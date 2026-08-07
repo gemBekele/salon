@@ -336,6 +336,24 @@ async function startServer() {
     res.json({ success: true });
   }));
 
+  app.put('/api/companies/:id', ...mgmt, asyncHandler(async (req, res) => {
+    if (req.user!.role !== 'super_admin') return res.status(403).json({ error: 'Only the Super Admin may edit tenants' });
+    const [rows] = (await pool.query(`SELECT id FROM companies WHERE id = ?`, [req.params.id])) as any;
+    if (!rows[0]) return res.status(404).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.status !== undefined) { fields.push('status = ?'); vals.push(b.status); }
+    if (b.phone !== undefined) { fields.push('phone = ?'); vals.push(b.phone); }
+    if (b.email !== undefined) { fields.push('email = ?'); vals.push(b.email); }
+    if (b.subscriptionPlanId !== undefined) { fields.push('subscription_plan_id = ?'); vals.push(b.subscriptionPlanId); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE companies SET ${fields.join(', ')} WHERE id = ?`, vals);
+    res.json({ success: true });
+  }));
+
   app.post('/api/branches', ...mgmt, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
     const errs = validate(req.body, { companyId: { required: true }, name: { required: true, type: 'string' }, city: { required: true, type: 'string' } });
@@ -382,6 +400,34 @@ async function startServer() {
     const b = req.body;
     await pool.query(`INSERT INTO business_units (id, company_id, branch_id, type, name, code, status) VALUES (?,?,?,?,?,?,?)`,
       [b.id, b.companyId, b.branchId, b.type, b.name, b.code || `BU-${Date.now()}`, b.status || 'active']);
+    res.json({ success: true });
+  }));
+
+  app.put('/api/business-units/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM business_units WHERE id = ?`, [req.params.id])) as any;
+    const bu = rows[0];
+    if (!bu) return res.status(404).json({ error: 'Business unit not found' });
+    if (!canAccessCompany(req.user!, bu.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.type !== undefined) { fields.push('type = ?'); vals.push(b.type); }
+    if (b.branchId !== undefined) { fields.push('branch_id = ?'); vals.push(b.branchId); }
+    if (b.code !== undefined) { fields.push('code = ?'); vals.push(b.code); }
+    if (b.status !== undefined) { fields.push('status = ?'); vals.push(b.status); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE business_units SET ${fields.join(', ')} WHERE id = ?`, vals);
+    res.json({ success: true });
+  }));
+
+  app.delete('/api/business-units/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM business_units WHERE id = ?`, [req.params.id])) as any;
+    const bu = rows[0];
+    if (!bu) return res.status(404).json({ error: 'Business unit not found' });
+    if (!canAccessCompany(req.user!, bu.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`UPDATE business_units SET status = 'inactive' WHERE id = ?`, [req.params.id]);
     res.json({ success: true });
   }));
 
@@ -543,6 +589,16 @@ async function startServer() {
     res.json({ success: true });
   }));
 
+  app.delete('/api/commission-rules/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id, target_name FROM commission_rules WHERE id = ?`, [req.params.id])) as any;
+    const rule = rows[0];
+    if (!rule) return res.status(404).json({ error: 'Commission rule not found' });
+    if (!canAccessCompany(req.user!, rule.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`DELETE FROM commission_rules WHERE id = ?`, [req.params.id]);
+    await insertAudit({ companyId: rule.company_id, branchId: null }, 'commission_change', `Commission Rule deleted: ${rule.target_name}`, req.user!.name);
+    res.json({ success: true });
+  }));
+
   // Update commission payout status
   app.patch('/api/commission-logs/payout', ...mgmt, asyncHandler(async (req, res) => {
     const { id, payoutStatus } = req.body;
@@ -569,6 +625,35 @@ async function startServer() {
     res.json({ success: true });
   }));
 
+  app.put('/api/expenses/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM expenses WHERE id = ?`, [req.params.id])) as any;
+    const exp = rows[0];
+    if (!exp) return res.status(404).json({ error: 'Expense not found' });
+    if (!canAccessCompany(req.user!, exp.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.category !== undefined) { fields.push('category = ?'); vals.push(b.category); }
+    if (b.amountEtb !== undefined) { fields.push('amount_etb = ?'); vals.push(b.amountEtb); }
+    if (b.description !== undefined) { fields.push('description = ?'); vals.push(b.description); }
+    if (b.paymentMethod !== undefined) { fields.push('payment_method = ?'); vals.push(b.paymentMethod); }
+    if (b.date !== undefined) { fields.push('date = ?'); vals.push(b.date); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE expenses SET ${fields.join(', ')} WHERE id = ?`, vals);
+    res.json({ success: true });
+  }));
+
+  app.delete('/api/expenses/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id, description FROM expenses WHERE id = ?`, [req.params.id])) as any;
+    const exp = rows[0];
+    if (!exp) return res.status(404).json({ error: 'Expense not found' });
+    if (!canAccessCompany(req.user!, exp.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`DELETE FROM expenses WHERE id = ?`, [req.params.id]);
+    await insertAudit({ companyId: exp.company_id, branchId: null }, 'expense_added', `Expense deleted: ${exp.description}`, req.user!.name);
+    res.json({ success: true });
+  }));
+
   // ==========================================================
   // RECEPTION POS (receptionist + manager + super_admin)
   // ==========================================================
@@ -579,6 +664,24 @@ async function startServer() {
     const b = req.body;
     await pool.query(`INSERT INTO customers (id, company_id, name, phone, email, notes) VALUES (?,?,?,?,?,?)`,
       [b.id, b.companyId, b.name, b.phone, b.email || null, b.notes || null]);
+    res.json({ success: true });
+  }));
+
+  app.put('/api/customers/:id', ...pos, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM customers WHERE id = ?`, [req.params.id])) as any;
+    const cust = rows[0];
+    if (!cust) return res.status(404).json({ error: 'Customer not found' });
+    if (!canAccessCompany(req.user!, cust.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.phone !== undefined) { fields.push('phone = ?'); vals.push(b.phone); }
+    if (b.email !== undefined) { fields.push('email = ?'); vals.push(b.email); }
+    if (b.notes !== undefined) { fields.push('notes = ?'); vals.push(b.notes); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`, vals);
     res.json({ success: true });
   }));
 
