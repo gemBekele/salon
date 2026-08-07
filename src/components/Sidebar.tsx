@@ -80,8 +80,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         {isWide && (
           <div className="min-w-0">
-            <h1 className="text-sm font-serif font-semibold text-[#f5f5f0] tracking-tight truncate">Serenity ERP</h1>
-            <p className="text-[10px] text-[#f5f5f0]/60 font-sans truncate">SaaS Platform</p>
+            <h1 className="text-sm font-serif font-semibold text-[#f5f5f0] tracking-tight truncate">Gech Beauty Salon</h1>
+            <p className="text-[10px] text-[#f5f5f0]/60 font-sans truncate">Salon Management ERP</p>
           </div>
         )}
       </div>

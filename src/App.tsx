@@ -575,7 +575,7 @@ export default function App() {
       <div className="min-h-screen bg-[#f5f5f0] flex items-center justify-center text-[#5A5A40] font-sans">
         <div className="flex flex-col items-center space-y-3">
           <div className="w-8 h-8 border-4 border-[#5A5A40] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm font-semibold">Connecting to Serenity ERP...</p>
+          <p className="text-sm font-semibold">Connecting to Gech Beauty Salon ERP...</p>
         </div>
       </div>
     );
@@ -590,7 +590,7 @@ export default function App() {
       <div className="min-h-screen bg-[#f5f5f0] flex items-center justify-center text-[#5A5A40] font-sans">
         <div className="flex flex-col items-center space-y-3">
           <div className="w-8 h-8 border-4 border-[#5A5A40] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm font-semibold">Loading tenant workspace from XAMPP MySQL...</p>
+          <p className="text-sm font-semibold">Loading salon workspace...</p>
         </div>
       </div>
     );
@@ -717,7 +717,7 @@ export default function App() {
       <footer id="app-footer" className="bg-white border-t border-[#e5e5d1] py-4 text-xs text-[#737366] text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            <strong className="text-[#5A5A40] font-serif font-bold">Serenity Salon & Spa Management ERP SaaS</strong> — Multi-Tenant Multi-Branch Platform
+            <strong className="text-[#5A5A40] font-serif font-bold">Gech Beauty Salon</strong> — Hawassa Salon Management ERP
           </div>
           <div className="text-[11px] uppercase tracking-wider font-semibold text-[#5A5A40]/70">
             RBAC Secured • XAMPP MySQL Live DB • Single DB Multi-Tenancy • ETB Currency

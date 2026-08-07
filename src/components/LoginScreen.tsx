@@ -50,8 +50,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <div className="w-16 h-16 mx-auto rounded-2xl bg-[#5A5A40] flex items-center justify-center text-white shadow-lg border border-[#4a4a35]">
             <Scissors className="w-8 h-8" />
           </div>
-          <h1 className="mt-4 text-2xl font-serif font-bold text-[#2d2d2a]">Serenity Salon &amp; Spa ERP</h1>
-          <p className="text-xs text-[#737366] mt-1">Multi-Tenant SaaS Platform — Secure Sign In</p>
+          <h1 className="mt-4 text-2xl font-serif font-bold text-[#2d2d2a]">Gech Beauty Salon</h1>
+          <p className="text-xs text-[#737366] mt-1">Hawassa Salon Management System — Secure Sign In</p>
         </div>
 
         <div className="bg-white border border-[#e5e5d1] rounded-3xl p-7 shadow-sm space-y-5">
