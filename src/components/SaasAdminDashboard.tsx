@@ -278,7 +278,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Phone Number</label>
                   <input

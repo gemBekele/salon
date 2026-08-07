@@ -86,7 +86,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
-      <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-2xl w-full h-[600px] flex flex-col shadow-xl overflow-hidden">
+      <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-2xl w-full h-[80vh] max-h-[600px] flex flex-col shadow-xl overflow-hidden">
         {/* Modal Header */}
         <div className="bg-[#5A5A40] p-4 text-white border-b border-[#4a4a35] flex items-center justify-between">
           <div className="flex items-center space-x-2.5">

@@ -261,7 +261,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
         </div>
 
         {/* Live Counters */}
-        <div className="flex items-center space-x-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2 sm:space-x-3 text-xs">
           <div className="bg-[#f5f5f0]/10 px-4 py-2.5 rounded-2xl border border-[#f5f5f0]/20 text-center">
             <div className="text-[#f5f5f0] font-serif font-bold text-xl">{queuedSessions.length}</div>
             <div className="text-[#f5f5f0]/70 text-[10px] uppercase font-bold tracking-wider">Queued</div>
@@ -278,10 +278,10 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
       </div>
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl border border-[#e5e5d1] text-xs font-bold shadow-sm">
+      <div className="flex overflow-x-auto flex-nowrap items-center space-x-2 bg-white p-2 rounded-2xl border border-[#e5e5d1] text-xs font-bold shadow-sm">
         <button
           onClick={() => setSubTab('pos')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition cursor-pointer ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition cursor-pointer whitespace-nowrap ${
             subTab === 'pos'
               ? 'bg-[#5A5A40] text-white shadow-sm'
               : 'text-[#737366] hover:text-[#2d2d2a] hover:bg-[#f5f5f0]'
@@ -293,7 +293,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
         <button
           onClick={() => setSubTab('schedule')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition cursor-pointer ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition cursor-pointer whitespace-nowrap ${
             subTab === 'schedule'
               ? 'bg-[#5A5A40] text-white shadow-sm'
               : 'text-[#737366] hover:text-[#2d2d2a] hover:bg-[#f5f5f0]'
@@ -305,7 +305,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
         <button
           onClick={() => setSubTab('sms')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition cursor-pointer ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition cursor-pointer whitespace-nowrap ${
             subTab === 'sms'
               ? 'bg-[#5A5A40] text-white shadow-sm'
               : 'text-[#737366] hover:text-[#2d2d2a] hover:bg-[#f5f5f0]'
@@ -522,7 +522,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
             ) : (
               <div className="space-y-3">
                 {selectedServiceItems.map((item, idx) => (
-                  <div key={idx} className="bg-[#f5f5f0] border border-[#e5e5d1] p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                  <div key={idx} className="bg-[#f5f5f0] border border-[#e5e5d1] p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 text-xs">
                     <div className="flex-1">
                       <div className="font-semibold text-[#2d2d2a]">{item.service.name}</div>
                       <div className="text-[#737366] text-[11px] mt-0.5">Price: {item.service.priceEtb} ETB</div>

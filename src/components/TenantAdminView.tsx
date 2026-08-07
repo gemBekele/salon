@@ -1101,14 +1101,14 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
           {/* Commission Logs Table */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Staff Commission Logs & Payout Schedule</h3>
                 <p className="text-xs text-[#737366]">
                   Calculated automatically per completed service session according to configured rules.
                 </p>
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleExportPayrollCsv}
                   className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white text-xs font-bold rounded-full cursor-pointer shadow-sm transition-all"
@@ -1206,7 +1206,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleRunRecurringExpensesTrigger}
                   className="flex items-center space-x-1.5 px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold rounded-full cursor-pointer transition-all"
@@ -1627,7 +1627,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
                   <select
@@ -1692,7 +1692,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Price (ETB)</label>
                   <input
@@ -1752,7 +1752,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Unit</label>
                   <input
@@ -1870,7 +1870,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Rule Type</label>
                   <select
@@ -1947,7 +1947,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-[#2d2d2a] mb-1">Category</label>
                   <select
@@ -1976,7 +1976,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-[#2d2d2a] mb-1">Payment Method</label>
                   <select
@@ -2015,7 +2015,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </label>
 
                 {expIsRecurring && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-purple-200/80">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-purple-200/80">
                     <div>
                       <label className="block font-semibold text-purple-900 mb-1">Recurrence Frequency</label>
                       <select
