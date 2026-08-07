@@ -42,6 +42,7 @@ import {
 } from '../types';
 import { ReportsDashboard } from './ReportsDashboard';
 import { apiFetch } from '../lib/api';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface TenantAdminViewProps {
   company: Company;
@@ -148,6 +149,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
   // Edit Modal States
   const [editingEntity, setEditingEntity] = useState<{ type: string; data: any } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: string; id: string; name: string } | null>(null);
 
   // Commission Rule Form
   const [ruleTargetType, setRuleTargetType] = useState<'staff' | 'service'>('staff');
@@ -709,7 +711,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => { if (confirm('Deactivate this branch?')) onDeleteBranch?.(branch.id); }}
+                      onClick={() => setConfirmDelete({ type: 'branch', id: branch.id, name: branch.name })}
                       className="p-1.5 rounded-lg hover:bg-red-50 text-[#737366] hover:text-red-600 transition-colors"
                       title="Deactivate Branch"
                     >
@@ -810,7 +812,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <span>Edit</span>
                     </button>
                     <button
-                      onClick={() => { if (confirm('Deactivate this staff member?')) onDeleteStaff?.(staff.id); }}
+                      onClick={() => setConfirmDelete({ type: 'staff', id: staff.id, name: staff.name })}
                       className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-red-50 text-[#737366] hover:text-red-600 text-[11px] font-medium transition-colors"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -875,7 +877,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                           <button onClick={() => setEditingEntity({ type: 'service', data: srv })} className="p-1 rounded hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40]">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => { if (confirm('Deactivate this service?')) onDeleteService?.(srv.id); }} className="p-1 rounded hover:bg-red-50 text-[#737366] hover:text-red-600">
+                          <button onClick={() => setConfirmDelete({ type: 'service', id: srv.id, name: srv.name })} className="p-1 rounded hover:bg-red-50 text-[#737366] hover:text-red-600">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -1010,7 +1012,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <span>Edit</span>
                     </button>
                     <button
-                      onClick={() => { if (confirm('Delete this inventory item?')) onDeleteInventoryItem?.(item.id); }}
+                      onClick={() => setConfirmDelete({ type: 'inventory', id: item.id, name: item.name })}
                       className="flex-1 py-1.5 rounded-xl hover:bg-red-50 text-[#737366] hover:text-red-600 text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -2182,6 +2184,24 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title={`Deactivate ${confirmDelete?.type === 'branch' ? 'Branch' : confirmDelete?.type === 'staff' ? 'Staff Member' : confirmDelete?.type === 'service' ? 'Service' : 'Inventory Item'}`}
+        message={`Are you sure you want to deactivate "${confirmDelete?.name}"? This can be reversed later.`}
+        confirmLabel="Deactivate"
+        danger
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          const { type, id } = confirmDelete;
+          if (type === 'branch') onDeleteBranch?.(id);
+          else if (type === 'staff') onDeleteStaff?.(id);
+          else if (type === 'service') onDeleteService?.(id);
+          else if (type === 'inventory') onDeleteInventoryItem?.(id);
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Navbar } from './components/Navbar';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastContainer, showToast } from './components/Toast';
 
 const SaasAdminDashboard = lazy(() => import('./components/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard })));
 const TenantAdminView = lazy(() => import('./components/TenantAdminView').then(m => ({ default: m.TenantAdminView })));
@@ -201,8 +202,9 @@ export default function App() {
       });
       await fetchDbState();
       setSelectedCompany(newCompany);
+      showToast('success', 'Company created');
     } catch (err) {
-      console.error('Failed to add company', err);
+      showToast('error', 'Failed to create company');
     }
   };
 
@@ -215,8 +217,9 @@ export default function App() {
       });
       await fetchDbState();
       setSelectedBranch(newBranch);
+      showToast('success', 'Branch created');
     } catch (err) {
-      console.error('Failed to add branch', err);
+      showToast('error', 'Failed to create branch');
     }
   };
 
@@ -229,8 +232,9 @@ export default function App() {
       });
       await fetchDbState();
       setSelectedBusinessUnit(newUnit);
+      showToast('success', 'Business unit created');
     } catch (err) {
-      console.error('Failed to add business unit', err);
+      showToast('error', 'Failed to add business unit');
     }
   };
 
@@ -242,8 +246,9 @@ export default function App() {
         body: JSON.stringify(newStaff),
       });
       await fetchDbState();
+      showToast('success', 'Staff created');
     } catch (err) {
-      console.error('Failed to add staff', err);
+      showToast('error', 'Failed to add staff');
     }
   };
 
@@ -255,8 +260,9 @@ export default function App() {
         body: JSON.stringify(newService),
       });
       await fetchDbState();
+      showToast('success', 'Service created');
     } catch (err) {
-      console.error('Failed to add service', err);
+      showToast('error', 'Failed to add service');
     }
   };
 
@@ -268,8 +274,9 @@ export default function App() {
         body: JSON.stringify(newItem),
       });
       await fetchDbState();
+      showToast('success', 'Inventory item created');
     } catch (err) {
-      console.error('Failed to add inventory item', err);
+      showToast('error', 'Failed to add inventory item');
     }
   };
 
@@ -281,8 +288,9 @@ export default function App() {
         body: JSON.stringify({ id: invId, addedStock }),
       });
       await fetchDbState();
+      showToast('success', 'Inventory stock updated');
     } catch (err) {
-      console.error('Failed to update inventory stock', err);
+      showToast('error', 'Failed to update inventory stock');
     }
   };
 
@@ -294,8 +302,9 @@ export default function App() {
         body: JSON.stringify(newCust),
       });
       await fetchDbState();
+      showToast('success', 'Customer created');
     } catch (err) {
-      console.error('Failed to add customer', err);
+      showToast('error', 'Failed to add customer');
     }
   };
 
@@ -308,11 +317,12 @@ export default function App() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.error('Failed to create visit session:', data.error);
+        showToast('error', 'Failed to create visit session');
       }
       await fetchDbState();
+      showToast('success', 'Visit session created');
     } catch (err) {
-      console.error('Failed to create visit session', err);
+      showToast('error', 'Failed to create visit session');
     }
   };
 
@@ -327,8 +337,9 @@ export default function App() {
         body: JSON.stringify({ id: sessionId, status: newStatus }),
       });
       await fetchDbState();
+      showToast('success', 'Session status updated');
     } catch (err) {
-      console.error('Failed to update session status', err);
+      showToast('error', 'Failed to update session status');
     }
   };
 
@@ -350,8 +361,9 @@ export default function App() {
         }),
       });
       await fetchDbState();
+      showToast('success', 'Session staff updated');
     } catch (err) {
-      console.error('Failed to update session staff assignment', err);
+      showToast('error', 'Failed to update session staff');
     }
   };
 
@@ -363,8 +375,9 @@ export default function App() {
         body: JSON.stringify(newRule),
       });
       await fetchDbState();
+      showToast('success', 'Commission rule saved');
     } catch (err) {
-      console.error('Failed to save commission rule', err);
+      showToast('error', 'Failed to save commission rule');
     }
   };
 
@@ -376,8 +389,9 @@ export default function App() {
         body: JSON.stringify(newExpense),
       });
       await fetchDbState();
+      showToast('success', 'Expense created');
     } catch (err) {
-      console.error('Failed to add expense', err);
+      showToast('error', 'Failed to add expense');
     }
   };
 
@@ -402,8 +416,9 @@ export default function App() {
         body: JSON.stringify(updated),
       });
       await fetchDbState();
+      showToast('success', 'Branch updated');
     } catch (err) {
-      console.error('Failed to update branch', err);
+      showToast('error', 'Failed to update branch');
     }
   };
 
@@ -411,8 +426,9 @@ export default function App() {
     try {
       await apiFetch(`/api/branches/${branchId}`, { method: 'DELETE' });
       await fetchDbState();
+      showToast('success', 'Branch deactivated');
     } catch (err) {
-      console.error('Failed to delete branch', err);
+      showToast('error', 'Failed to deactivate branch');
     }
   };
 
@@ -424,8 +440,9 @@ export default function App() {
         body: JSON.stringify(updated),
       });
       await fetchDbState();
+      showToast('success', 'Staff updated');
     } catch (err) {
-      console.error('Failed to update staff', err);
+      showToast('error', 'Failed to update staff');
     }
   };
 
@@ -433,8 +450,9 @@ export default function App() {
     try {
       await apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' });
       await fetchDbState();
+      showToast('success', 'Staff deactivated');
     } catch (err) {
-      console.error('Failed to delete staff', err);
+      showToast('error', 'Failed to deactivate staff');
     }
   };
 
@@ -446,8 +464,9 @@ export default function App() {
         body: JSON.stringify(updated),
       });
       await fetchDbState();
+      showToast('success', 'Service updated');
     } catch (err) {
-      console.error('Failed to update service', err);
+      showToast('error', 'Failed to update service');
     }
   };
 
@@ -455,8 +474,9 @@ export default function App() {
     try {
       await apiFetch(`/api/services/${serviceId}`, { method: 'DELETE' });
       await fetchDbState();
+      showToast('success', 'Service deactivated');
     } catch (err) {
-      console.error('Failed to delete service', err);
+      showToast('error', 'Failed to deactivate service');
     }
   };
 
@@ -468,8 +488,9 @@ export default function App() {
         body: JSON.stringify(updated),
       });
       await fetchDbState();
+      showToast('success', 'Inventory item updated');
     } catch (err) {
-      console.error('Failed to update inventory item', err);
+      showToast('error', 'Failed to update inventory item');
     }
   };
 
@@ -477,8 +498,9 @@ export default function App() {
     try {
       await apiFetch(`/api/inventory-items/${itemId}`, { method: 'DELETE' });
       await fetchDbState();
+      showToast('success', 'Inventory item deactivated');
     } catch (err) {
-      console.error('Failed to delete inventory item', err);
+      showToast('error', 'Failed to deactivate inventory item');
     }
   };
 
@@ -491,12 +513,13 @@ export default function App() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.error('Failed to add user:', data.error);
+        showToast('error', 'Failed to add user');
         return;
       }
       await fetchDbState();
+      showToast('success', 'User created');
     } catch (err) {
-      console.error('Failed to add user', err);
+      showToast('error', 'Failed to add user');
     }
   };
 
@@ -509,12 +532,13 @@ export default function App() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.error('Failed to update user:', data.error);
+        showToast('error', 'Failed to update user');
         return;
       }
       await fetchDbState();
+      showToast('success', 'User updated');
     } catch (err) {
-      console.error('Failed to update user', err);
+      showToast('error', 'Failed to update user');
     }
   };
 
@@ -540,8 +564,9 @@ export default function App() {
       });
 
       await fetchDbState();
+      showToast('success', 'Checkout completed');
     } catch (err) {
-      console.error('Failed to checkout session', err);
+      showToast('error', 'Failed to checkout session');
     }
   };
 
@@ -704,6 +729,7 @@ export default function App() {
           selectedBranch={selectedBranch}
         />
       </Suspense>
+      <ToastContainer />
     </div>
   );
 }
