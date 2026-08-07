@@ -1,0 +1,136 @@
+Using the shared master context, design the complete Appointment, Queue, and TV Display system for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The system must support:
+- Appointment booking
+- Walk-in customers
+- Queue numbers
+- Staff assignment
+- Service assignment
+- Waiting area display
+- TV display screen
+- SMS notifications
+
+Design the following:
+
+1. Appointment Booking
+Support:
+- Customer appointment
+- Service selection
+- Staff selection
+- Business unit selection
+- Date and time
+- Duration
+- Appointment status:
+  - scheduled
+  - confirmed
+  - arrived
+  - in_progress
+  - completed
+  - cancelled
+  - no_show
+
+2. Walk-in Customers
+Explain:
+- How walk-ins enter the queue
+- How they are assigned queue numbers
+- How they are merged with appointments
+- How priority rules work
+
+3. Queue Management
+Design:
+- Queue numbering format
+- Queue reset rules
+- Queue by business unit
+- Queue by staff
+- Queue by service type
+- Estimated waiting time
+- Called status
+- Serving status
+- Completed status
+- Skipped status
+
+4. TV Display Screen
+Design a TV-friendly page showing:
+
+NOW SERVING
+A105
+Massage Room 2
+
+Also show:
+- Next in queue
+- Waiting list
+- Business unit name
+- Branch branding
+- Last updated time
+- Optional promotional message
+
+Technical requirements:
+- Must work with Livewire polling or lightweight refresh
+- Must be suitable for cPanel hosting
+- Must avoid heavy infrastructure
+- Must be readable from a distance
+- Must support fullscreen display
+
+5. Staff Assignment Logic
+Explain:
+- Auto-assign by skill
+- Manual assign by receptionist
+- Staff availability
+- Staff on break
+- Staff with appointment conflict
+- Multiple staff for different services
+
+6. SMS Notifications
+Support:
+- Appointment confirmation
+- Appointment reminder
+- Customer turn approaching
+- Service ready
+- Visit completed
+- Receipt link or summary
+
+7. Calendar View
+Design:
+- Day view
+- Week view
+- Staff timeline
+- Business unit filter
+- Drag-and-drop if feasible
+- Conflict detection
+
+8. Operational Rules
+Handle:
+- Double booking
+- Late customer
+- No-show
+- Appointment cancellation
+- Staff unavailable
+- Walk-in priority
+- Long-running services
+- Multi-service visits
+
+9. Database Impact
+Define fields for:
+- appointments
+- appointment_logs
+- queue_entries
+- queue_display_settings
+
+10. UI Requirements
+Provide:
+- Reception appointment screen
+- Queue board screen
+- TV display screen
+- Staff schedule screen
+- Livewire components
+- Polling strategy
+- Status badge design
+
+Output format:
+- Appointment workflow
+- Queue workflow
+- TV display specification
+- Database implications
+- UI design
+- Edge cases
+- Acceptance criteria

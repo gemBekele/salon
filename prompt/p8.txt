@@ -1,0 +1,172 @@
+Using the shared master context, design the UI/UX system for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The users are often non-technical.
+The interface must be:
+- Simple
+- Fast
+- Large-button friendly
+- Mobile friendly
+- Tablet friendly
+- Touch friendly
+- Minimal steps
+- Easy to learn
+- Suitable for reception desks and busy salon environments
+
+Design the following:
+
+1. Design Principles
+- Clean dashboard
+- Clear call-to-action buttons
+- High readability
+- Strong status colors
+- Low cognitive load
+- Fast customer checkout
+- Minimal typing
+- Search-first customer lookup
+- Touch-friendly cards and buttons
+
+2. Screen Inventory
+List all major screens:
+- Login
+- Super Admin dashboard
+- Owner dashboard
+- Branch manager dashboard
+- Reception dashboard
+- Staff dashboard
+- Customer list
+- Customer profile
+- New visit
+- Visit board
+- Appointment calendar
+- Checkout screen
+- Payment screen
+- Service catalog
+- Staff management
+- Inventory
+- Reports
+- Settings
+- Subscription page
+- Notifications
+- SMS logs
+
+3. Reception Screen
+This is the most important operational screen.
+
+It should include large actions such as:
++ New Customer
++ Start Service
++ Add Service
++ Checkout
++ View Queue
++ Find Appointment
+
+Design:
+- Layout
+- Primary buttons
+- Customer search
+- Quick visit creation
+- Queue panel
+- Active visits panel
+- Service selection panel
+- Staff assignment panel
+- Running total panel
+
+4. Visit Board
+Design a screen that shows active visits:
+- Queue number
+- Customer name
+- Business unit
+- Assigned services
+- Assigned staff
+- Status
+- Waiting time
+- Total charge
+- Checkout button
+
+5. Checkout Screen
+Design:
+- Visit summary
+- Service list
+- Product list
+- Discounts
+- Tax if enabled
+- Total
+- Payment methods
+- Split payment
+- Print receipt
+- Send SMS receipt
+
+6. Dashboard Design
+For each role:
+- Owner dashboard
+- Branch manager dashboard
+- Receptionist dashboard
+- Staff dashboard
+
+Define:
+- KPI cards
+- Charts
+- Alerts
+- Quick actions
+- Today's summary
+- Staff performance
+- Revenue summary
+- Queue status
+
+7. Component System
+Recommend reusable Blade and Livewire components:
+- Stat card
+- Data table
+- Modal
+- Drawer
+- Search select
+- Status badge
+- Payment method selector
+- Service card
+- Staff card
+- Queue card
+- Alert banner
+- Empty state
+- Confirmation dialog
+
+8. Responsive Behavior
+Explain how the UI adapts to:
+- Phone
+- Tablet
+- Desktop
+- TV display
+
+9. Accessibility
+Include:
+- Large tap targets
+- Good contrast
+- Simple labels
+- Icons with text
+- Keyboard support
+- Confirmation for destructive actions
+
+10. UX Rules
+Define:
+- How to prevent accidental checkout
+- How to show unsaved changes
+- How to show validation errors
+- How to handle loading states
+- How to show offline or slow connection behavior
+- How to show subscription limits
+
+Provide:
+- ASCII wireframes for key screens
+- Livewire component structure
+- Navigation structure
+- Recommended Tailwind utility patterns
+- User flow diagrams
+- UX edge cases
+- Acceptance criteria
+
+Output format:
+- UI/UX specification
+- Wireframes
+- Component architecture
+- Responsive rules
+- UX rules
+- Acceptance criteria

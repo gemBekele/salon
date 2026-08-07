@@ -1,0 +1,148 @@
+Using the shared master context, design the complete SaaS Architecture for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+This must be a single-database multi-tenant SaaS architecture.
+
+Core requirement:
+Every tenant-owned business table must include company_id.
+
+Example:
+customers
+- id
+- company_id
+- name
+- phone
+- created_at
+- updated_at
+
+Security requirement:
+Company A must never be able to access Company B data.
+
+Design the following:
+
+1. Tenant Identification
+Explain:
+- How the current tenant is identified after login
+- How company_id is resolved into the session or authenticated context
+- How middleware injects tenant context
+- How Eloquent global scopes enforce tenant filtering
+- How policies enforce ownership
+- How route model binding can be made tenant-safe
+
+2. Tenant Scoping Rules
+Define which tables are:
+- Global tables
+- Tenant-owned tables
+- Branch-owned tables
+- Shared reference tables
+
+Examples:
+Global:
+- plans
+- plan_features
+- global settings
+
+Tenant-owned:
+- companies
+- branches
+- customers
+- services
+- staff
+- visits
+- payments
+- inventory
+
+3. Subscription System
+Design:
+- plans
+- subscriptions
+- billing cycles
+- trial period
+- active state
+- suspended state
+- cancelled state
+- expiry date
+- grace period
+- plan limits
+- feature flags
+
+Plan limits may include:
+- Number of branches
+- Number of staff
+- Number of customers
+- Number of appointments per month
+- Number of SMS credits
+- Access to inventory module
+- Access to commission module
+- Access to TV display module
+- Access to advanced reports
+
+4. Tenant Onboarding
+Design the onboarding flow:
+- Company registration
+- Owner user creation
+- Plan selection
+- Branch creation
+- Business unit creation
+- Staff setup
+- Service catalog setup
+- Initial configuration wizard
+
+5. Feature Access Control
+Explain how features are enabled or disabled based on:
+- Subscription plan
+- Trial state
+- Payment status
+- Company settings
+
+6. Suspension Behavior
+Explain what happens when a subscription is suspended:
+- Read-only mode?
+- Login allowed but operations blocked?
+- Grace period?
+- Data retention?
+- Admin notifications?
+
+7. Security Controls
+Provide:
+- Tenant isolation tests
+- Middleware examples
+- Global scope examples
+- Policy examples
+- Forbidden access handling
+- Audit logging for admin impersonation
+- Protection against URL manipulation
+
+8. Database Strategy
+Explain:
+- Why single-database multi-tenancy is suitable for this product
+- Indexing strategy for company_id
+- Performance considerations
+- Backup strategy
+- Future migration path to database-per-tenant if ever needed
+
+9. SaaS Admin Panel
+Define what the Super Admin can see:
+- Tenant list
+- Subscription status
+- Usage metrics
+- Plan assignment
+- Suspension controls
+- Impersonation logs
+- Support tools
+
+10. Future Scalability
+Explain how this architecture can later support:
+- API access
+- Mobile apps
+- Multiple languages
+- Multiple currencies
+- Regional deployments
+- White-label salons
+
+Output format:
+- SaaS architecture document
+- Tenant isolation strategy
+- Subscription lifecycle
+- Database implications
+- Security tests
+- Acceptance criteria

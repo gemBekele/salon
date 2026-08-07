@@ -1,0 +1,166 @@
+Using the shared master context and all previous architectural outputs, create a complete Development Roadmap for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The roadmap must be practical for Laravel 11, MySQL, Blade, Livewire, Tailwind, and cPanel hosting.
+
+Divide development into 4 phases.
+
+Phase 1: Core Platform
+Goal:
+Build the foundation of the SaaS and multi-tenant ERP.
+
+Include:
+- Laravel 11 project setup
+- Authentication
+- Multi-tenant company structure
+- Users
+- Roles
+- Permissions
+- Branches
+- Business units
+- Departments
+- Staff management
+- Tenant scoping middleware
+- Global scopes
+- Audit logging foundation
+- Basic settings
+- Dashboard shell
+- cPanel deployment preparation
+
+Deliverables:
+- Working login
+- Tenant creation
+- Branch creation
+- User assignment
+- Role protection
+- Basic navigation
+
+Acceptance criteria:
+- Tenant isolation works
+- Roles are enforced
+- Branch structure can be managed
+- Deployment to cPanel is possible
+
+Phase 2: Salon Operation
+Goal:
+Build the core daily workflow.
+
+Include:
+- Customer management
+- Service categories
+- Service catalog
+- Staff-service assignment
+- Appointment basics
+- Walk-in queue
+- Visit session
+- Service assignment
+- Pending charges
+- Checkout
+- Payments
+- Invoices
+- Receipts
+- Basic SMS logs
+
+Deliverables:
+- Receptionist can register customer
+- Receptionist can open visit
+- Receptionist can add services
+- Staff can complete services
+- Checkout can collect payment
+- Invoice is generated
+
+Acceptance criteria:
+- Customer visit workflow works end to end
+- Multiple services in one visit works
+- Different staff assignment works
+- Checkout totals are accurate
+- Payment records are secure
+
+Phase 3: Business Management
+Goal:
+Build ERP features that help owners manage the business.
+
+Include:
+- Commission rules
+- Commission calculation
+- Commission settlement
+- Inventory items
+- Service-to-inventory mapping
+- Stock transactions
+- Expense management
+- Reports
+- Staff performance
+- Financial overview
+- Branch comparison
+- Notifications
+
+Deliverables:
+- Commission is calculated correctly
+- Inventory deducts automatically
+- Expenses are recorded
+- Reports show accurate business performance
+
+Acceptance criteria:
+- Commission reports match calculation rules
+- Inventory movement is auditable
+- Reports are role-scoped
+- Owner dashboard shows meaningful KPIs
+
+Phase 4: SaaS Commercialization
+Goal:
+Complete the product as a sellable SaaS.
+
+Include:
+- Subscription plans
+- Plan features
+- Tenant subscriptions
+- Trial management
+- Billing status
+- Suspension logic
+- Tenant onboarding wizard
+- Usage limits
+- Super admin SaaS panel
+- Support impersonation
+- Platform analytics
+
+Deliverables:
+- New salon can sign up
+- Owner can select plan
+- Subscription limits are enforced
+- Super admin can manage tenants
+- Tenant suspension works safely
+
+Acceptance criteria:
+- SaaS onboarding is smooth
+- Subscription states control access
+- Tenant data remains isolated
+- Platform is ready for commercial launch
+
+For each phase, provide:
+1. Scope
+2. Out of scope
+3. Database tables affected
+4. Livewire pages/components needed
+5. Middleware and policies needed
+6. Testing checklist
+7. Deployment checklist
+8. Risks
+9. Estimated effort order
+10. Definition of done
+
+Also provide:
+- MVP scope recommendation
+- Version 1.1 improvements
+- Version 2.0 advanced features
+- Recommended package list
+- Recommended testing strategy
+- Recommended cPanel deployment steps
+- Recommended environment variables
+- Recommended backup strategy
+
+Output format:
+- Phase-by-phase roadmap
+- Milestones
+- Deliverables
+- Acceptance criteria
+- MVP recommendation
+- Technical checklist

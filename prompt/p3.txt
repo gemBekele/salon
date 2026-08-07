@@ -1,0 +1,111 @@
+Using the shared master context, design the complete database architecture for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The database must use MySQL and be suitable for Laravel 11 migrations.
+
+Design a single-database multi-tenant schema where all tenant-owned business records include company_id.
+
+Required core tables:
+- companies
+- subscriptions
+- plans
+- plan_features
+- branches
+- business_units
+- departments
+- users
+- roles
+- permissions
+- role_user
+- permission_role
+- staff
+- staff_branch
+- staff_business_unit
+- customers
+- service_categories
+- services
+- service_staff
+- appointments
+- customer_visits
+- visit_services
+- payments
+- invoices
+- invoice_items
+- commissions
+- commission_rules
+- commission_settlements
+- inventory_items
+- inventory_item_service
+- stock_transactions
+- expenses
+- expense_categories
+- notifications
+- sms_logs
+- settings
+- audit_logs
+
+You may add additional tables if they are necessary for a professional ERP design.
+
+For each table, provide:
+1. Table name
+2. Purpose
+3. Columns
+4. Data types
+5. Nullable fields
+6. Default values
+7. Indexes
+8. Foreign keys
+9. Unique constraints
+10. Soft deletes if appropriate
+11. Whether it is tenant-scoped or global
+
+Important database rules:
+- All tenant-owned tables must include company_id
+- Use appropriate indexes for company_id, branch_id, status, date fields, and foreign keys
+- Money fields should use a safe numeric format
+- Status fields should be indexed
+- Dates and timezones should be handled cleanly
+- Use UUID or ULID if beneficial, but explain the tradeoff
+- Prefer relational integrity and clarity over unnecessary complexity
+
+Also generate:
+1. A complete ERD in Mermaid format
+2. A table relationship summary
+3. A Laravel migration file structure
+4. Suggested migration order
+5. Suggested seeders
+6. Suggested factory structure
+7. Suggested database constraints to prevent invalid operational states
+
+Pay special attention to these workflows:
+- A customer visit can contain multiple services
+- Each service in a visit may be assigned to a different staff member
+- A visit can remain open while services are being performed
+- A visit must support pending charges before final checkout
+- Payments can be partial, full, or split
+- Commissions may be calculated after service completion or after payment, depending on configuration
+- Inventory can be automatically deducted when a service is completed
+- Branches, business units, departments, and staff must support multi-branch operations
+- Subscriptions must control tenant access and feature limits
+
+Include example migration names such as:
+- create_companies_table
+- create_branches_table
+- create_customer_visits_table
+- create_visit_services_table
+- create_commission_rules_table
+- create_stock_transactions_table
+
+Also include:
+- Recommended enum values for statuses
+- Recommended composite indexes
+- Suggested soft delete usage
+- Suggested audit fields such as created_by, updated_by, deleted_by
+
+Output format:
+- Mermaid ERD
+- Table definitions
+- Relationship explanation
+- Migration structure
+- Assumptions
+- Data integrity rules
+- Acceptance criteria

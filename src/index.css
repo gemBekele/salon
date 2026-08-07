@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #f5f5f0;
+    color: #2d2d2a;
+  }
+
+  h1, h2, h3, .font-serif-theme {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+/* Custom Natural Tones theme helpers */
+.bg-natural-canvas { background-color: #f5f5f0; }
+.bg-natural-sage { background-color: #5A5A40; }
+.bg-natural-sage-dark { background-color: #4a4a35; }
+.bg-natural-card { background-color: #ffffff; }
+.bg-natural-muted { background-color: #e5e5d1; }
+.bg-natural-soft { background-color: #f0f0ea; }
+
+.border-natural { border-color: #e5e5d1; }
+.text-natural-sage { color: #5A5A40; }
+.text-natural-dark { color: #2d2d2a; }
+.text-natural-muted { color: #737366; }
+

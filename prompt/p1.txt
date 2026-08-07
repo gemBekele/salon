@@ -1,0 +1,29 @@
+How to use these prompts
+Recommended workflow
+Create a new Google AI Studio project.
+First paste the Shared Master Context.
+Then run each prompt in order:
+Prompt 1: Project Vision & System Architecture
+Prompt 2: Database Design
+Prompt 3: Roles & Permissions
+Prompt 4: Customer Journey Workflow
+Prompt 5: Multi-Branch Architecture
+Prompt 6: SaaS Architecture
+Prompt 7: UI/UX Design
+Prompt 8: Reports
+Prompt 9: Commission System
+Prompt 10: Inventory System
+Prompt 11: Appointment, Queue & TV Display
+Prompt 12: Development Roadmap
+Important instruction
+For every prompt, tell Google AI Studio to output:
+
+
+- Assumptions
+- Architecture decisions
+- Data model impact
+- Workflow explanation
+- Edge cases
+- Implementation notes
+- Acceptance criteria
+

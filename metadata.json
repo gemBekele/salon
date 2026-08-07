@@ -1,0 +1,6 @@
+{
+  "name": "Salon & Spa ERP SaaS",
+  "description": "Multi-Tenant Salon, Spa & Beauty Center ERP SaaS Platform with Branch & Business Unit Scoping, Receptionist POS, Visit Session Flow, Staff Commissions, Queue Engine & Analytics",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

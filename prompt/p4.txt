@@ -1,0 +1,115 @@
+Using the shared master context, design the complete User Roles and Permissions system for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The system must support both SaaS-level administration and tenant-level salon operations.
+
+Design the following roles:
+
+1. Super Admin
+This is the SaaS platform owner role.
+Responsibilities:
+- Manage companies/salons
+- Manage subscription plans
+- Manage subscriptions
+- Manage global system settings
+- Monitor platform usage
+- Suspend or activate tenants
+- Impersonate tenant users if needed for support, with audit logging
+
+2. Salon Owner
+This is the tenant owner role.
+Responsibilities:
+- Manage company branding
+- Manage branches
+- Manage business units
+- Manage staff and users
+- View consolidated reports
+- View financial overview
+- Manage subscription and billing
+- Configure commission rules
+- Configure services and inventory policies
+
+3. Branch Manager
+Responsibilities:
+- Manage daily branch operations
+- Manage branch staff assignments
+- View branch sales
+- Approve or review daily closures
+- View branch inventory
+- Monitor appointments and queues
+- Handle exceptions and overrides
+
+4. Receptionist
+Responsibilities:
+- Register customers
+- Check in customers
+- Create visit sessions
+- Assign queue numbers
+- Add services to visits
+- Assign staff to services
+- Checkout customers
+- Receive payments
+- Print or send receipts
+
+5. Staff
+Responsibilities:
+- View assigned services
+- Update service status
+- Mark services as completed
+- View personal schedule
+- View personal commission summary
+- Request inventory items if applicable
+
+Design requirements:
+- Use role-based access control with granular permissions
+- Recommend whether to use Laravel native policies/gates or a package such as spatie/laravel-permission
+- Support tenant-scoped roles
+- Support branch-scoped permissions
+- Support future custom roles
+- Prevent privilege escalation
+- Separate global permissions from tenant permissions
+
+Provide:
+1. Full permission matrix
+2. Role hierarchy
+3. Recommended permission names
+4. Route middleware strategy
+5. Policy examples
+6. Gate definitions
+7. Navigation visibility rules
+8. Data scope rules per role
+9. Audit rules for sensitive permissions
+10. How to handle staff who work in multiple branches or business units
+
+Permission categories should include:
+- Tenant administration
+- Branch management
+- User management
+- Staff management
+- Customer management
+- Appointment management
+- Visit management
+- Service management
+- Checkout and payment
+- Commission view/manage
+- Inventory view/manage
+- Expense view/manage
+- Reports view/export
+- SMS/notification management
+- Settings management
+- Subscription management
+
+Also define:
+- Which roles can void a service
+- Which roles can discount an invoice
+- Which roles can refund a payment
+- Which roles can edit completed visits
+- Which roles can delete records
+- Which roles can export reports
+
+Output format:
+- Role definitions
+- Permission matrix table
+- Laravel implementation approach
+- Policy and middleware examples
+- Edge cases
+- Acceptance criteria

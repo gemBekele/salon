@@ -1,0 +1,31 @@
+Based on all previous architecture, database, workflow, and roadmap outputs, generate the Laravel 11 implementation skeleton for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+Do not build everything at once.
+Start with Phase 1 only.
+
+Generate:
+1. Recommended folder structure
+2. Domain modules
+3. Eloquent models for Phase 1
+4. Migration file names
+5. Middleware for tenant scoping
+6. Policies for tenant isolation
+7. Livewire page structure
+8. Navigation structure
+9. Seeder structure
+10. Test cases for tenant isolation and role access
+
+Use Laravel 11 best practices.
+Use Blade + Livewire + Tailwind.
+Keep the architecture cPanel-friendly.
+Avoid unnecessary packages.
+
+Output:
+- File tree
+- Migration names
+- Model names
+- Middleware names
+- Policy names
+- Livewire component names
+- Route structure
+- Phase 1 acceptance tests

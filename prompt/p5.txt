@@ -1,0 +1,141 @@
+Using the shared master context, design the complete Customer Journey Workflow for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+This workflow must support real-world salon operations for walk-in customers and appointment customers.
+
+The main journey is:
+
+Customer Registration
+→ Create Visit Session
+→ Queue Number
+→ Multiple Services
+→ Different Staff
+→ Pending Charges
+→ Final Checkout
+→ Payment
+→ Commission Calculation
+→ Inventory Deduction
+→ SMS Follow-up
+
+Design the complete workflow in detail.
+
+Include the following:
+
+1. Customer Registration
+- Walk-in customer
+- Existing customer lookup by phone/name
+- Duplicate prevention
+- Optional customer profile fields
+- Gender, phone, email, notes, birthday, tags
+- Consent for SMS notifications
+
+2. Visit Session Creation
+Explain:
+- What a visit session represents
+- How it is opened
+- How it relates to customer, branch, business unit, and queue
+- Statuses such as open, in_progress, ready_for_checkout, completed, cancelled, no_show
+- Whether a visit can be reopened after checkout
+
+3. Queue Number
+Design:
+- Queue numbering rules
+- Prefix by business unit or service type
+- Daily reset behavior
+- Priority customers
+- Appointment vs walk-in queue merging
+- Queue display states
+
+4. Service Selection
+Explain:
+- Adding multiple services to one visit
+- Service categories
+- Duration
+- Price
+- Staff assignment
+- Business unit assignment
+- Service status flow:
+  - pending
+  - assigned
+  - in_progress
+  - completed
+  - cancelled
+  - no_show
+
+5. Different Staff per Service
+Explain:
+- One visit can include multiple services
+- Each service can be assigned to a different staff member
+- Staff can only see their assigned services if permissions restrict it
+- Commission should be calculated per staff/service where applicable
+
+6. Pending Charges
+Design:
+- How charges accumulate while the visit is still open
+- How receptionist sees current total
+- How partial service completion is handled
+- How to add products or extra charges
+- How discounts and taxes may be applied later
+
+7. Final Checkout
+Explain:
+- Invoice generation
+- Checkout screen summary
+- Payment methods
+- Split payments
+- Partial payments
+- Outstanding balance
+- Receipt printing
+- Invoice status
+
+8. Payment
+Design:
+- Payment statuses
+- Payment methods
+- Payment references
+- Refunds
+- Void handling
+- Cash drawer implications if relevant
+
+9. Commission Calculation
+Explain when commission is triggered:
+- On service completion
+- On checkout
+- On payment received
+- Based on company settings
+
+10. Inventory Deduction
+Explain:
+- How services consume products
+- When deduction happens
+- How stock shortages are handled
+- Transaction logging
+
+11. SMS Follow-up
+Explain:
+- Visit completion message
+- Appointment reminder
+- Receipt summary
+- Thank-you message
+- Review request
+
+Also include:
+- State machine diagram for visit and service statuses
+- Event list such as VisitOpened, ServiceStarted, ServiceCompleted, CheckoutCompleted, PaymentReceived
+- Validation rules
+- Edge cases:
+  - customer leaves without completing service
+  - staff unavailable
+  - service cancelled after start
+  - payment failure
+  - duplicate customer
+  - visit moved to another business unit
+- UI actions needed at each step
+- Database fields needed to support the workflow
+
+Output format:
+- Step-by-step workflow
+- Status transitions
+- Events
+- Business rules
+- Edge cases
+- Acceptance criteria

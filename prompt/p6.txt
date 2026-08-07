@@ -1,0 +1,138 @@
+Using the shared master context, design the complete Multi-Branch Architecture for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The organizational structure must support:
+
+Company
+→ Branch
+→ Business Unit
+→ Department
+→ Staff
+
+Example:
+A company may have:
+- Branch A in City X
+- Branch B in City Y
+
+Inside Branch A:
+- Men's Salon
+- Women's Salon
+- Spa Center
+- Massage Center
+
+Each business unit may have:
+- Separate staff
+- Separate services
+- Separate inventory
+- Separate reports
+- Separate queue behavior
+- Separate operational settings
+
+But the owner must still see:
+- Central dashboard
+- Consolidated financial overview
+- Branch comparison reports
+- Company-wide settings
+
+Design requirements:
+
+1. Company Level
+Define:
+- Company profile
+- Branding
+- Subscription ownership
+- Global settings
+- Default currency and timezone
+- Default commission policies
+- Default invoice settings
+- Default SMS settings
+
+2. Branch Level
+Define:
+- Branch profile
+- Address
+- City
+- Working hours
+- Phone
+- Active status
+- Branch manager assignment
+- Branch-specific settings
+- Branch-specific pricing if needed
+
+3. Business Unit Level
+Define:
+- Business unit type such as men's salon, women's salon, spa, massage, beauty center
+- Gender rules if needed
+- Assigned branch
+- Assigned staff
+- Assigned services
+- Assigned queue rules
+- Assigned inventory stock
+- Assigned reporting categories
+
+4. Department Level
+Define whether department is necessary and how it differs from business unit.
+Examples:
+- Hair department
+- Nail department
+- Facial department
+- Massage department
+- Cashier department
+
+5. Staff Assignment
+Explain:
+- Staff can belong to a branch
+- Staff can be assigned to one or more business units
+- Staff can have skills
+- Staff can have roles
+- Staff can work across business units if allowed
+
+6. Data Scoping
+Explain how data is scoped:
+- Owner sees all branches
+- Branch manager sees only assigned branch
+- Receptionist sees only assigned branch or business unit
+- Staff sees assigned services only
+- Reports respect scope restrictions
+
+7. Reporting Structure
+Design:
+- Branch-level reports
+- Business-unit-level reports
+- Department-level reports
+- Staff-level reports
+- Consolidated company reports
+- Branch comparison reports
+
+8. Operational Independence
+Each business unit should be able to have:
+- Different service catalog
+- Different staff
+- Different inventory
+- Different opening hours
+- Different queue display
+- Different receipt notes if needed
+
+9. Central Control
+The owner should still be able to:
+- Create new branches
+- Duplicate services
+- Transfer staff
+- Compare performance
+- Control subscription
+- Standardize categories
+
+Provide:
+- Suggested database tables and relationships
+- Scope rules
+- Permission rules
+- Example hierarchy
+- Edge cases
+- Recommended UI navigation structure
+
+Output format:
+- Organization model
+- ERD impact
+- Scoping rules
+- Reporting rules
+- Example scenarios
+- Acceptance criteria

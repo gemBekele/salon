@@ -1,0 +1,128 @@
+Using the shared master context, design the complete Staff Commission System for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The commission system must support real salon payroll scenarios.
+
+Example:
+Service: Hair Cut
+Price: 300 ETB
+Commission rule: 30%
+Staff commission: 90 ETB
+
+Design the following:
+
+1. Commission Rule Types
+Support:
+- Percentage of service price
+- Fixed amount per service
+- Tiered commission
+- Service-specific commission
+- Staff-specific commission
+- Role-based commission
+- Business-unit-specific commission
+- Branch-specific commission
+- Commission after deduction of product cost, if optional
+
+2. Commission Trigger Timing
+Support configurable triggers:
+- Commission created when service is completed
+- Commission created when visit is checked out
+- Commission created only after payment is received
+- Commission created for partial payment if configured
+
+3. Commission Calculation Flow
+Explain:
+- How commission is calculated per visit_service
+- How multiple staff in one visit are handled
+- How discounts affect commission
+- How cancelled services affect commission
+- How refunded payments affect commission
+- How manual adjustments are handled
+
+4. Settlement Cycles
+Support:
+- Daily settlement
+- Weekly settlement
+- Monthly settlement
+- Manual payout
+- Pending settlement
+- Approved settlement
+- Paid settlement
+- Disputed settlement
+
+5. Commission Records
+Design database fields for:
+- commission_rules
+- commissions
+- commission_settlements
+- commission_adjustments
+
+Include:
+- company_id
+- branch_id
+- business_unit_id
+- staff_id
+- service_id
+- visit_id
+- visit_service_id
+- rule_id
+- base_amount
+- commission_amount
+- status
+- settlement_id
+- calculated_at
+- approved_at
+- paid_at
+
+6. Reporting
+Provide:
+- Staff commission summary
+- Branch commission summary
+- Settlement history
+- Pending commission report
+- Paid commission report
+- Commission audit report
+
+7. Security
+Define:
+- Who can view commission
+- Who can edit rules
+- Who can approve settlements
+- Who can mark settlement paid
+- Audit trail requirements
+
+8. Edge Cases
+Handle:
+- Service completed but not paid
+- Partial payment
+- Refund after commission paid
+- Staff transfer between branches
+- Rule changed after service completed
+- Duplicate commission prevention
+- Commission reversal
+
+9. Example Calculations
+Provide calculation examples:
+- Percentage commission
+- Fixed commission
+- Tiered commission
+- Discounted service
+- Multiple staff in same visit
+- Refund scenario
+
+10. Implementation Notes
+Provide:
+- Laravel event listeners
+- Domain service suggestion
+- Calculation pseudocode
+- Idempotency rules
+- Database constraints
+- Testing scenarios
+
+Output format:
+- Commission rule engine design
+- Database schema
+- Calculation examples
+- Workflow
+- Security rules
+- Edge cases
+- Acceptance criteria

@@ -1,0 +1,113 @@
+Using the shared master context, design the complete Inventory System for the Multi-Tenant SaaS Salon & Spa Management ERP Platform.
+
+The inventory system must support services that consume products.
+
+Example:
+Service: Hair Coloring
+Consumes:
+- Hair dye
+- Developer
+- Gloves
+
+When the service is completed, the system should automatically deduct inventory.
+
+Design the following:
+
+1. Inventory Structure
+Support:
+- Inventory items
+- Categories
+- Units of measure
+- SKUs
+- Branch-level stock
+- Business-unit-level stock
+- Optional warehouse/location
+- Reorder level
+- Cost price
+- Selling price if retail is supported
+
+2. Service-to-Inventory Mapping
+Design how services consume products:
+- One service can consume multiple items
+- Each item can have quantity and unit
+- Consumption can be optional or mandatory
+- Consumption can be branch-specific if needed
+
+3. Stock Transactions
+Support:
+- Purchase in
+- Adjustment in
+- Adjustment out
+- Service consumption
+- Transfer in
+- Transfer out
+- Return to supplier
+- Damage/loss
+- Opening stock
+
+4. Automatic Deduction Flow
+Explain:
+- When stock is deducted
+- Whether deduction happens on service completion or checkout
+- How to handle insufficient stock
+- Whether negative stock is allowed
+- How to log every movement
+- How to reverse consumption if service is cancelled
+
+5. Inventory Permissions
+Define:
+- Who can view stock
+- Who can adjust stock
+- Who can transfer stock
+- Who can receive stock
+- Who can delete stock records
+
+6. Inventory Reports
+Provide:
+- Current stock report
+- Low stock report
+- Stock movement report
+- Consumption by service report
+- Stock valuation report
+- Branch stock comparison
+
+7. Multi-Branch Inventory
+Explain:
+- Branch-specific stock
+- Transfer between branches
+- Business unit stock usage
+- Central purchasing distribution
+
+8. Alerts
+Design:
+- Low stock alert
+- Out of stock alert
+- Expiry alert if future support is needed
+- Negative stock warning
+
+9. Database Design
+Provide schema impact for:
+- inventory_items
+- inventory_item_service
+- stock_transactions
+- stock_levels
+- inventory_transfers
+- inventory_adjustments
+
+10. Edge Cases
+Handle:
+- Service uses product but stock is zero
+- Product unit conversion
+- Partial service completion
+- Cancelled service after stock deducted
+- Deleted service template
+- Stock transferred while visit is active
+
+Output format:
+- Inventory architecture
+- Stock movement workflow
+- Database schema
+- Business rules
+- UI requirements
+- Edge cases
+- Acceptance criteria
