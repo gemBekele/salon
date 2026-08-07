@@ -7,7 +7,7 @@ import mysql from 'mysql2/promise';
 import crypto from 'node:crypto';
 
 import { verifyPassword, signToken, AuthUser, hashPassword } from './server-lib/auth';
-import { authenticate, requireRoles, securityHeaders, corsMiddleware, requestLogger, rateLimit, errorHandler, asyncHandler } from './server-lib/middleware';
+import { authenticate, requireRoles, securityHeaders, corsMiddleware, requestLogger, rateLimit, loginRateLimit, errorHandler, asyncHandler } from './server-lib/middleware';
 import { validate, ValidationSchema } from './server-lib/validate';
 import { createSmsService } from './server-lib/sms';
 import { ensureSeeded } from './server-lib/seed';
@@ -86,7 +86,13 @@ async function startServer() {
     }
   }
 
-  // Seed reference data + RBAC users if empty
+  // Validate JWT secret
+  const jwtSecret = process.env.JWT_SECRET || '';
+  if (!jwtSecret || jwtSecret.includes('change_this') || jwtSecret.includes('dev-insecure')) {
+    console.error('[FATAL] JWT_SECRET is not set or is a placeholder. Refusing to start.');
+    console.error('  Set a strong random string in .env.local: JWT_SECRET=<your-secret>');
+    process.exit(1);
+  }
   try {
     await ensureSeeded(pool);
   } catch (e) {
@@ -98,6 +104,13 @@ async function startServer() {
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
+  app.use((req, _res, next) => {
+    const raw = req.headers.cookie || '';
+    (req as any).cookies = Object.fromEntries(
+      raw.split(';').map((c) => c.trim().split('=').map((s) => s.trim())).filter(([k]) => k)
+    );
+    next();
+  });
   app.use(securityHeaders);
   app.use(corsMiddleware);
   app.use(requestLogger);
@@ -111,19 +124,30 @@ async function startServer() {
   // ==========================================================
   // AUTH
   // ==========================================================
-  app.post('/api/auth/login', rateLimit(10, 60_000), asyncHandler(async (req, res) => {
+  app.post('/api/auth/login', loginRateLimit, asyncHandler(async (req, res) => {
     const errs = validate(req.body, { email: { required: true, type: 'string' }, password: { required: true, type: 'string' } });
     if (errs.length) return res.status(400).json({ error: errs.join('; ') });
     const [rows] = (await pool.query('SELECT * FROM users WHERE email = ?', [req.body.email])) as any;
     const user = rows[0];
     if (!user || !verifyPassword(req.body.password, user.password_hash)) {
+      loginRateLimit.recordFailure(req);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     if (!user.is_active) return res.status(403).json({ error: 'Account is disabled' });
 
+    loginRateLimit.recordSuccess(req);
     await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
     const authUser: AuthUser = { id: user.id, companyId: user.company_id, name: user.name, email: user.email, role: user.role };
-    return res.json({ token: signToken(authUser), user: authUser });
+    const token = signToken(authUser);
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('sserp_token', token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'strict' : 'lax',
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/',
+    });
+    return res.json({ token, user: authUser });
   }));
 
   app.get('/api/auth/me', authenticate, (req, res) => res.json({ user: req.user }));
@@ -135,6 +159,7 @@ async function startServer() {
       const { tokenBlacklist } = require('./server-lib/auth');
       tokenBlacklist.add(token);
     }
+    res.clearCookie('sserp_token', { path: '/' });
     res.json({ success: true });
   });
 
@@ -183,7 +208,12 @@ async function startServer() {
         : `SELECT * FROM visit_sessions ${typeof req.query.startDate === 'string' ? 'WHERE started_at >= ?' : ''} ${typeof req.query.endDate === 'string' ? (typeof req.query.startDate === 'string' ? 'AND' : 'WHERE') + ' started_at <= ?' : ''}`,
       [...(companyId ? [companyId] : []), ...(typeof req.query.startDate === 'string' ? [req.query.startDate] : []), ...(typeof req.query.endDate === 'string' ? [req.query.endDate + ' 23:59:59'] : [])]
     );
-    const [sessionSrvRows] = await pool.query('SELECT * FROM visit_session_services');
+    const [sessionSrvRows] = await pool.query(
+      companyId
+        ? `SELECT vss.* FROM visit_session_services vss JOIN visit_sessions vs ON vss.visit_session_id = vs.id WHERE vs.company_id = ?`
+        : 'SELECT * FROM visit_session_services',
+      companyId ? [companyId] : []
+    );
     const [ruleRows] = await pool.query(`SELECT * FROM commission_rules ${scope}`, params);
     const [logRows] = await pool.query(`SELECT * FROM commission_logs ${scope}`, params);
     const [expRows] = await pool.query(`SELECT * FROM expenses ${scope} ORDER BY date DESC`, params);
@@ -291,7 +321,7 @@ async function startServer() {
   // ==========================================================
   // MANAGEMENT WRITE ROUTES
   // ==========================================================
-  const mgmt = [authenticate, requireRoles('super_admin', 'tenant_manager')];
+  const mgmt = [authenticate, requireRoles('super_admin', 'tenant_manager'), rateLimit(120, 60_000)];
 
   // Companies (super_admin only)
   app.post('/api/companies', ...mgmt, asyncHandler(async (req, res) => {
@@ -542,7 +572,7 @@ async function startServer() {
   // ==========================================================
   // RECEPTION POS (receptionist + manager + super_admin)
   // ==========================================================
-  const pos = [authenticate, requireRoles('super_admin', 'tenant_manager', 'receptionist')];
+  const pos = [authenticate, requireRoles('super_admin', 'tenant_manager', 'receptionist'), rateLimit(180, 60_000)];
 
   app.post('/api/customers', ...pos, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });

@@ -174,7 +174,12 @@ export default function App() {
     fetchDbState();
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // proceed with local cleanup even if server call fails
+    }
     clearToken();
     setUser(null);
     setCompanies([]);

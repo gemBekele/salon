@@ -50,13 +50,16 @@ export const securityHeaders: RequestHandler = helmet({
 
 export const corsMiddleware: RequestHandler = cors({
   origin(origin, callback) {
-    if (!origin || process.env.CORS_ORIGINS?.includes(origin)) {
+    const allowed = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!origin) return callback(null, true);
+    if (allowed.length === 0 || allowed.includes(origin)) {
       return callback(null, true);
     }
-    return callback(null, true);
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
   maxAge: 86400,
 });
 
@@ -125,10 +128,13 @@ loginRateLimit.recordSuccess = (req) => {
   if (key) loginAttempts.delete(key);
 };
 
-/** Require a valid Bearer JWT; attaches the user to req.user. */
+/** Require a valid Bearer JWT; attaches the user to req.user. Reads from Authorization header or cookie. */
 export const authenticate: RequestHandler = (req, res, next) => {
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  let token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token && (req as any).cookies?.sserp_token) {
+    token = (req as any).cookies.sserp_token;
+  }
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   if (tokenBlacklist.has(token)) return res.status(401).json({ error: 'Session has been terminated' });
   try {
