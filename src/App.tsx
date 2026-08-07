@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Navbar } from './components/Navbar';
-import { SaasAdminDashboard } from './components/SaasAdminDashboard';
-import { TenantAdminView } from './components/TenantAdminView';
-import { ReceptionistPos } from './components/ReceptionistPos';
-import { StaffPortalView } from './components/StaffPortalView';
-import { ArchitectBlueprintView } from './components/ArchitectBlueprintView';
-import { QueueDisplayView } from './components/QueueDisplayView';
-import { AiAssistantModal } from './components/AiAssistantModal';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const SaasAdminDashboard = lazy(() => import('./components/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard })));
+const TenantAdminView = lazy(() => import('./components/TenantAdminView').then(m => ({ default: m.TenantAdminView })));
+const ReceptionistPos = lazy(() => import('./components/ReceptionistPos').then(m => ({ default: m.ReceptionistPos })));
+const StaffPortalView = lazy(() => import('./components/StaffPortalView').then(m => ({ default: m.StaffPortalView })));
+const ArchitectBlueprintView = lazy(() => import('./components/ArchitectBlueprintView').then(m => ({ default: m.ArchitectBlueprintView })));
+const QueueDisplayView = lazy(() => import('./components/QueueDisplayView').then(m => ({ default: m.QueueDisplayView })));
+const AiAssistantModal = lazy(() => import('./components/AiAssistantModal').then(m => ({ default: m.AiAssistantModal })));
 
 import { mockArchitectureSections } from './data/mockErpData';
 
@@ -387,6 +388,131 @@ export default function App() {
     }
   };
 
+  // UPDATE / DELETE HANDLERS
+  const handleUpdateBranch = async (updated: Branch) => {
+    try {
+      await apiFetch(`/api/branches/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to update branch', err);
+    }
+  };
+
+  const handleDeleteBranch = async (branchId: string) => {
+    try {
+      await apiFetch(`/api/branches/${branchId}`, { method: 'DELETE' });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to delete branch', err);
+    }
+  };
+
+  const handleUpdateStaff = async (updated: Staff) => {
+    try {
+      await apiFetch(`/api/staff/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to update staff', err);
+    }
+  };
+
+  const handleDeleteStaff = async (staffId: string) => {
+    try {
+      await apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to delete staff', err);
+    }
+  };
+
+  const handleUpdateService = async (updated: Service) => {
+    try {
+      await apiFetch(`/api/services/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to update service', err);
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string) => {
+    try {
+      await apiFetch(`/api/services/${serviceId}`, { method: 'DELETE' });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to delete service', err);
+    }
+  };
+
+  const handleUpdateInventoryItem = async (updated: InventoryItem) => {
+    try {
+      await apiFetch(`/api/inventory-items/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to update inventory item', err);
+    }
+  };
+
+  const handleDeleteInventoryItem = async (itemId: string) => {
+    try {
+      await apiFetch(`/api/inventory-items/${itemId}`, { method: 'DELETE' });
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to delete inventory item', err);
+    }
+  };
+
+  const handleAddUser = async (newUser: User) => {
+    try {
+      const res = await apiFetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Failed to add user:', data.error);
+        return;
+      }
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to add user', err);
+    }
+  };
+
+  const handleUpdateUser = async (updated: User & { password?: string }) => {
+    try {
+      const res = await apiFetch(`/api/users/${updated.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Failed to update user:', data.error);
+        return;
+      }
+      await fetchDbState();
+    } catch (err) {
+      console.error('Failed to update user', err);
+    }
+  };
+
   const handleCheckoutSession = async (
     sessionId: string,
     paymentMethod: PaymentMethod,
@@ -485,6 +611,7 @@ export default function App() {
             expenses={expenses}
             visitSessions={visitSessions}
             auditLogs={auditLogs}
+            users={users}
             selectedBranch={selectedBranch}
             onAddBranch={handleAddBranch}
             onAddBusinessUnit={handleAddBusinessUnit}
@@ -495,6 +622,16 @@ export default function App() {
             onSaveCommissionRule={handleSaveCommissionRule}
             onAddExpense={handleAddExpense}
             onAddAuditLog={handleAddAuditLog}
+            onUpdateBranch={handleUpdateBranch}
+            onDeleteBranch={handleDeleteBranch}
+            onUpdateStaff={handleUpdateStaff}
+            onDeleteStaff={handleDeleteStaff}
+            onUpdateService={handleUpdateService}
+            onDeleteService={handleDeleteService}
+            onUpdateInventoryItem={handleUpdateInventoryItem}
+            onDeleteInventoryItem={handleDeleteInventoryItem}
+            onAddUser={handleAddUser}
+            onUpdateUser={handleUpdateUser}
           />
         )}
 
@@ -554,12 +691,14 @@ export default function App() {
         </div>
       </footer>
 
-      <AiAssistantModal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-        selectedCompany={selectedCompany}
-        selectedBranch={selectedBranch}
-      />
+      <Suspense fallback={null}>
+        <AiAssistantModal
+          isOpen={isAiModalOpen}
+          onClose={() => setIsAiModalOpen(false)}
+          selectedCompany={selectedCompany}
+          selectedBranch={selectedBranch}
+        />
+      </Suspense>
     </div>
   );
 }

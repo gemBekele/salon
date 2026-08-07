@@ -38,6 +38,7 @@ import {
   ExpenseRecord,
   VisitSession,
   AuditLog,
+  User,
 } from '../types';
 import { ReportsDashboard } from './ReportsDashboard';
 import { apiFetch } from '../lib/api';
@@ -54,6 +55,7 @@ interface TenantAdminViewProps {
   expenses: ExpenseRecord[];
   visitSessions: VisitSession[];
   auditLogs?: AuditLog[];
+  users?: User[];
   selectedBranch?: Branch;
   onAddBranch: (br: Branch) => void;
   onAddBusinessUnit: (bu: BusinessUnit) => void;
@@ -64,6 +66,16 @@ interface TenantAdminViewProps {
   onSaveCommissionRule: (rule: CommissionRule) => void;
   onAddExpense?: (exp: ExpenseRecord) => void;
   onAddAuditLog?: (log: AuditLog) => void;
+  onUpdateBranch?: (br: Branch) => void;
+  onDeleteBranch?: (branchId: string) => void;
+  onUpdateStaff?: (stf: Staff) => void;
+  onDeleteStaff?: (staffId: string) => void;
+  onUpdateService?: (srv: Service) => void;
+  onDeleteService?: (serviceId: string) => void;
+  onUpdateInventoryItem?: (inv: InventoryItem) => void;
+  onDeleteInventoryItem?: (itemId: string) => void;
+  onAddUser?: (user: User) => void;
+  onUpdateUser?: (user: User & { password?: string }) => void;
 }
 
 export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
@@ -78,6 +90,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   expenses,
   visitSessions,
   auditLogs = [],
+  users = [],
   selectedBranch,
   onAddBranch,
   onAddBusinessUnit,
@@ -88,9 +101,19 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   onSaveCommissionRule,
   onAddExpense,
   onAddAuditLog,
+  onUpdateBranch,
+  onDeleteBranch,
+  onUpdateStaff,
+  onDeleteStaff,
+  onUpdateService,
+  onDeleteService,
+  onUpdateInventoryItem,
+  onDeleteInventoryItem,
+  onAddUser,
+  onUpdateUser,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'branches' | 'staff' | 'services' | 'inventory' | 'commissions' | 'financials' | 'reports' | 'audit'
+    'branches' | 'staff' | 'services' | 'inventory' | 'commissions' | 'financials' | 'reports' | 'audit' | 'users'
   >('branches');
 
   // Branch Metric Selection State
@@ -121,6 +144,10 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showCommissionRuleModal, setShowCommissionRuleModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+
+  // Edit Modal States
+  const [editingEntity, setEditingEntity] = useState<{ type: string; data: any } | null>(null);
 
   // Commission Rule Form
   const [ruleTargetType, setRuleTargetType] = useState<'staff' | 'service'>('staff');
@@ -603,6 +630,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
           { id: 'financials', label: 'Financials & Expenses', icon: BarChart3 },
           { id: 'reports', label: 'Reports & Analytics', icon: TrendingUp },
           { id: 'audit', label: 'Security Audit', icon: ShieldCheck },
+          { id: 'users', label: 'User Management', icon: ShieldCheck },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -671,6 +699,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                         Main Flagship
                       </span>
                     )}
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => setEditingEntity({ type: 'branch', data: branch })}
+                      className="p-1.5 rounded-lg hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] transition-colors"
+                      title="Edit Branch"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => { if (confirm('Deactivate this branch?')) onDeleteBranch?.(branch.id); }}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-[#737366] hover:text-red-600 transition-colors"
+                      title="Deactivate Branch"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   <div className="border-t border-[#e5e5d1] pt-3 space-y-2">
@@ -757,6 +801,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       </span>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-1 pt-2 border-t border-[#e5e5d1]">
+                    <button
+                      onClick={() => setEditingEntity({ type: 'staff', data: staff })}
+                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] text-[11px] font-medium transition-colors"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      onClick={() => { if (confirm('Deactivate this staff member?')) onDeleteStaff?.(staff.id); }}
+                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-red-50 text-[#737366] hover:text-red-600 text-[11px] font-medium transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove</span>
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -792,7 +852,8 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <th className="px-4 py-3">Price (ETB)</th>
                   <th className="px-4 py-3">Duration</th>
                   <th className="px-4 py-3">Staff Commission</th>
-                  <th className="px-4 py-3 rounded-r-xl">Business Unit</th>
+                  <th className="px-4 py-3">Business Unit</th>
+                  <th className="px-4 py-3 rounded-r-xl">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e5e5d1]">
@@ -809,6 +870,16 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <td className="px-4 py-3 text-[#737366]">{srv.durationMinutes} mins</td>
                       <td className="px-4 py-3 text-emerald-700 font-bold">{srv.commissionValue}% Rate</td>
                       <td className="px-4 py-3 text-[#737366]">{bu?.name || 'General'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-1">
+                          <button onClick={() => setEditingEntity({ type: 'service', data: srv })} className="p-1 rounded hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40]">
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => { if (confirm('Deactivate this service?')) onDeleteService?.(srv.id); }} className="p-1 rounded hover:bg-red-50 text-[#737366] hover:text-red-600">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -930,6 +1001,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   >
                     + Restock (+50 {item.unit})
                   </button>
+                  <div className="flex items-center space-x-1 mt-1">
+                    <button
+                      onClick={() => setEditingEntity({ type: 'inventory', data: item })}
+                      className="flex-1 py-1.5 rounded-xl hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      onClick={() => { if (confirm('Delete this inventory item?')) onDeleteInventoryItem?.(item.id); }}
+                      className="flex-1 py-1.5 rounded-xl hover:bg-red-50 text-[#737366] hover:text-red-600 text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1314,6 +1401,77 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 9: USER MANAGEMENT */}
+      {activeTab === 'users' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">User Management</h3>
+              <p className="text-xs text-[#737366]">
+                Manage system users, roles, and access permissions for this tenant.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAddUserModal(true)}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add User</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm font-sans">
+            <table className="w-full text-left text-xs text-[#2d2d2a]">
+              <thead className="bg-[#f5f5f0] text-[#737366] uppercase font-bold text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-3 rounded-l-xl">Name</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Last Login</th>
+                  <th className="px-4 py-3 rounded-r-xl">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e5e5d1]">
+                {users.filter((u) => company.id === '' || u.companyId === company.id).map((usr) => (
+                  <tr key={usr.id} className="hover:bg-[#f5f5f0]/60">
+                    <td className="px-4 py-3 font-bold text-[#2d2d2a]">{usr.name}</td>
+                    <td className="px-4 py-3 text-[#737366]">{usr.email}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        usr.role === 'super_admin' ? 'bg-purple-50 text-purple-800 border border-purple-200' :
+                        usr.role === 'tenant_manager' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
+                        usr.role === 'receptionist' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                        'bg-[#f5f5f0] text-[#737366] border border-[#e5e5d1]'
+                      }`}>
+                        {usr.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        usr.isActive ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+                      }`}>
+                        {usr.isActive ? 'Active' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[#737366]">{usr.lastLoginAt ? new Date(usr.lastLoginAt).toLocaleDateString() : 'Never'}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setEditingEntity({ type: 'user', data: usr })}
+                        className="p-1.5 rounded-lg hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] transition-colors"
+                        title="Edit User"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -1896,6 +2054,129 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 >
                   Save Expense
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD USER */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Add New User</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const target = e.target as HTMLFormElement;
+              const fd = new FormData(target);
+              onAddUser?.({
+                id: `usr_${Date.now()}`,
+                companyId: company.id,
+                name: fd.get('name') as string,
+                email: fd.get('email') as string,
+                role: fd.get('role') as any,
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                password: fd.get('password') as string,
+              } as any);
+              setShowAddUserModal(false);
+            }} className="space-y-3 font-sans">
+              <div>
+                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Full Name</label>
+                <input name="name" required className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Email</label>
+                <input name="email" type="email" required className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Password</label>
+                <input name="password" type="password" required className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
+                <select name="role" className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]">
+                  <option value="tenant_manager">Tenant Manager</option>
+                  <option value="receptionist">Receptionist</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full shadow-md">Create User</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT ENTITY */}
+      {editingEntity && (
+        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Edit {editingEntity.type.charAt(0).toUpperCase() + editingEntity.type.slice(1)}</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const target = e.target as HTMLFormElement;
+              const fd = new FormData(target);
+              const data = editingEntity.data;
+              if (editingEntity.type === 'branch') {
+                onUpdateBranch?.({ ...data, name: fd.get('name') as string, city: fd.get('city') as string, address: fd.get('address') as string, phone: fd.get('phone') as string });
+              } else if (editingEntity.type === 'staff') {
+                onUpdateStaff?.({ ...data, name: fd.get('name') as string, phone: fd.get('phone') as string, email: fd.get('email') as string, role: fd.get('role') as any, defaultCommissionPercentage: Number(fd.get('commission')) });
+              } else if (editingEntity.type === 'service') {
+                onUpdateService?.({ ...data, name: fd.get('name') as string, category: fd.get('category') as string, priceEtb: Number(fd.get('price')), durationMinutes: Number(fd.get('duration')) });
+              } else if (editingEntity.type === 'inventory') {
+                onUpdateInventoryItem?.({ ...data, name: fd.get('name') as string, sku: fd.get('sku') as string, unit: fd.get('unit') as string, currentStock: Number(fd.get('stock')), reorderLevel: Number(fd.get('reorder')), unitCostEtb: Number(fd.get('cost')) });
+              } else if (editingEntity.type === 'user') {
+                onUpdateUser?.({ ...data, name: fd.get('name') as string, email: fd.get('email') as string, role: fd.get('role') as any, password: fd.get('password') as string || undefined });
+              }
+              setEditingEntity(null);
+            }} className="space-y-3 font-sans">
+              {editingEntity.type === 'branch' && (<>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">City</label><input name="city" defaultValue={editingEntity.data.city} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Address</label><input name="address" defaultValue={editingEntity.data.address} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+              </>)}
+              {editingEntity.type === 'staff' && (<>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
+                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]">
+                    <option value="barber">Barber</option><option value="hairstylist">Hairstylist</option><option value="masseuse">Masseuse</option><option value="esthetician">Esthetician</option><option value="receptionist">Receptionist</option><option value="manager">Manager</option>
+                  </select>
+                </div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Commission %</label><input name="commission" type="number" defaultValue={editingEntity.data.defaultCommissionPercentage} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+              </>)}
+              {editingEntity.type === 'service' && (<>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Category</label><input name="category" defaultValue={editingEntity.data.category} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Price (ETB)</label><input name="price" type="number" defaultValue={editingEntity.data.priceEtb} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Duration (mins)</label><input name="duration" type="number" defaultValue={editingEntity.data.durationMinutes} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+              </>)}
+              {editingEntity.type === 'inventory' && (<>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">SKU</label><input name="sku" defaultValue={editingEntity.data.sku} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Unit</label><input name="unit" defaultValue={editingEntity.data.unit} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Stock</label><input name="stock" type="number" defaultValue={editingEntity.data.currentStock} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Reorder Level</label><input name="reorder" type="number" defaultValue={editingEntity.data.reorderLevel} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Cost per unit (ETB)</label><input name="cost" type="number" defaultValue={editingEntity.data.unitCostEtb} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+              </>)}
+              {editingEntity.type === 'user' && (<>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Password (leave blank to keep)</label><input name="password" type="password" className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
+                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]">
+                    <option value="tenant_manager">Tenant Manager</option><option value="receptionist">Receptionist</option><option value="staff">Staff</option>
+                  </select>
+                </div>
+              </>)}
+              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+                <button type="button" onClick={() => setEditingEntity(null)} className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full shadow-md">Save Changes</button>
               </div>
             </form>
           </div>

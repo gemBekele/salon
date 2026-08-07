@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import crypto from 'node:crypto';
 
-import { verifyPassword, signToken, AuthUser } from './server-lib/auth';
+import { verifyPassword, signToken, AuthUser, hashPassword } from './server-lib/auth';
 import { authenticate, requireRoles, securityHeaders, corsMiddleware, requestLogger, rateLimit, errorHandler, asyncHandler } from './server-lib/middleware';
 import { validate, ValidationSchema } from './server-lib/validate';
 import { createSmsService } from './server-lib/sms';
@@ -726,6 +726,46 @@ async function startServer() {
     const b = req.body;
     await pool.query(`INSERT INTO sms_logs (id, company_id, recipient_phone, message_type, content, status, sent_at) VALUES (?,?,?,?,?,?,?)`,
       [b.id, b.companyId, b.recipientPhone, b.messageType, b.content, b.status || 'sent', b.sentAt || new Date().toISOString()]);
+    res.json({ success: true });
+  }));
+
+  // ==========================================================
+  // USER MANAGEMENT (tenant_manager + super_admin)
+  // ==========================================================
+  app.post('/api/users', ...mgmt, asyncHandler(async (req, res) => {
+    if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
+    const errs = validate(req.body, { companyId: { required: true }, name: { required: true, type: 'string' }, email: { required: true, type: 'string' }, password: { required: true, type: 'string' }, role: { required: true, enum: ['super_admin', 'tenant_manager', 'receptionist', 'staff'] } });
+    if (errs.length) return res.status(400).json({ error: errs.join('; ') });
+    const b = req.body;
+    const [existing] = (await pool.query(`SELECT id FROM users WHERE email = ?`, [b.email])) as any;
+    if (existing.length > 0) return res.status(409).json({ error: 'Email already in use' });
+    await pool.query(
+      `INSERT INTO users (id, company_id, name, email, password_hash, role, is_active) VALUES (?,?,?,?,?,?,?)`,
+      [b.id, b.companyId, b.name, b.email, hashPassword(b.password), b.role, b.isActive !== false ? 1 : 0]
+    );
+    res.json({ success: true });
+  }));
+
+  app.put('/api/users/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM users WHERE id = ?`, [req.params.id])) as any;
+    const u = rows[0];
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    if (!canAccessCompany(req.user!, u.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.email !== undefined) {
+      const [dup] = (await pool.query(`SELECT id FROM users WHERE email = ? AND id != ?`, [b.email, req.params.id])) as any;
+      if (dup.length > 0) return res.status(409).json({ error: 'Email already in use' });
+      fields.push('email = ?'); vals.push(b.email);
+    }
+    if (b.role !== undefined) { fields.push('role = ?'); vals.push(b.role); }
+    if (b.isActive !== undefined) { fields.push('is_active = ?'); vals.push(b.isActive ? 1 : 0); }
+    if (b.password && b.password.length > 0) { fields.push('password_hash = ?'); vals.push(hashPassword(b.password)); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, vals);
     res.json({ success: true });
   }));
 
