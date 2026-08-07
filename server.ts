@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import crypto from 'node:crypto';
 
-import { verifyPassword, signToken, AuthUser, hashPassword } from './server-lib/auth';
+import { verifyPassword, signToken, AuthUser, hashPassword, tokenBlacklist } from './server-lib/auth';
 import { authenticate, requireRoles, securityHeaders, corsMiddleware, requestLogger, rateLimit, loginRateLimit, errorHandler, asyncHandler } from './server-lib/middleware';
 import { validate, ValidationSchema } from './server-lib/validate';
 import { createSmsService } from './server-lib/sms';
@@ -156,7 +156,6 @@ async function startServer() {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (token) {
-      const { tokenBlacklist } = require('./server-lib/auth');
       tokenBlacklist.add(token);
     }
     res.clearCookie('sserp_token', { path: '/' });
