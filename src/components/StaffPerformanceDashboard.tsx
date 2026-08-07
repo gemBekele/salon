@@ -71,13 +71,6 @@ export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps>
     if (performanceByDate[logDateKey]) {
       performanceByDate[logDateKey].earningsEtb += log.commissionAmountEtb;
       performanceByDate[logDateKey].serviceCount += 1;
-    } else {
-      // Fallback for mock items with static dates
-      const firstKey = Object.keys(performanceByDate)[0];
-      if (firstKey && performanceByDate[firstKey]) {
-        performanceByDate[firstKey].earningsEtb += log.commissionAmountEtb;
-        performanceByDate[firstKey].serviceCount += 1;
-      }
     }
   });
 
