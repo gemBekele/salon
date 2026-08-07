@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
-import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer, showToast } from './components/Toast';
@@ -598,7 +598,7 @@ export default function App() {
 
   return (
     <div id="app-root" className="min-h-screen bg-[#f5f5f0] text-[#2d2d2a] flex flex-col font-sans antialiased selection:bg-[#5A5A40] selection:text-white">
-      <Navbar
+      <Sidebar
         currentPersona={currentPersona}
         setCurrentPersona={setCurrentPersona}
         companies={companies}
@@ -616,7 +616,11 @@ export default function App() {
         onOpenAiAssistant={() => setIsAiModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-60 transition-all duration-200">
+        {/* Mobile top bar spacer (hamburger sits over this) */}
+        <div className="lg:hidden h-12" />
+
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <ErrorBoundary fallbackLabel="Failed to load dashboard">
         <Suspense fallback={<div className="flex items-center justify-center py-12 text-[#737366] text-sm">Loading...</div>}>
         {currentPersona === 'saas_super_admin' && user.role === 'super_admin' && (
@@ -720,6 +724,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      </div>
 
       <Suspense fallback={null}>
         <AiAssistantModal
