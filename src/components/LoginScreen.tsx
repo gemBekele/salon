@@ -115,20 +115,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 <span className="text-[#2d2d2a] font-medium">Super Admin</span>
                 <span className="text-[#737366] font-mono">admin@serenity.et</span>
               </button>
-              <button onClick={() => fill('admin@glamourserenity.et', 'Manager123!')} className="w-full flex justify-between items-center bg-[#f5f5f0] hover:bg-[#e5e5d1] px-3 py-1.5 rounded-xl text-left">
-                <span className="text-[#2d2d2a] font-medium">Tenant Manager</span>
-                <span className="text-[#737366] font-mono">admin@glamourserenity.et</span>
+              <button onClick={() => fill('admin@gechsalon.et', 'Manager123!')} className="w-full flex justify-between items-center bg-[#f5f5f0] hover:bg-[#e5e5d1] px-3 py-1.5 rounded-xl text-left">
+                <span className="text-[#2d2d2a] font-medium">Salon Admin</span>
+                <span className="text-[#737366] font-mono">admin@gechsalon.et</span>
               </button>
-              <button onClick={() => fill('sara@glamourserenity.et', 'Staff123!')} className="w-full flex justify-between items-center bg-[#f5f5f0] hover:bg-[#e5e5d1] px-3 py-1.5 rounded-xl text-left">
+              <button onClick={() => fill('liya@gechsalon.et', 'Staff123!')} className="w-full flex justify-between items-center bg-[#f5f5f0] hover:bg-[#e5e5d1] px-3 py-1.5 rounded-xl text-left">
                 <span className="text-[#2d2d2a] font-medium">Receptionist</span>
-                <span className="text-[#737366] font-mono">sara@glamourserenity.et</span>
+                <span className="text-[#737366] font-mono">liya@gechsalon.et</span>
               </button>
             </div>
           </div>
         </div>
 
         <p className="text-center text-[10px] text-[#737366] mt-6">
-          Powered by XAMPP MySQL • React • Express — ETB currency default
+          Powered by XAMPP MySQL • React • Express — Designed & Built by <strong className="text-[#5A5A40]">EngelsTech</strong>
         </p>
       </div>
     </div>

@@ -720,7 +720,7 @@ export default function App() {
             <strong className="text-[#5A5A40] font-serif font-bold">Gech Beauty Salon</strong> — Hawassa Salon Management ERP
           </div>
           <div className="text-[11px] uppercase tracking-wider font-semibold text-[#5A5A40]/70">
-            RBAC Secured • XAMPP MySQL Live DB • Single DB Multi-Tenancy • ETB Currency
+            Designed & Built by <strong>EngelsTech</strong> • XAMPP MySQL • ETB Currency
           </div>
         </div>
       </footer>
