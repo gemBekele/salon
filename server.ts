@@ -7,7 +7,7 @@ import mysql from 'mysql2/promise';
 import crypto from 'node:crypto';
 
 import { verifyPassword, signToken, AuthUser } from './server-lib/auth';
-import { authenticate, requireRoles, securityHeaders, rateLimit, errorHandler, asyncHandler } from './server-lib/middleware';
+import { authenticate, requireRoles, securityHeaders, corsMiddleware, requestLogger, rateLimit, errorHandler, asyncHandler } from './server-lib/middleware';
 import { validate, ValidationSchema } from './server-lib/validate';
 import { createSmsService } from './server-lib/sms';
 import { ensureSeeded } from './server-lib/seed';
@@ -99,6 +99,8 @@ async function startServer() {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
   app.use(securityHeaders);
+  app.use(corsMiddleware);
+  app.use(requestLogger);
 
   // Gemini AI (optional)
   const apiKey = process.env.GEMINI_API_KEY;
@@ -126,6 +128,26 @@ async function startServer() {
 
   app.get('/api/auth/me', authenticate, (req, res) => res.json({ user: req.user }));
 
+  app.post('/api/auth/logout', authenticate, (req, res) => {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (token) {
+      const { tokenBlacklist } = require('./server-lib/auth');
+      tokenBlacklist.add(token);
+    }
+    res.json({ success: true });
+  });
+
+  // Health check
+  app.get('/api/health', async (_req, res) => {
+    try {
+      await pool.query('SELECT 1');
+      res.json({ status: 'ok', db: 'connected', uptime: process.uptime() });
+    } catch {
+      res.status(503).json({ status: 'error', db: 'disconnected' });
+    }
+  });
+
   // ==========================================================
   // REPORTS
   // ==========================================================
@@ -145,7 +167,14 @@ async function startServer() {
     const [buRows] = await pool.query(`SELECT * FROM business_units ${scope}`, params);
     const [stfRows] = await pool.query(`SELECT * FROM staff ${scope}`, params);
     const [srvRows] = await pool.query(`SELECT * FROM services ${scope}`, params);
-    const [reqRows] = await pool.query('SELECT * FROM service_inventory_requirements');
+    const [reqRows] = await pool.query(
+      companyId
+        ? `SELECT sir.* FROM service_inventory_requirements sir
+           JOIN services s ON sir.service_id = s.id
+           WHERE s.company_id = ?`
+        : 'SELECT * FROM service_inventory_requirements',
+      companyId ? [companyId] : []
+    );
     const [invRows] = await pool.query(`SELECT * FROM inventory_items ${scope}`, params);
     const [custRows] = await pool.query(`SELECT * FROM customers ${scope}`, params);
     const [vstRows] = await pool.query(`SELECT * FROM visit_sessions ${scope}`, params);
@@ -334,6 +363,21 @@ async function startServer() {
        VALUES (?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE type=VALUES(type), value=VALUES(value), deduct_product_cost=VALUES(deduct_product_cost), is_active=VALUES(is_active)`,
       [b.id, b.companyId, b.targetType, b.targetId, b.targetName, b.type, b.value, b.deductProductCost ? 1 : 0, b.isActive ? 1 : 0]);
     await insertAudit({ companyId: b.companyId, branchId: null }, 'commission_change', `Commission Rule configured: ${b.targetName}`, 'Tenant Admin', `Value ${b.value}`);
+    res.json({ success: true });
+  }));
+
+  // Update commission payout status
+  app.patch('/api/commission-logs/payout', ...mgmt, asyncHandler(async (req, res) => {
+    const { id, payoutStatus } = req.body;
+    if (!id || !payoutStatus) return res.status(400).json({ error: 'id and payoutStatus are required' });
+    if (!['unpaid', 'payout_requested', 'paid'].includes(payoutStatus)) {
+      return res.status(400).json({ error: 'payoutStatus must be unpaid, payout_requested, or paid' });
+    }
+    const [rows] = (await pool.query(`SELECT company_id FROM commission_logs WHERE id = ?`, [id])) as any;
+    const log = rows[0];
+    if (!log) return res.status(404).json({ error: 'Commission log not found' });
+    if (!canAccessCompany(req.user!, log.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`UPDATE commission_logs SET payout_status = ? WHERE id = ?`, [payoutStatus, id]);
     res.json({ success: true });
   }));
 
@@ -586,9 +630,6 @@ async function startServer() {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }
-
-// Stub loop variable used inside checkout helpers referenced above.
-async function and(x: any) { return x; }
 
 startServer().catch((err) => {
   console.error('Server startup error:', err);
