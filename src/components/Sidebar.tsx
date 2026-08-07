@@ -218,11 +218,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="text-[10px] text-[#f5f5f0]/50 truncate">{currentUser.email}</div>
             </div>
           )}
-          {isWide && (
-            <button onClick={onLogout} className="text-[#f5f5f0]/50 hover:text-white p-1 cursor-pointer shrink-0" title="Sign out">
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            onClick={onLogout}
+            className={`text-[#f5f5f0]/50 hover:text-white p-1.5 rounded-lg hover:bg-[#f5f5f0]/10 cursor-pointer shrink-0 ${isWide ? '' : ''}`}
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
