@@ -249,7 +249,7 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
       <div className="border-t border-[#38382e] pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#787868]">
         <div className="flex items-center space-x-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-          <span className="text-[#b8b8a0] font-bold">Serenity ERP Live Waiting Display Protocol v2.4</span>
+          <span className="text-[#b8b8a0] font-bold">Gech Beauty Salon — Live Queue Display</span>
         </div>
         <div>
           For assistance or priority booking, please approach the reception desk.

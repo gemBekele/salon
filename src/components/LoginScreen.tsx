@@ -8,7 +8,7 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
-  const [email, setEmail] = useState('admin@glamourserenity.et');
+  const [email, setEmail] = useState('admin@gechsalon.et');
   const [password, setPassword] = useState('Manager123!');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -111,10 +111,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <div className="pt-3 border-t border-[#e5e5d1]">
             <p className="text-[10px] uppercase tracking-widest text-[#737366] font-bold mb-2">Demo Accounts</p>
             <div className="space-y-1.5 text-[11px]">
-              <button onClick={() => fill('admin@serenity.et', 'Admin123!')} className="w-full flex justify-between items-center bg-[#f5f5f0] hover:bg-[#e5e5d1] px-3 py-1.5 rounded-xl text-left">
-                <span className="text-[#2d2d2a] font-medium">Super Admin</span>
-                <span className="text-[#737366] font-mono">admin@serenity.et</span>
-              </button>
               <button onClick={() => fill('admin@gechsalon.et', 'Manager123!')} className="w-full flex justify-between items-center bg-[#f5f5f0] hover:bg-[#e5e5d1] px-3 py-1.5 rounded-xl text-left">
                 <span className="text-[#2d2d2a] font-medium">Salon Admin</span>
                 <span className="text-[#737366] font-mono">admin@gechsalon.et</span>
