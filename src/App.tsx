@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { SaasAdminDashboard } from './components/SaasAdminDashboard';
 import { TenantAdminView } from './components/TenantAdminView';
@@ -8,6 +8,7 @@ import { ArchitectBlueprintView } from './components/ArchitectBlueprintView';
 import { QueueDisplayView } from './components/QueueDisplayView';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { LoginScreen } from './components/LoginScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { mockArchitectureSections } from './data/mockErpData';
 
@@ -30,6 +31,7 @@ import {
   AuditLog,
   PaymentMethod,
   SubscriptionPlan,
+  User,
 } from './types';
 import { apiFetch, clearToken } from './lib/api';
 
@@ -75,6 +77,7 @@ export default function App() {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
 
   // Gemini AI Assistant Modal
@@ -115,6 +118,7 @@ export default function App() {
       if (data.expenses) setExpenses(data.expenses);
       if (data.smsLogs) setSmsLogs(data.smsLogs);
       if (data.auditLogs) setAuditLogs(data.auditLogs);
+      if (data.users) setUsers(data.users);
       if (data.subscriptionPlans) setSubscriptionPlans(data.subscriptionPlans);
     } catch (err) {
       console.error('Failed to load database state from MySQL:', err);
@@ -457,6 +461,8 @@ export default function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <ErrorBoundary fallbackLabel="Failed to load dashboard">
+        <Suspense fallback={<div className="flex items-center justify-center py-12 text-[#737366] text-sm">Loading...</div>}>
         {currentPersona === 'saas_super_admin' && user.role === 'super_admin' && (
           <SaasAdminDashboard
             companies={companies}
@@ -533,6 +539,8 @@ export default function App() {
         {currentPersona === 'architect_lead' && (
           <ArchitectBlueprintView sections={mockArchitectureSections} />
         )}
+        </Suspense>
+        </ErrorBoundary>
       </main>
 
       <footer id="app-footer" className="bg-white border-t border-[#e5e5d1] py-4 text-xs text-[#737366] text-center">

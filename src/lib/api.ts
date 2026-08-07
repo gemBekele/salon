@@ -32,5 +32,8 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
     clearToken();
     notifySessionExpired();
   }
+  if (res.status === 403) {
+    console.error('[API] Access denied (403):', input);
+  }
   return res;
 }

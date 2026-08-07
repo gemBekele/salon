@@ -177,13 +177,24 @@ async function startServer() {
     );
     const [invRows] = await pool.query(`SELECT * FROM inventory_items ${scope}`, params);
     const [custRows] = await pool.query(`SELECT * FROM customers ${scope}`, params);
-    const [vstRows] = await pool.query(`SELECT * FROM visit_sessions ${scope}`, params);
+    const [vstRows] = await pool.query(
+      companyId
+        ? `SELECT * FROM visit_sessions WHERE company_id = ? ${typeof req.query.startDate === 'string' ? 'AND started_at >= ?' : ''} ${typeof req.query.endDate === 'string' ? 'AND started_at <= ?' : ''}`
+        : `SELECT * FROM visit_sessions ${typeof req.query.startDate === 'string' ? 'WHERE started_at >= ?' : ''} ${typeof req.query.endDate === 'string' ? (typeof req.query.startDate === 'string' ? 'AND' : 'WHERE') + ' started_at <= ?' : ''}`,
+      [...(companyId ? [companyId] : []), ...(typeof req.query.startDate === 'string' ? [req.query.startDate] : []), ...(typeof req.query.endDate === 'string' ? [req.query.endDate + ' 23:59:59'] : [])]
+    );
     const [sessionSrvRows] = await pool.query('SELECT * FROM visit_session_services');
     const [ruleRows] = await pool.query(`SELECT * FROM commission_rules ${scope}`, params);
     const [logRows] = await pool.query(`SELECT * FROM commission_logs ${scope}`, params);
     const [expRows] = await pool.query(`SELECT * FROM expenses ${scope} ORDER BY date DESC`, params);
     const [smsRows] = await pool.query(`SELECT * FROM sms_logs ${scope} ORDER BY created_at DESC`, params);
     const [auditRows] = await pool.query(`SELECT * FROM audit_logs ${scope} ORDER BY timestamp DESC`, params);
+    const [userRows] = await pool.query(
+      companyId
+        ? `SELECT u.* FROM users u LEFT JOIN companies c ON u.company_id = c.id WHERE u.company_id = ?`
+        : `SELECT * FROM users`,
+      companyId ? [companyId] : []
+    );
 
     const jsonArr = (rows: any, parser: (r: any) => any) => (rows as any[]).map(parser);
 
@@ -270,6 +281,10 @@ async function startServer() {
         description: r.description, performedBy: r.performed_by, timestamp: r.timestamp,
         details: r.details || undefined, ipAddress: r.ip_address || undefined,
       })),
+      users: jsonArr(userRows, (r) => ({
+        id: r.id, companyId: r.company_id, name: r.name, email: r.email, role: r.role,
+        isActive: Boolean(r.is_active), lastLoginAt: r.last_login_at || undefined, createdAt: r.created_at,
+      })),
     });
   }));
 
@@ -301,6 +316,35 @@ async function startServer() {
     res.json({ success: true });
   }));
 
+  app.put('/api/branches/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM branches WHERE id = ?`, [req.params.id])) as any;
+    const br = rows[0];
+    if (!br) return res.status(404).json({ error: 'Branch not found' });
+    if (!canAccessCompany(req.user!, br.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.city !== undefined) { fields.push('city = ?'); vals.push(b.city); }
+    if (b.address !== undefined) { fields.push('address = ?'); vals.push(b.address); }
+    if (b.phone !== undefined) { fields.push('phone = ?'); vals.push(b.phone); }
+    if (b.isMainBranch !== undefined) { fields.push('is_main_branch = ?'); vals.push(b.isMainBranch ? 1 : 0); }
+    if (b.status !== undefined) { fields.push('status = ?'); vals.push(b.status); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE branches SET ${fields.join(', ')} WHERE id = ?`, vals);
+    res.json({ success: true });
+  }));
+
+  app.delete('/api/branches/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM branches WHERE id = ?`, [req.params.id])) as any;
+    const br = rows[0];
+    if (!br) return res.status(404).json({ error: 'Branch not found' });
+    if (!canAccessCompany(req.user!, br.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`UPDATE branches SET status = 'inactive' WHERE id = ?`, [req.params.id]);
+    res.json({ success: true });
+  }));
+
   app.post('/api/business-units', ...mgmt, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
     const errs = validate(req.body, { companyId: { required: true }, branchId: { required: true }, name: { required: true }, type: { required: true, enum: ['mens_salon', 'womens_salon', 'spa_center', 'massage_center'] } });
@@ -321,6 +365,39 @@ async function startServer() {
     res.json({ success: true });
   }));
 
+  app.put('/api/staff/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM staff WHERE id = ?`, [req.params.id])) as any;
+    const st = rows[0];
+    if (!st) return res.status(404).json({ error: 'Staff not found' });
+    if (!canAccessCompany(req.user!, st.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.phone !== undefined) { fields.push('phone = ?'); vals.push(b.phone); }
+    if (b.email !== undefined) { fields.push('email = ?'); vals.push(b.email); }
+    if (b.role !== undefined) { fields.push('role = ?'); vals.push(b.role); }
+    if (b.branchId !== undefined) { fields.push('branch_id = ?'); vals.push(b.branchId); }
+    if (b.businessUnitId !== undefined) { fields.push('business_unit_id = ?'); vals.push(b.businessUnitId); }
+    if (b.specialties !== undefined) { fields.push('specialties = ?'); vals.push(JSON.stringify(b.specialties)); }
+    if (b.defaultCommissionPercentage !== undefined) { fields.push('default_commission_percentage = ?'); vals.push(b.defaultCommissionPercentage); }
+    if (b.status !== undefined) { fields.push('status = ?'); vals.push(b.status); }
+    if (b.avatarUrl !== undefined) { fields.push('avatar_url = ?'); vals.push(b.avatarUrl); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE staff SET ${fields.join(', ')} WHERE id = ?`, vals);
+    res.json({ success: true });
+  }));
+
+  app.delete('/api/staff/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM staff WHERE id = ?`, [req.params.id])) as any;
+    const st = rows[0];
+    if (!st) return res.status(404).json({ error: 'Staff not found' });
+    if (!canAccessCompany(req.user!, st.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`UPDATE staff SET status = 'inactive' WHERE id = ?`, [req.params.id]);
+    res.json({ success: true });
+  }));
+
   app.post('/api/services', ...mgmt, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
     const b = req.body;
@@ -334,12 +411,82 @@ async function startServer() {
     res.json({ success: true });
   }));
 
+  app.put('/api/services/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM services WHERE id = ?`, [req.params.id])) as any;
+    const sv = rows[0];
+    if (!sv) return res.status(404).json({ error: 'Service not found' });
+    if (!canAccessCompany(req.user!, sv.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.category !== undefined) { fields.push('category = ?'); vals.push(b.category); }
+    if (b.priceEtb !== undefined) { fields.push('price_etb = ?'); vals.push(b.priceEtb); }
+    if (b.durationMinutes !== undefined) { fields.push('duration_minutes = ?'); vals.push(b.durationMinutes); }
+    if (b.commissionType !== undefined) { fields.push('commission_type = ?'); vals.push(b.commissionType); }
+    if (b.commissionValue !== undefined) { fields.push('commission_value = ?'); vals.push(b.commissionValue); }
+    if (b.businessUnitId !== undefined) { fields.push('business_unit_id = ?'); vals.push(b.businessUnitId); }
+    if (b.isActive !== undefined) { fields.push('is_active = ?'); vals.push(b.isActive ? 1 : 0); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE services SET ${fields.join(', ')} WHERE id = ?`, vals);
+    if (Array.isArray(b.requiredInventory)) {
+      await pool.query(`DELETE FROM service_inventory_requirements WHERE service_id = ?`, [req.params.id]);
+      for (const item of b.requiredInventory) {
+        await pool.query(`INSERT INTO service_inventory_requirements (service_id, inventory_item_id, quantity_used) VALUES (?,?,?)`, [req.params.id, item.inventoryItemId, item.quantityUsed]);
+      }
+    }
+    res.json({ success: true });
+  }));
+
+  app.delete('/api/services/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM services WHERE id = ?`, [req.params.id])) as any;
+    const sv = rows[0];
+    if (!sv) return res.status(404).json({ error: 'Service not found' });
+    if (!canAccessCompany(req.user!, sv.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`UPDATE services SET is_active = FALSE WHERE id = ?`, [req.params.id]);
+    res.json({ success: true });
+  }));
+
   app.post('/api/inventory-items', ...mgmt, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
     const b = req.body;
     await pool.query(`INSERT INTO inventory_items (id, company_id, branch_id, business_unit_id, name, sku, unit, current_stock, reorder_level, unit_cost_etb) VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [b.id, b.companyId, b.branchId, b.businessUnitId, b.name, b.sku || b.name, b.unit || 'pcs', b.currentStock || 0, b.reorderLevel || 0, b.unitCostEtb || 0]);
     await insertAudit({ companyId: b.companyId, branchId: b.branchId }, 'inventory_adjustment', `Inventory item created: ${b.name}`, 'Tenant Admin', 'Stock added');
+    res.json({ success: true });
+  }));
+
+  app.put('/api/inventory-items/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id FROM inventory_items WHERE id = ?`, [req.params.id])) as any;
+    const inv = rows[0];
+    if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
+    if (!canAccessCompany(req.user!, inv.company_id)) return res.status(403).json({ error: 'Company not found' });
+    const b = req.body;
+    const fields: string[] = [];
+    const vals: any[] = [];
+    if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
+    if (b.sku !== undefined) { fields.push('sku = ?'); vals.push(b.sku); }
+    if (b.unit !== undefined) { fields.push('unit = ?'); vals.push(b.unit); }
+    if (b.currentStock !== undefined) { fields.push('current_stock = ?'); vals.push(b.currentStock); }
+    if (b.reorderLevel !== undefined) { fields.push('reorder_level = ?'); vals.push(b.reorderLevel); }
+    if (b.unitCostEtb !== undefined) { fields.push('unit_cost_etb = ?'); vals.push(b.unitCostEtb); }
+    if (b.sellingPriceEtb !== undefined) { fields.push('selling_price_etb = ?'); vals.push(b.sellingPriceEtb); }
+    if (b.branchId !== undefined) { fields.push('branch_id = ?'); vals.push(b.branchId); }
+    if (b.businessUnitId !== undefined) { fields.push('business_unit_id = ?'); vals.push(b.businessUnitId); }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    await pool.query(`UPDATE inventory_items SET ${fields.join(', ')} WHERE id = ?`, vals);
+    res.json({ success: true });
+  }));
+
+  app.delete('/api/inventory-items/:id', ...mgmt, asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT company_id, name FROM inventory_items WHERE id = ?`, [req.params.id])) as any;
+    const inv = rows[0];
+    if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
+    if (!canAccessCompany(req.user!, inv.company_id)) return res.status(403).json({ error: 'Company not found' });
+    await pool.query(`DELETE FROM inventory_items WHERE id = ?`, [req.params.id]);
+    await insertAudit({ companyId: inv.company_id, branchId: null }, 'inventory_adjustment', `Inventory item deleted: ${inv.name}`, req.user!.name);
     res.json({ success: true });
   }));
 

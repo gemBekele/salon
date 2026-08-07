@@ -172,16 +172,9 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
       map[dateStr].visits += 1;
     });
 
-    // If empty, supply placeholder
+    // If empty, return empty array
     if (Object.keys(map).length === 0) {
-      return [
-        { date: '2026-08-01', revenue: 4200, visits: 3 },
-        { date: '2026-08-02', revenue: 6800, visits: 5 },
-        { date: '2026-08-03', revenue: 5100, visits: 4 },
-        { date: '2026-08-04', revenue: 8900, visits: 7 },
-        { date: '2026-08-05', revenue: 11200, visits: 9 },
-        { date: '2026-08-06', revenue: totalGrossRevenue || 9400, visits: completedVisits.length || 8 },
-      ];
+      return [];
     }
 
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
@@ -205,12 +198,7 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
     }));
 
     if (result.length === 0) {
-      return [
-        { name: 'Haircut & Styling', value: 12500 },
-        { name: 'Massage & Spa', value: 9800 },
-        { name: 'Facial & Skincare', value: 5400 },
-        { name: 'Manicure & Nails', value: 3200 },
-      ];
+      return [];
     }
     return result;
   }, [completedVisits, services]);

@@ -143,12 +143,6 @@ export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps>
                   {b.name}
                 </option>
               ))}
-              {branches.length === 0 && (
-                <>
-                  <option value="branch_addis_main">Addis Ababa Main</option>
-                  <option value="branch_hawassa">Hawassa Branch</option>
-                </>
-              )}
             </select>
           </div>
 
@@ -165,12 +159,6 @@ export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps>
                   {u.name}
                 </option>
               ))}
-              {businessUnits.length === 0 && (
-                <>
-                  <option value="bu_hair">Barbershop & Hair</option>
-                  <option value="bu_spa">Spa & Massage</option>
-                </>
-              )}
             </select>
           </div>
         </div>

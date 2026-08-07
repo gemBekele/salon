@@ -236,6 +236,17 @@ export interface SmsLog {
   sentAt: string;
 }
 
+export interface User {
+  id: string;
+  companyId: string;
+  name: string;
+  email: string;
+  role: AuthUserRole;
+  isActive: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+}
+
 export interface ArchitectureDocSection {
   id: string;
   title: string;
