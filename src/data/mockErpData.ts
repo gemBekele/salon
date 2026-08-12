@@ -1406,7 +1406,7 @@ The UI system prioritizes speed, high visual contrast, and low cognitive load fo
 - **Large Tap Targets**: Minimum 48px × 48px touch controls for all primary action buttons.
 - **Search-First Customer Identification**: Auto-focus phone number lookup bar on reception screen load (\`+251 9...\`).
 - **Touch Card Selection**: Service and staff pickers use visual card tiles rather than dense drop-down selects.
-- **Color-Coded Status Tokens**: Visual queue state pills (Green = Completed, Amber = In Progress, Blue = Ready for Checkout, Slate = Pending Queue).
+- **Color-Coded Status Tokens**: Visual queue state pills (Green = Completed, Navy = In Progress, Blue = Ready for Checkout, Slate = Pending Queue).
 
 ### 2. Comprehensive Screen Inventory (21 Core Views)
 1. **Login & Branch Selector** (\`/login\`)
@@ -1434,32 +1434,32 @@ The UI system prioritizes speed, high visual contrast, and low cognitive load fo
       {
         filename: 'resources/views/livewire/receptionist-pos-hub.blade.php',
         language: 'blade',
-        code: `<div class="grid grid-cols-12 gap-4 h-screen bg-[#f5f5f0] p-4 font-sans text-[#2d2d2a]">
+        code: `<div class="grid grid-cols-12 gap-4 h-screen bg-[#f6f3ec] p-4 font-sans text-[#18181b]">
     <!-- Left Panel: Search & Customer Queue (4 Cols) -->
-    <div class="col-span-4 bg-white rounded-3xl border border-[#e5e5d1] p-4 flex flex-col space-y-4 shadow-sm">
+    <div class="col-span-4 bg-white rounded-3xl border border-[#efe8d9] p-4 flex flex-col space-y-4 shadow-sm">
         <div class="space-y-2">
-            <label class="text-xs font-bold text-[#5A5A40] uppercase tracking-wider">Search Customer by Phone</label>
+            <label class="text-xs font-bold text-[#18181b] uppercase tracking-wider">Search Customer by Phone</label>
             <div class="relative">
                 <input type="text" wire:model.live.debounce.300ms="searchPhone" 
                        placeholder="Enter phone: 0911..." 
-                       class="w-full h-12 pl-10 pr-4 text-base rounded-2xl border border-[#e5e5d1] bg-[#f5f5f0] focus:ring-2 focus:ring-[#5A5A40]" autofocus />
-                <svg class="w-5 h-5 absolute left-3 top-3.5 text-[#737366]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                       class="w-full h-12 pl-10 pr-4 text-base rounded-2xl border border-[#efe8d9] bg-[#f6f3ec] focus:ring-2 focus:ring-[#18181b]" autofocus />
+                <svg class="w-5 h-5 absolute left-3 top-3.5 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
         </div>
 
-        <button wire:click="openNewVisitModal" class="w-full h-14 bg-[#5A5A40] hover:bg-[#4a4a34] text-white font-bold rounded-2xl text-base shadow-md flex items-center justify-center space-x-2">
+        <button wire:click="openNewVisitModal" class="w-full h-14 bg-[#18181b] hover:bg-[#111114] text-white font-bold rounded-2xl text-base shadow-md flex items-center justify-center space-x-2">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             <span>+ Create New Walk-in Visit</span>
         </button>
 
         <!-- Queue Status Board -->
         <div class="flex-1 overflow-y-auto space-y-2">
-            <h4 class="text-xs font-bold text-[#737366] uppercase">Today's Waiting Queue ({{ count($waitingQueue) }})</h4>
+            <h4 class="text-xs font-bold text-[#71717a] uppercase">Today's Waiting Queue ({{ count($waitingQueue) }})</h4>
             @foreach($waitingQueue as $ticket)
-                <div wire:click="selectVisit({{ $ticket->id }})" class="p-3 bg-[#f5f5f0] rounded-2xl border border-[#e5e5d1] hover:border-[#5A5A40] cursor-pointer transition">
+                <div wire:click="selectVisit({{ $ticket->id }})" class="p-3 bg-[#f6f3ec] rounded-2xl border border-[#efe8d9] hover:border-[#18181b] cursor-pointer transition">
                     <div class="flex justify-between items-center">
-                        <span class="font-mono font-bold text-base text-[#2d2d2a]">{{ $ticket->queue_number }}</span>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">{{ $ticket->status }}</span>
+                        <span class="font-mono font-bold text-base text-[#18181b]">{{ $ticket->queue_number }}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-100 text-ink-800">{{ $ticket->status }}</span>
                     </div>
                     <div class="text-sm font-semibold mt-1">{{ $ticket->customer->name }}</div>
                 </div>
@@ -1468,25 +1468,25 @@ The UI system prioritizes speed, high visual contrast, and low cognitive load fo
     </div>
 
     <!-- Center & Right Panel: Active Service Details & Checkout Total (8 Cols) -->
-    <div class="col-span-8 bg-white rounded-3xl border border-[#e5e5d1] p-6 flex flex-col justify-between shadow-sm">
+    <div class="col-span-8 bg-white rounded-3xl border border-[#efe8d9] p-6 flex flex-col justify-between shadow-sm">
         @if($selectedVisit)
             <div class="space-y-4">
-                <div class="flex justify-between items-center border-b border-[#e5e5d1] pb-4">
+                <div class="flex justify-between items-center border-b border-[#efe8d9] pb-4">
                     <div>
-                        <h2 class="text-xl font-serif font-bold text-[#2d2d2a]">{{ $selectedVisit->customer->name }}</h2>
-                        <span class="text-xs text-[#737366]">Ticket: {{ $selectedVisit->queue_number }} • BU: {{ $selectedVisit->businessUnit->name }}</span>
+                        <h2 class="text-xl font-serif font-bold text-[#18181b]">{{ $selectedVisit->customer->name }}</h2>
+                        <span class="text-xs text-[#71717a]">Ticket: {{ $selectedVisit->queue_number }} • BU: {{ $selectedVisit->businessUnit->name }}</span>
                     </div>
-                    <span class="text-2xl font-mono font-bold text-[#5A5A40]">{{ number_format($selectedVisit->running_total, 2) }} ETB</span>
+                    <span class="text-2xl font-mono font-bold text-[#18181b]">{{ number_format($selectedVisit->running_total, 2) }} ETB</span>
                 </div>
 
                 <!-- Service List -->
                 <div class="space-y-2">
-                    <h4 class="text-xs font-bold text-[#737366] uppercase">Assigned Services</h4>
+                    <h4 class="text-xs font-bold text-[#71717a] uppercase">Assigned Services</h4>
                     @foreach($selectedVisit->services as $service)
-                        <div class="flex justify-between items-center p-3 rounded-2xl bg-[#f5f5f0] border border-[#e5e5d1]">
+                        <div class="flex justify-between items-center p-3 rounded-2xl bg-[#f6f3ec] border border-[#efe8d9]">
                             <div>
                                 <div class="font-bold text-sm">{{ $service->service_name }}</div>
-                                <div class="text-xs text-[#737366]">Staff: {{ $service->staff->name ?? 'Unassigned' }}</div>
+                                <div class="text-xs text-[#71717a]">Staff: {{ $service->staff->name ?? 'Unassigned' }}</div>
                             </div>
                             <span class="font-mono font-bold text-sm">{{ number_format($service->price, 2) }} ETB</span>
                         </div>
@@ -1495,17 +1495,17 @@ The UI system prioritizes speed, high visual contrast, and low cognitive load fo
             </div>
 
             <!-- Bottom Quick Checkout Bar -->
-            <div class="pt-4 border-t border-[#e5e5d1] flex space-x-3">
-                <button wire:click="openAddServiceModal" class="flex-1 h-14 bg-slate-100 hover:bg-slate-200 text-[#2d2d2a] font-bold rounded-2xl text-base border border-[#e5e5d1]">
+            <div class="pt-4 border-t border-[#efe8d9] flex space-x-3">
+                <button wire:click="openAddServiceModal" class="flex-1 h-14 bg-slate-100 hover:bg-slate-200 text-[#18181b] font-bold rounded-2xl text-base border border-[#efe8d9]">
                     + Add Service
                 </button>
-                <button wire:click="proceedToCheckout({{ $selectedVisit->id }})" class="flex-1 h-14 bg-[#2d2d2a] hover:bg-[#1a1a18] text-white font-bold rounded-2xl text-base shadow-lg">
+                <button wire:click="proceedToCheckout({{ $selectedVisit->id }})" class="flex-1 h-14 bg-[#18181b] hover:bg-[#141417] text-white font-bold rounded-2xl text-base shadow-lg">
                     Proceed to Checkout →
                 </button>
             </div>
         @else
-            <div class="h-full flex flex-col items-center justify-center text-center text-[#737366]">
-                <svg class="w-16 h-16 text-[#e5e5d1] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+            <div class="h-full flex flex-col items-center justify-center text-center text-[#71717a]">
+                <svg class="w-16 h-16 text-[#efe8d9] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
                 <p class="text-base font-semibold">Select a Visit Ticket from the Queue or Search Customer</p>
             </div>
         @endif

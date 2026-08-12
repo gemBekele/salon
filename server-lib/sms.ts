@@ -1,7 +1,16 @@
-import type { Pool } from 'mysql2/promise';
+import type { DbPool } from './db';
 import crypto from 'node:crypto';
 
 export type SmsMessageType = 'appointment_reminder' | 'queue_turn_alert' | 'session_receipt' | 'marketing_promo';
+
+export interface SmsService {
+  dispatch(params: {
+    companyId: string;
+    recipientPhone: string;
+    messageType: SmsMessageType;
+    content: string;
+  }): Promise<void>;
+}
 
 /**
  * SMS delivery abstraction. Two providers are supported:
@@ -11,7 +20,7 @@ export type SmsMessageType = 'appointment_reminder' | 'queue_turn_alert' | 'sess
  * Every message is persisted to sms_logs with a queued -> sent/failed lifecycle,
  * and delivery is retried once before being marked failed.
  */
-export function createSmsService(pool: Pool) {
+export function createSmsService(pool: DbPool) {
   const provider = (process.env.SMS_PROVIDER || 'log').toLowerCase();
   const providerUrl = process.env.SMS_PROVIDER_URL || '';
   const apiKey = process.env.SMS_API_KEY || '';

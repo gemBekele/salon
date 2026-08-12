@@ -11,6 +11,9 @@ const StaffPortalView = lazy(() => import('./components/StaffPortalView').then(m
 const ArchitectBlueprintView = lazy(() => import('./components/ArchitectBlueprintView').then(m => ({ default: m.ArchitectBlueprintView })));
 const QueueDisplayView = lazy(() => import('./components/QueueDisplayView').then(m => ({ default: m.QueueDisplayView })));
 const AiAssistantModal = lazy(() => import('./components/AiAssistantModal').then(m => ({ default: m.AiAssistantModal })));
+const CustomerWebsiteView = lazy(() => import('./components/CustomerWebsiteView').then(m => ({ default: m.CustomerWebsiteView })));
+const AppointmentBookingModal = lazy(() => import('./components/AppointmentBookingModal').then(m => ({ default: m.AppointmentBookingModal })));
+const CustomerLoginModal = lazy(() => import('./components/CustomerLoginModal').then(m => ({ default: m.CustomerLoginModal })));
 
 import { mockArchitectureSections } from './data/mockErpData';
 
@@ -35,7 +38,7 @@ import {
   SubscriptionPlan,
   User,
 } from './types';
-import { apiFetch, clearToken } from './lib/api';
+import { apiFetch, clearToken, apiOk, ApiError } from './lib/api';
 
 /** Role -> personas each role may access. */
 const ROLE_PERSONAS: Record<AuthUserRole, PersonaRole[]> = {
@@ -57,6 +60,7 @@ export default function App() {
   // Auth
   const [user, setUser] = useState<AuthUser | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   // Active Persona State (restricted by role)
   const [currentPersona, setCurrentPersona] = useState<PersonaRole>('receptionist');
@@ -85,11 +89,23 @@ export default function App() {
   // Gemini AI Assistant Modal
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
+  // View Mode: 'website' (Public Barbershop Landing Page) vs 'erp' (Core System)
+  const [currentView, setCurrentView] = useState<'website' | 'erp'>('website');
+  const [websiteTheme, setWebsiteTheme] = useState<'dark' | 'light'>('dark');
+
+  // Customer Website Modals
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [bookingServiceId, setBookingServiceId] = useState<string | null>(null);
+  const [isCustomerLoginOpen, setIsCustomerLoginOpen] = useState(false);
+
   // FETCH ALL DATA FROM MYSQL DATABASE (scoped by role server-side)
   const fetchDbState = useCallback(async () => {
     try {
       const res = await apiFetch('/api/db-state');
-      if (!res.ok) return;
+      if (!res.ok) {
+        setDbError(`Could not load workspace data (${res.status}).`);
+        return;
+      }
       const data = await res.json();
 
       if (data.companies && data.companies.length > 0) {
@@ -122,8 +138,10 @@ export default function App() {
       if (data.auditLogs) setAuditLogs(data.auditLogs);
       if (data.users) setUsers(data.users);
       if (data.subscriptionPlans) setSubscriptionPlans(data.subscriptionPlans);
+      setDbError(null);
     } catch (err) {
       console.error('Failed to load database state from MySQL:', err);
+      setDbError('Could not load workspace data from the server.');
     }
   }, []);
 
@@ -195,116 +213,116 @@ export default function App() {
 
   const handleAddCompany = async (newCompany: Company) => {
     try {
-      await apiFetch('/api/companies', {
+      await apiOk(await apiFetch('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCompany),
-      });
+      }));
       await fetchDbState();
       setSelectedCompany(newCompany);
       showToast('success', 'Company created');
     } catch (err) {
-      showToast('error', 'Failed to create company');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to create company');
     }
   };
 
   const handleAddBranch = async (newBranch: Branch) => {
     try {
-      await apiFetch('/api/branches', {
+      await apiOk(await apiFetch('/api/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newBranch),
-      });
+      }));
       await fetchDbState();
       setSelectedBranch(newBranch);
       showToast('success', 'Branch created');
     } catch (err) {
-      showToast('error', 'Failed to create branch');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to create branch');
     }
   };
 
   const handleAddBusinessUnit = async (newUnit: BusinessUnit) => {
     try {
-      await apiFetch('/api/business-units', {
+      await apiOk(await apiFetch('/api/business-units', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUnit),
-      });
+      }));
       await fetchDbState();
       setSelectedBusinessUnit(newUnit);
       showToast('success', 'Business unit created');
     } catch (err) {
-      showToast('error', 'Failed to add business unit');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add business unit');
     }
   };
 
   const handleAddStaff = async (newStaff: Staff) => {
     try {
-      await apiFetch('/api/staff', {
+      await apiOk(await apiFetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newStaff),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Staff created');
     } catch (err) {
-      showToast('error', 'Failed to add staff');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add staff');
     }
   };
 
   const handleAddService = async (newService: Service) => {
     try {
-      await apiFetch('/api/services', {
+await apiOk(await apiFetch('/api/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newService),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Service created');
     } catch (err) {
-      showToast('error', 'Failed to add service');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add service');
     }
   };
 
   const handleAddInventoryItem = async (newItem: InventoryItem) => {
     try {
-      await apiFetch('/api/inventory-items', {
+      await apiOk(await apiFetch('/api/inventory-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Inventory item created');
     } catch (err) {
-      showToast('error', 'Failed to add inventory item');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add inventory item');
     }
   };
 
   const handleUpdateInventoryStock = async (invId: string, addedStock: number) => {
     try {
-      await apiFetch('/api/inventory-items/adjust-stock', {
+      await apiOk(await apiFetch('/api/inventory-items/adjust-stock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: invId, addedStock }),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Inventory stock updated');
     } catch (err) {
-      showToast('error', 'Failed to update inventory stock');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update inventory stock');
     }
   };
 
   const handleAddCustomer = async (newCust: Customer) => {
     try {
-      await apiFetch('/api/customers', {
+      await apiOk(await apiFetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCust),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Customer created');
     } catch (err) {
-      showToast('error', 'Failed to add customer');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add customer');
     }
   };
 
@@ -315,14 +333,26 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSession),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showToast('error', 'Failed to create visit session');
-      }
+      await apiOk(res);
       await fetchDbState();
       showToast('success', 'Visit session created');
     } catch (err) {
-      showToast('error', 'Failed to create visit session');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to create visit session');
+    }
+  };
+
+  const handleUpdateSessionServices = async (sessionId: string, service: any) => {
+    try {
+      const res = await apiFetch('/api/visit-sessions/services', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, service }),
+      });
+      await apiOk(res);
+      await fetchDbState();
+      showToast('success', 'Service added to session');
+    } catch (err) {
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add service');
     }
   };
 
@@ -330,16 +360,25 @@ export default function App() {
     sessionId: string,
     newStatus: 'queued' | 'in_progress' | 'completed' | 'cancelled'
   ) => {
+    // Optimistic local state update for instant UI responsiveness
+    setVisitSessions((prev) =>
+      prev.map((s) => (s.id === sessionId ? { ...s, status: newStatus } : s))
+    );
+
     try {
-      await apiFetch('/api/visit-sessions/status', {
+      const res = await apiFetch('/api/visit-sessions/status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: sessionId, status: newStatus }),
       });
-      await fetchDbState();
-      showToast('success', 'Session status updated');
+      if (res.ok) {
+        showToast('success', `Session status updated to ${newStatus}`);
+      } else {
+        console.warn('Backend session status update warning:', res.status);
+      }
     } catch (err) {
-      showToast('error', 'Failed to update session status');
+      console.warn('Backend session status update fallback:', err);
+      // Retain optimistic UI state so staff workflow is uninterrupted
     }
   };
 
@@ -350,7 +389,7 @@ export default function App() {
   ) => {
     try {
       const stf = staffList.find((st) => st.id === newStaffId);
-      await apiFetch('/api/visit-sessions/staff', {
+      await apiOk(await apiFetch('/api/visit-sessions/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,39 +398,39 @@ export default function App() {
           staffId: newStaffId,
           staffName: stf?.name || 'Staff Member',
         }),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Session staff updated');
     } catch (err) {
-      showToast('error', 'Failed to update session staff');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update session staff');
     }
   };
 
   const handleSaveCommissionRule = async (newRule: CommissionRule) => {
     try {
-      await apiFetch('/api/commission-rules', {
+      await apiOk(await apiFetch('/api/commission-rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRule),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Commission rule saved');
     } catch (err) {
-      showToast('error', 'Failed to save commission rule');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to save commission rule');
     }
   };
 
   const handleAddExpense = async (newExpense: ExpenseRecord) => {
     try {
-      await apiFetch('/api/expenses', {
+      await apiOk(await apiFetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newExpense),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Expense created');
     } catch (err) {
-      showToast('error', 'Failed to add expense');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add expense');
     }
   };
 
@@ -410,97 +449,97 @@ export default function App() {
   // UPDATE / DELETE HANDLERS
   const handleUpdateBranch = async (updated: Branch) => {
     try {
-      await apiFetch(`/api/branches/${updated.id}`, {
+      await apiOk(await apiFetch(`/api/branches/${updated.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Branch updated');
     } catch (err) {
-      showToast('error', 'Failed to update branch');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update branch');
     }
   };
 
   const handleDeleteBranch = async (branchId: string) => {
     try {
-      await apiFetch(`/api/branches/${branchId}`, { method: 'DELETE' });
+      await apiOk(await apiFetch(`/api/branches/${branchId}`, { method: 'DELETE' }));
       await fetchDbState();
       showToast('success', 'Branch deactivated');
     } catch (err) {
-      showToast('error', 'Failed to deactivate branch');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to deactivate branch');
     }
   };
 
   const handleUpdateStaff = async (updated: Staff) => {
     try {
-      await apiFetch(`/api/staff/${updated.id}`, {
+      await apiOk(await apiFetch(`/api/staff/${updated.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Staff updated');
     } catch (err) {
-      showToast('error', 'Failed to update staff');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update staff');
     }
   };
 
   const handleDeleteStaff = async (staffId: string) => {
     try {
-      await apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' });
+      await apiOk(await apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' }));
       await fetchDbState();
       showToast('success', 'Staff deactivated');
     } catch (err) {
-      showToast('error', 'Failed to deactivate staff');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to deactivate staff');
     }
   };
 
   const handleUpdateService = async (updated: Service) => {
     try {
-      await apiFetch(`/api/services/${updated.id}`, {
+      await apiOk(await apiFetch(`/api/services/${updated.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Service updated');
     } catch (err) {
-      showToast('error', 'Failed to update service');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update service');
     }
   };
 
   const handleDeleteService = async (serviceId: string) => {
     try {
-      await apiFetch(`/api/services/${serviceId}`, { method: 'DELETE' });
+      await apiOk(await apiFetch(`/api/services/${serviceId}`, { method: 'DELETE' }));
       await fetchDbState();
       showToast('success', 'Service deactivated');
     } catch (err) {
-      showToast('error', 'Failed to deactivate service');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to deactivate service');
     }
   };
 
   const handleUpdateInventoryItem = async (updated: InventoryItem) => {
     try {
-      await apiFetch(`/api/inventory-items/${updated.id}`, {
+      await apiOk(await apiFetch(`/api/inventory-items/${updated.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
-      });
+      }));
       await fetchDbState();
       showToast('success', 'Inventory item updated');
     } catch (err) {
-      showToast('error', 'Failed to update inventory item');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update inventory item');
     }
   };
 
   const handleDeleteInventoryItem = async (itemId: string) => {
     try {
-      await apiFetch(`/api/inventory-items/${itemId}`, { method: 'DELETE' });
+      await apiOk(await apiFetch(`/api/inventory-items/${itemId}`, { method: 'DELETE' }));
       await fetchDbState();
       showToast('success', 'Inventory item deactivated');
     } catch (err) {
-      showToast('error', 'Failed to deactivate inventory item');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to deactivate inventory item');
     }
   };
 
@@ -511,15 +550,11 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showToast('error', 'Failed to add user');
-        return;
-      }
+      await apiOk(res);
       await fetchDbState();
       showToast('success', 'User created');
     } catch (err) {
-      showToast('error', 'Failed to add user');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to add user');
     }
   };
 
@@ -530,15 +565,11 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showToast('error', 'Failed to update user');
-        return;
-      }
+      await apiOk(res);
       await fetchDbState();
       showToast('success', 'User updated');
     } catch (err) {
-      showToast('error', 'Failed to update user');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to update user');
     }
   };
 
@@ -552,7 +583,7 @@ export default function App() {
       if (!session) return;
 
       // Atomic server checkout: commissions, loyalty & inventory handled in one transaction.
-      await apiFetch('/api/visit-sessions/checkout', {
+      await apiOk(await apiFetch('/api/visit-sessions/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -561,35 +592,120 @@ export default function App() {
           reference,
           completedAt: new Date().toISOString(),
         }),
-      });
+      }));
 
       await fetchDbState();
       showToast('success', 'Checkout completed');
     } catch (err) {
-      showToast('error', 'Failed to checkout session');
+      showToast('error', err instanceof ApiError ? err.message : 'Failed to checkout session');
     }
   };
 
   if (bootstrapping) {
     return (
-      <div className="min-h-screen bg-[#f5f5f0] flex items-center justify-center text-[#5A5A40] font-sans">
+      <div className="min-h-screen bg-[#f6f3ec] flex items-center justify-center text-[#18181b] font-sans">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-8 h-8 border-4 border-[#5A5A40] border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-8 h-8 border-4 border-[#18181b] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-semibold">Connecting to Gech Beauty Salon ERP...</p>
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <LoginScreen onLogin={handleLogin} />;
+  // 1. PUBLIC BARBERSHOP CUSTOMER WEBSITE (Default View)
+  if (currentView === 'website') {
+    const activeCompany = selectedCompany || companies[0] || null;
+    const activeBranch = selectedBranch || branches[0] || null;
+
+    return (
+      <ErrorBoundary fallbackLabel="Failed to load Customer Website">
+        <Suspense fallback={<div className="min-h-screen bg-[#0a0a0c] text-ink-500 flex items-center justify-center font-serif text-lg">Loading Gech Barbershop...</div>}>
+          <ToastContainer />
+          <CustomerWebsiteView
+            company={activeCompany}
+            branch={activeBranch}
+            services={services}
+            staffList={staffList}
+            onOpenBooking={(srvId) => {
+              setBookingServiceId(srvId || null);
+              setIsBookingModalOpen(true);
+            }}
+            onOpenLogin={() => setIsCustomerLoginOpen(true)}
+            onLaunchStaffErp={() => setCurrentView('erp')}
+            theme={websiteTheme}
+            setTheme={setWebsiteTheme}
+          />
+
+          <AppointmentBookingModal
+            isOpen={isBookingModalOpen}
+            onClose={() => setIsBookingModalOpen(false)}
+            company={activeCompany}
+            branch={activeBranch}
+            services={services}
+            staffList={staffList}
+            initialServiceId={bookingServiceId}
+            onBookingCreated={(newSession) => {
+              setVisitSessions((prev) => [newSession, ...prev]);
+              fetchDbState();
+            }}
+            theme={websiteTheme}
+          />
+
+          <CustomerLoginModal
+            isOpen={isCustomerLoginOpen}
+            onClose={() => setIsCustomerLoginOpen(false)}
+            onLaunchStaffLogin={() => setCurrentView('erp')}
+            customers={customers}
+            theme={websiteTheme}
+          />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (!user && currentPersona !== 'queue_tv') {
+    return <LoginScreen onLogin={handleLogin} onLaunchTv={() => setCurrentPersona('queue_tv')} onReturnToWebsite={() => setCurrentView('website')} />;
+  }
+
+  // Dedicated 100% Fullscreen Lounge TV Mode (No Sidebar, No Headers - Full Screen Space)
+  if (currentPersona === 'queue_tv') {
+    const activeCompany: Company = selectedCompany || companies[0] || {
+      id: 'comp_1',
+      name: 'Gech Beauty Salon',
+      code: 'GECH-HW',
+      city: 'Hawassa',
+      currency: 'ETB',
+      createdAt: new Date().toISOString(),
+    };
+    const activeBranch: Branch = selectedBranch || branches[0] || {
+      id: 'br_1',
+      companyId: activeCompany.id,
+      name: 'Hawassa Central Branch',
+      code: 'HW-01',
+      city: 'Hawassa',
+      createdAt: new Date().toISOString(),
+    };
+    return (
+      <ErrorBoundary fallbackLabel="Failed to load TV display">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-[#141417] text-[#f6f3ec] text-sm">Loading TV Lounge Queue Board...</div>}>
+          <QueueDisplayView
+            company={activeCompany}
+            branch={activeBranch}
+            visitSessions={visitSessions}
+            businessUnits={businessUnits}
+            onExitTvMode={() => setCurrentPersona('receptionist')}
+            onRefresh={fetchDbState}
+          />
+        </Suspense>
+      </ErrorBoundary>
+    );
   }
 
   if (!selectedCompany || !selectedBranch) {
     return (
-      <div className="min-h-screen bg-[#f5f5f0] flex items-center justify-center text-[#5A5A40] font-sans">
+      <div className="min-h-screen bg-[#f6f3ec] flex items-center justify-center text-[#18181b] font-sans">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-8 h-8 border-4 border-[#5A5A40] border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-8 h-8 border-4 border-[#18181b] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-semibold">Loading salon workspace...</p>
         </div>
       </div>
@@ -597,7 +713,7 @@ export default function App() {
   }
 
   return (
-    <div id="app-root" className="min-h-screen bg-[#f5f5f0] text-[#2d2d2a] flex flex-col font-sans antialiased selection:bg-[#5A5A40] selection:text-white">
+    <div id="app-root" className="min-h-screen bg-[#f6f3ec] text-[#18181b] flex flex-col font-sans antialiased selection:bg-[#18181b] selection:text-white">
       <Sidebar
         currentPersona={currentPersona}
         setCurrentPersona={setCurrentPersona}
@@ -614,15 +730,28 @@ export default function App() {
         currentUser={user}
         onLogout={handleLogout}
         onOpenAiAssistant={() => setIsAiModalOpen(true)}
+        onViewWebsite={() => setCurrentView('website')}
       />
 
       <div className="flex-1 flex flex-col min-h-screen lg:ml-60 transition-all duration-200">
         {/* Mobile top bar spacer (hamburger sits over this) */}
         <div className="lg:hidden h-12" />
 
+        {dbError && (
+          <div className="mx-4 sm:mx-6 lg:mx-auto lg:max-w-7xl w-full lg:px-8 mt-4 flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="font-medium">{dbError}</span>
+            <button
+              onClick={() => { setDbError(null); fetchDbState(); }}
+              className="shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <ErrorBoundary fallbackLabel="Failed to load dashboard">
-        <Suspense fallback={<div className="flex items-center justify-center py-12 text-[#737366] text-sm">Loading...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center py-12 text-[#71717a] text-sm">Loading...</div>}>
         {currentPersona === 'saas_super_admin' && user.role === 'super_admin' && (
           <SaasAdminDashboard
             companies={companies}
@@ -678,13 +807,11 @@ export default function App() {
             services={services}
             customers={customers}
             visitSessions={visitSessions}
-            inventoryItems={inventoryItems}
-            smsLogs={smsLogs}
             onCreateVisitSession={handleCreateVisitSession}
             onCheckoutSession={handleCheckoutSession}
             onAddCustomer={handleAddCustomer}
             onUpdateSessionStatus={handleUpdateSessionStatus}
-            onUpdateSessionTimeOrStaff={handleUpdateSessionTimeOrStaff}
+            onRefresh={fetchDbState}
           />
         )}
 
@@ -693,17 +820,30 @@ export default function App() {
             company={selectedCompany}
             branch={selectedBranch}
             visitSessions={visitSessions}
+            businessUnits={businessUnits}
             onExitTvMode={() => setCurrentPersona('receptionist')}
+            onRefresh={fetchDbState}
           />
         )}
 
         {currentPersona === 'staff_member' && (
           <StaffPortalView
+            company={selectedCompany}
+            branch={selectedBranch}
             staffList={staffList}
+            services={services}
+            customers={customers}
+            inventoryItems={inventoryItems}
             commissionLogs={commissionLogs}
             visitSessions={visitSessions}
             branches={branches}
             businessUnits={businessUnits}
+            onCreateVisitSession={handleCreateVisitSession}
+            onUpdateSessionStatus={handleUpdateSessionStatus}
+            onAddCustomer={handleAddCustomer}
+            onUpdateSessionServices={handleUpdateSessionServices}
+            onCheckoutSession={handleCheckoutSession}
+            onRefresh={fetchDbState}
           />
         )}
 
@@ -714,12 +854,12 @@ export default function App() {
         </ErrorBoundary>
       </main>
 
-      <footer id="app-footer" className="bg-white border-t border-[#e5e5d1] py-4 text-xs text-[#737366] text-center">
+      <footer id="app-footer" className="bg-white border-t border-[#efe8d9] py-4 text-xs text-[#71717a] text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            <strong className="text-[#5A5A40] font-serif font-bold">Gech Beauty Salon</strong> — Hawassa Salon Management ERP
+            <strong className="text-[#18181b] font-serif font-bold">Gech Beauty Salon</strong> — Hawassa Salon Management ERP
           </div>
-          <div className="text-[11px] uppercase tracking-wider font-semibold text-[#5A5A40]/70">
+          <div className="text-[11px] uppercase tracking-wider font-semibold text-[#18181b]/70">
             Designed & Built by <strong>EngelsTech</strong> • XAMPP MySQL • ETB Currency
           </div>
         </div>

@@ -199,13 +199,14 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const companyServices = services.filter((s) => s.companyId === company.id);
   const companyInventory = inventoryItems.filter((i) => i.companyId === company.id);
   const companyCommissions = commissionLogs.filter((c) => c.companyId === company.id);
+  const companyExpenses = expenses.filter((e) => e.companyId === company.id);
 
   const totalCompletedRevenueEtb = visitSessions
     .filter((s) => s.companyId === company.id && s.status === 'completed')
     .reduce((acc, s) => acc + s.netTotalEtb, 0);
 
   const totalCommissionsEtb = companyCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
-  const totalExpensesEtb = expenses.filter((e) => e.companyId === company.id).reduce((acc, e) => acc + e.amountEtb, 0);
+  const totalExpensesEtb = companyExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
   const lowStockCount = companyInventory.filter((i) => i.currentStock <= i.reorderLevel).length;
 
   // Real-time Branch Metrics Calculation
@@ -277,7 +278,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   };
 
   const handleRunRecurringExpensesTrigger = () => {
-    const recurringList = expenses.filter((e) => e.companyId === company.id && e.isRecurring);
+    const recurringList = companyExpenses.filter((e) => e.isRecurring);
     let createdCount = 0;
     recurringList.forEach((rec) => {
       if (onAddExpense) {
@@ -494,34 +495,34 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-[#5A5A40] text-white rounded-3xl p-6 shadow-sm border border-[#4a4a35] flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-primary text-primary-foreground rounded-3xl p-6 shadow-sm border border-primary/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#f5f5f0]/15 text-[#f5f5f0] border border-[#f5f5f0]/30 uppercase tracking-widest">
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-muted/15 text-primary-foreground border border-primary-foreground/30 uppercase tracking-widest">
               Tenant Company Operations Manager
             </span>
-            <span className="text-[#f5f5f0]/80 text-xs">{company.name}</span>
+            <span className="text-primary-foreground/80 text-xs">{company.name}</span>
           </div>
-          <h2 className="text-2xl font-serif font-light text-[#f5f5f0] mt-1">
+          <h2 className="text-2xl font-serif font-light text-primary-foreground mt-1">
             Salon & Spa Multi-Branch Management
           </h2>
-          <p className="text-[#f5f5f0]/80 text-xs mt-1 font-sans">
+          <p className="text-primary-foreground/80 text-xs mt-1 font-sans">
             Manage branches, business units (Men's/Women's/Spa/Massage), staff shifts, service catalog, auto-inventory stock rules, and commission schedules.
           </p>
         </div>
 
         {/* Quick Metric Pills */}
         <div className="flex items-center space-x-3 text-xs font-sans">
-          <div className="bg-[#f5f5f0]/10 px-4 py-2.5 rounded-2xl border border-[#f5f5f0]/20">
-            <div className="text-[#f5f5f0]/70 text-[11px]">Total Completed Revenue</div>
-            <div className="text-base font-serif font-bold text-white mt-0.5">
+          <div className="bg-muted/10 px-4 py-2.5 rounded-2xl border border-primary-foreground/20">
+            <div className="text-primary-foreground/70 text-[11px]">Total Completed Revenue</div>
+            <div className="text-base font-serif font-bold text-primary-foreground mt-0.5">
               {totalCompletedRevenueEtb.toLocaleString()} ETB
             </div>
           </div>
 
-          <div className="bg-[#f5f5f0]/10 px-4 py-2.5 rounded-2xl border border-[#f5f5f0]/20">
-            <div className="text-[#f5f5f0]/70 text-[11px]">Low Stock Items</div>
-            <div className={`text-base font-serif font-bold mt-0.5 ${lowStockCount > 0 ? 'text-amber-200' : 'text-emerald-200'}`}>
+          <div className="bg-muted/10 px-4 py-2.5 rounded-2xl border border-primary-foreground/20">
+            <div className="text-primary-foreground/70 text-[11px]">Low Stock Items</div>
+            <div className={`text-base font-serif font-bold mt-0.5 ${lowStockCount > 0 ? 'text-ink-200' : 'text-ink-200'}`}>
               {lowStockCount} Items
             </div>
           </div>
@@ -529,22 +530,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       </div>
 
       {/* REAL-TIME BRANCH TOP-LEVEL METRIC CARDS */}
-      <div className="bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm space-y-4 font-sans">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#e5e5d1]">
+      <div className="bg-card border border-border rounded-3xl p-5 shadow-sm space-y-4 font-sans">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
           <div className="flex items-center space-x-2">
-            <Activity className="w-5 h-5 text-emerald-600 animate-pulse" />
-            <h3 className="font-serif font-bold text-[#2d2d2a] text-base">Real-Time Branch Operations Dashboard</h3>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <Activity className="w-5 h-5 text-muted-foreground animate-pulse" />
+            <h3 className="font-serif font-bold text-foreground text-base">Real-Time Branch Operations Dashboard</h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-muted text-foreground border border-border">
               Live Stream
             </span>
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="text-xs font-semibold text-[#737366]">Selected Branch:</span>
+            <span className="text-xs font-semibold text-muted-foreground">Selected Branch:</span>
             <select
               value={activeBranchId}
               onChange={(e) => setSelectedMetricBranchId(e.target.value)}
-              className="bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] font-bold text-xs rounded-xl px-3 py-1.5 outline-none focus:border-[#5A5A40]"
+              className="bg-muted border border-border text-foreground font-bold text-xs rounded-xl px-3 py-1.5 outline-none focus:border-primary"
             >
               {companyBranches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -557,47 +558,47 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Revenue Today */}
-          <div className="bg-gradient-to-br from-[#f5f5f0] to-white border border-[#e5e5d1] rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+          <div className="bg-gradient-to-br from-[#f6f3ec] to-white border border-border rounded-2xl p-4 flex flex-col justify-between shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#737366] uppercase tracking-wider">Revenue Today</span>
-              <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Revenue Today</span>
+              <div className="p-2 rounded-xl bg-muted text-foreground">
                 <DollarSign className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-2">
-              <div className="text-2xl font-serif font-bold text-emerald-800">
+              <div className="text-2xl font-serif font-bold text-foreground">
                 {revenueTodayEtb.toLocaleString()} ETB
               </div>
-              <div className="text-[11px] text-[#737366] mt-1 flex items-center space-x-1">
-                <TrendingUp className="w-3 h-3 text-emerald-600" />
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center space-x-1">
+                <TrendingUp className="w-3 h-3 text-muted-foreground" />
                 <span>Today's completed revenue at {currentMetricBranch?.name}</span>
               </div>
             </div>
           </div>
 
           {/* Card 2: Active Visits */}
-          <div className="bg-gradient-to-br from-[#f5f5f0] to-white border border-[#e5e5d1] rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+          <div className="bg-gradient-to-br from-[#f6f3ec] to-white border border-border rounded-2xl p-4 flex flex-col justify-between shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#737366] uppercase tracking-wider">Active Visits</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Visits</span>
               <div className="p-2 rounded-xl bg-blue-100 text-blue-800">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-2">
               <div className="text-2xl font-serif font-bold text-blue-900">
-                {activeVisitsCount} <span className="text-xs font-sans font-normal text-[#737366]">Visits Active</span>
+                {activeVisitsCount} <span className="text-xs font-sans font-normal text-muted-foreground">Visits Active</span>
               </div>
-              <div className="text-[11px] text-[#737366] mt-1 flex items-center space-x-2">
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center space-x-2">
                 <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold">{inProgressCount} In Service</span>
-                <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-bold">{queuedCount} Waiting</span>
+                <span className="px-1.5 py-0.5 rounded bg-muted text-foreground font-bold">{queuedCount} Waiting</span>
               </div>
             </div>
           </div>
 
           {/* Card 3: Staff Occupancy */}
-          <div className="bg-gradient-to-br from-[#f5f5f0] to-white border border-[#e5e5d1] rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+          <div className="bg-gradient-to-br from-[#f6f3ec] to-white border border-border rounded-2xl p-4 flex flex-col justify-between shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#737366] uppercase tracking-wider">Staff Occupancy</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Staff Occupancy</span>
               <div className="p-2 rounded-xl bg-purple-100 text-purple-800">
                 <Users className="w-4 h-4" />
               </div>
@@ -606,13 +607,13 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               <div className="text-2xl font-serif font-bold text-purple-950">
                 {staffOccupancyPct}%
               </div>
-              <div className="w-full bg-stone-200 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div className="w-full bg-muted rounded-full h-1.5 mt-2 overflow-hidden">
                 <div
                   className="bg-purple-700 h-1.5 rounded-full transition-all duration-500"
                   style={{ width: `${Math.min(100, staffOccupancyPct)}%` }}
                 />
               </div>
-              <div className="text-[11px] text-[#737366] mt-1 flex justify-between">
+              <div className="text-[11px] text-muted-foreground mt-1 flex justify-between">
                 <span>{busyBranchStaffCount} Working/Busy</span>
                 <span>{totalBranchStaffCount} Total Staff</span>
               </div>
@@ -622,7 +623,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex items-center space-x-2 border-b border-[#e5e5d1] overflow-x-auto pb-2 font-sans">
+      <div className="flex items-center space-x-2 border-b border-border overflow-x-auto pb-2 font-sans">
         {[
           { id: 'branches', label: 'Branches & Units', icon: GitBranch },
           { id: 'staff', label: 'Staff Roster', icon: Users },
@@ -643,8 +644,8 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center space-x-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
-                  ? 'bg-[#5A5A40] text-white shadow-sm'
-                  : 'bg-white text-[#737366] hover:text-[#2d2d2a] border border-[#e5e5d1]'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-card text-muted-foreground hover:text-foreground border border-border'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -659,22 +660,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Company Branches & Business Units</h3>
-              <p className="text-xs text-[#737366]">
+              <h3 className="text-lg font-serif font-bold text-foreground">Company Branches & Business Units</h3>
+              <p className="text-xs text-muted-foreground">
                 A single company can operate multiple branches across cities, each with specialized units (e.g. Men's Salon + Moroccan Hammam).
               </p>
             </div>
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowAddBranchModal(true)}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Branch</span>
               </button>
               <button
                 onClick={() => setShowAddUnitModal(true)}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-[#f5f5f0] hover:bg-[#e5e5d1] text-[#5A5A40] font-semibold text-xs rounded-full border border-[#e5e5d1] cursor-pointer"
+                className="flex items-center space-x-1.5 px-4 py-2 bg-muted hover:bg-muted text-foreground font-semibold text-xs rounded-full border border-border cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Business Unit</span>
@@ -687,17 +688,17 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               const branchUnits = companyBusinessUnits.filter((bu) => bu.branchId === branch.id);
               const branchStaff = companyStaff.filter((s) => s.branchId === branch.id);
               return (
-                <div key={branch.id} className="bg-white border border-[#e5e5d1] rounded-3xl p-5 space-y-4 shadow-sm">
+                <div key={branch.id} className="bg-card border border-border rounded-3xl p-5 space-y-4 shadow-sm">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <GitBranch className="w-4 h-4 text-[#5A5A40]" />
-                        <h4 className="text-base font-serif font-bold text-[#2d2d2a]">{branch.name}</h4>
+                        <GitBranch className="w-4 h-4 text-foreground" />
+                        <h4 className="text-base font-serif font-bold text-foreground">{branch.name}</h4>
                       </div>
-                      <p className="text-xs text-[#737366] mt-1">{branch.city} — {branch.address}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{branch.city} — {branch.address}</p>
                     </div>
                     {branch.isMainBranch && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-foreground border border-border text-[10px] font-bold">
                         Main Flagship
                       </span>
                     )}
@@ -705,34 +706,34 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <div className="flex items-center space-x-1">
                     <button
                       onClick={() => setEditingEntity({ type: 'branch', data: branch })}
-                      className="p-1.5 rounded-lg hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       title="Edit Branch"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setConfirmDelete({ type: 'branch', id: branch.id, name: branch.name })}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-[#737366] hover:text-red-600 transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
                       title="Deactivate Branch"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  <div className="border-t border-[#e5e5d1] pt-3 space-y-2">
-                    <div className="text-xs font-semibold text-[#2d2d2a] flex items-center justify-between">
+                  <div className="border-t border-border pt-3 space-y-2">
+                    <div className="text-xs font-semibold text-foreground flex items-center justify-between">
                       <span>Business Units ({branchUnits.length})</span>
-                      <span className="text-[#737366] text-[11px]">{branchStaff.length} Staff Assigned</span>
+                      <span className="text-muted-foreground text-[11px]">{branchStaff.length} Staff Assigned</span>
                     </div>
 
                     <div className="space-y-1.5">
                       {branchUnits.map((bu) => (
-                        <div key={bu.id} className="bg-[#f5f5f0] p-2.5 rounded-2xl text-xs flex items-center justify-between border border-[#e5e5d1]">
+                        <div key={bu.id} className="bg-muted p-2.5 rounded-2xl text-xs flex items-center justify-between border border-border">
                           <div className="flex items-center space-x-2">
-                            <Layers className="w-3.5 h-3.5 text-[#5A5A40]" />
-                            <span className="font-semibold text-[#2d2d2a]">{bu.name}</span>
+                            <Layers className="w-3.5 h-3.5 text-foreground" />
+                            <span className="font-semibold text-foreground">{bu.name}</span>
                           </div>
-                          <span className="text-[10px] px-2 py-0.5 bg-white text-[#737366] rounded font-mono border border-[#e5e5d1]">
+                          <span className="text-[10px] px-2 py-0.5 bg-card text-muted-foreground rounded font-mono border border-border">
                             {bu.code}
                           </span>
                         </div>
@@ -751,14 +752,14 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Staff Roster & Commission Rates</h3>
-              <p className="text-xs text-[#737366]">
+              <h3 className="text-lg font-serif font-bold text-foreground">Staff Roster & Commission Rates</h3>
+              <p className="text-xs text-muted-foreground">
                 Staff members work across shifts and business units. Commissions earn automatically on session completion.
               </p>
             </div>
             <button
               onClick={() => setShowAddStaffModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Staff Member</span>
@@ -770,50 +771,50 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               const staffBr = companyBranches.find((b) => b.id === staff.branchId);
               const staffBu = companyBusinessUnits.find((u) => u.id === staff.businessUnitId);
               return (
-                <div key={staff.id} className="bg-white border border-[#e5e5d1] rounded-3xl p-5 space-y-3 shadow-sm">
+                <div key={staff.id} className="bg-card border border-border rounded-3xl p-5 space-y-3 shadow-sm">
                   <div className="flex items-center space-x-3">
                     <img
                       src={staff.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
                       alt={staff.name}
-                      className="w-12 h-12 rounded-full object-cover border border-[#e5e5d1]"
+                      className="w-12 h-12 rounded-full object-cover border border-border"
                     />
                     <div>
-                      <h4 className="text-base font-serif font-bold text-[#2d2d2a]">{staff.name}</h4>
-                      <p className="text-xs text-[#5A5A40] capitalize font-medium">{staff.role}</p>
-                      <p className="text-[11px] text-[#737366]">{staff.phone}</p>
+                      <h4 className="text-base font-serif font-bold text-foreground">{staff.name}</h4>
+                      <p className="text-xs text-foreground capitalize font-medium">{staff.role}</p>
+                      <p className="text-[11px] text-muted-foreground">{staff.phone}</p>
                     </div>
                   </div>
 
-                  <div className="border-t border-[#e5e5d1] pt-3 space-y-1.5 text-xs font-sans">
-                    <div className="flex justify-between text-[#737366]">
+                  <div className="border-t border-border pt-3 space-y-1.5 text-xs font-sans">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Branch & Unit:</span>
-                      <span className="text-[#2d2d2a] font-medium">{staffBr?.name} ({staffBu?.name || 'All'})</span>
+                      <span className="text-foreground font-medium">{staffBr?.name} ({staffBu?.name || 'All'})</span>
                     </div>
-                    <div className="flex justify-between text-[#737366]">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Commission Rate:</span>
-                      <span className="text-emerald-700 font-bold">{staff.defaultCommissionPercentage}% Rate</span>
+                      <span className="text-foreground font-bold">{staff.defaultCommissionPercentage}% Rate</span>
                     </div>
-                    <div className="flex justify-between text-[#737366]">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Shift Status:</span>
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        staff.status === 'available' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                        staff.status === 'busy' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-[#f5f5f0] text-[#737366] border border-[#e5e5d1]'
+                        staff.status === 'available' ? 'bg-muted text-foreground border border-border' :
+                        staff.status === 'busy' ? 'bg-muted text-foreground border border-border' : 'bg-muted text-muted-foreground border border-border'
                       }`}>
                         {staff.status}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-1 pt-2 border-t border-[#e5e5d1]">
+                  <div className="flex items-center space-x-1 pt-2 border-t border-border">
                     <button
                       onClick={() => setEditingEntity({ type: 'staff', data: staff })}
-                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] text-[11px] font-medium transition-colors"
+                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground text-[11px] font-medium transition-colors"
                     >
                       <Edit2 className="w-3 h-3" />
                       <span>Edit</span>
                     </button>
                     <button
                       onClick={() => setConfirmDelete({ type: 'staff', id: staff.id, name: staff.name })}
-                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-red-50 text-[#737366] hover:text-red-600 text-[11px] font-medium transition-colors"
+                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 text-[11px] font-medium transition-colors"
                     >
                       <Trash2 className="w-3 h-3" />
                       <span>Remove</span>
@@ -831,23 +832,23 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Service Pricing Catalog & Rules</h3>
-              <p className="text-xs text-[#737366]">
+              <h3 className="text-lg font-serif font-bold text-foreground">Service Pricing Catalog & Rules</h3>
+              <p className="text-xs text-muted-foreground">
                 Services configure default duration, price in ETB, staff commission calculation rules, and required inventory items.
               </p>
             </div>
             <button
               onClick={() => setShowAddServiceModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Create Service</span>
             </button>
           </div>
 
-          <div className="overflow-x-auto bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm font-sans">
-            <table className="w-full text-left text-xs text-[#2d2d2a]">
-              <thead className="bg-[#f5f5f0] text-[#737366] uppercase font-bold text-[10px] tracking-wider">
+          <div className="overflow-x-auto bg-card border border-border rounded-3xl p-5 shadow-sm font-sans">
+            <table className="w-full text-left text-xs text-foreground">
+              <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
                 <tr>
                   <th className="px-4 py-3 rounded-l-xl">Service Name</th>
                   <th className="px-4 py-3">Category</th>
@@ -858,26 +859,26 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <th className="px-4 py-3 rounded-r-xl">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e5e5d1]">
+              <tbody className="divide-y divide-[#efe8d9]">
                 {companyServices.map((srv) => {
                   const bu = companyBusinessUnits.find((u) => u.id === srv.businessUnitId);
                   return (
-                    <tr key={srv.id} className="hover:bg-[#f5f5f0]/60">
-                      <td className="px-4 py-3 font-bold text-[#2d2d2a] flex items-center space-x-2">
-                        <Scissors className="w-3.5 h-3.5 text-[#5A5A40]" />
+                    <tr key={srv.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3 font-bold text-foreground flex items-center space-x-2">
+                        <Scissors className="w-3.5 h-3.5 text-foreground" />
                         <span>{srv.name}</span>
                       </td>
-                      <td className="px-4 py-3 text-[#737366]">{srv.category}</td>
-                      <td className="px-4 py-3 text-[#5A5A40] font-bold">{srv.priceEtb.toLocaleString()} ETB</td>
-                      <td className="px-4 py-3 text-[#737366]">{srv.durationMinutes} mins</td>
-                      <td className="px-4 py-3 text-emerald-700 font-bold">{srv.commissionValue}% Rate</td>
-                      <td className="px-4 py-3 text-[#737366]">{bu?.name || 'General'}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{srv.category}</td>
+                      <td className="px-4 py-3 text-foreground font-bold">{srv.priceEtb.toLocaleString()} ETB</td>
+                      <td className="px-4 py-3 text-muted-foreground">{srv.durationMinutes} mins</td>
+                      <td className="px-4 py-3 text-foreground font-bold">{srv.commissionValue}% Rate</td>
+                      <td className="px-4 py-3 text-muted-foreground">{bu?.name || 'General'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center space-x-1">
-                          <button onClick={() => setEditingEntity({ type: 'service', data: srv })} className="p-1 rounded hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40]">
+                          <button onClick={() => setEditingEntity({ type: 'service', data: srv })} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => setConfirmDelete({ type: 'service', id: srv.id, name: srv.name })} className="p-1 rounded hover:bg-red-50 text-[#737366] hover:text-red-600">
+                          <button onClick={() => setConfirmDelete({ type: 'service', id: srv.id, name: srv.name })} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -896,14 +897,14 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Branch Stock & Auto-Deduction Inventory</h3>
-              <p className="text-xs text-[#737366]">
+              <h3 className="text-lg font-serif font-bold text-foreground">Branch Stock & Auto-Deduction Inventory</h3>
+              <p className="text-xs text-muted-foreground">
                 Stock decrements automatically upon completing visit sessions. Reorder alerts trigger when threshold is reached.
               </p>
             </div>
             <button
               onClick={() => setShowAddInventoryModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Stock Item</span>
@@ -912,17 +913,17 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
           {/* Low Stock Alert Toast / Warning Banner */}
           {companyInventory.some((item) => item.currentStock <= item.reorderLevel) && (
-            <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 shadow-sm text-amber-950 space-y-2 animate-fadeIn">
+            <div className="bg-muted border-2 border-border rounded-2xl p-4 shadow-sm text-foreground space-y-2 animate-fadeIn">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                  <div className="p-2 bg-muted text-foreground rounded-xl">
                     <AlertTriangle className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-serif font-bold text-sm text-amber-900">
+                    <h4 className="font-serif font-bold text-sm text-foreground">
                       Low Stock Warning Alert! ({companyInventory.filter((i) => i.currentStock <= i.reorderLevel).length} items below reorder threshold)
                     </h4>
-                    <p className="text-xs text-amber-800/90 mt-0.5">
+                    <p className="text-xs text-foreground/90 mt-0.5">
                       The following consumables are running low and may affect scheduled services. Click + Restock to order supply.
                     </p>
                   </div>
@@ -934,23 +935,23 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       .filter((i) => i.currentStock <= i.reorderLevel)
                       .forEach((i) => onUpdateInventoryStock(i.id, 50));
                   }}
-                  className="px-3.5 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-full cursor-pointer shadow-sm shrink-0"
+                  className="px-3.5 py-1.5 bg-primary hover:bg-primary/80 text-primary-foreground font-bold text-xs rounded-full cursor-pointer shadow-sm shrink-0"
                 >
                   Restock All Low Items (+50)
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-amber-200/80">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border/80">
                 {companyInventory
                   .filter((i) => i.currentStock <= i.reorderLevel)
                   .map((item) => (
                     <span
                       key={item.id}
-                      className="px-3 py-1 bg-white border border-amber-300 rounded-xl text-xs font-bold text-amber-900 flex items-center space-x-2"
+                      className="px-3 py-1 bg-card border border-border rounded-xl text-xs font-bold text-foreground flex items-center space-x-2"
                     >
                       <span>{item.name}:</span>
                       <span className="text-red-700 font-mono">{item.currentStock} {item.unit}</span>
-                      <span className="text-[10px] text-amber-700">(Min: {item.reorderLevel})</span>
+                      <span className="text-[10px] text-foreground">(Min: {item.reorderLevel})</span>
                     </span>
                   ))}
               </div>
@@ -963,17 +964,17 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               return (
                 <div
                   key={item.id}
-                  className={`bg-white border rounded-3xl p-5 space-y-3 shadow-sm ${
-                    isLow ? 'border-amber-400 bg-amber-50/20' : 'border-[#e5e5d1]'
+                  className={`bg-card border rounded-3xl p-5 space-y-3 shadow-sm ${
+                    isLow ? 'border-primary/40 bg-muted/20' : 'border-border'
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="text-base font-serif font-bold text-[#2d2d2a]">{item.name}</h4>
-                      <p className="text-[10px] text-[#737366] font-mono">SKU: {item.sku}</p>
+                      <h4 className="text-base font-serif font-bold text-foreground">{item.name}</h4>
+                      <p className="text-[10px] text-muted-foreground font-mono">SKU: {item.sku}</p>
                     </div>
                     {isLow && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold flex items-center space-x-1">
+                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-foreground border border-border text-[10px] font-bold flex items-center space-x-1">
                         <AlertTriangle className="w-3 h-3" />
                         <span>Low Stock</span>
                       </span>
@@ -981,42 +982,42 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   </div>
 
                   <div className="space-y-1 text-xs">
-                    <div className="flex justify-between text-[#737366]">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Current Stock:</span>
-                      <span className={`font-bold ${isLow ? 'text-amber-800' : 'text-emerald-700'}`}>
+                      <span className={`font-bold ${isLow ? 'text-foreground' : 'text-foreground'}`}>
                         {item.currentStock} {item.unit}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[#737366]">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Reorder Threshold:</span>
-                      <span className="text-[#2d2d2a] font-medium">{item.reorderLevel} {item.unit}</span>
+                      <span className="text-foreground font-medium">{item.reorderLevel} {item.unit}</span>
                     </div>
-                    <div className="flex justify-between text-[#737366]">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Cost per unit:</span>
-                      <span className="text-[#2d2d2a] font-medium">{item.unitCostEtb} ETB</span>
+                      <span className="text-foreground font-medium">{item.unitCostEtb} ETB</span>
                     </div>
                   </div>
 
                   <button
                     onClick={() => onUpdateInventoryStock(item.id, 50)}
-                    className="w-full mt-2 py-2 bg-[#f5f5f0] hover:bg-[#e5e5d1] text-[#5A5A40] text-xs font-bold rounded-full border border-[#e5e5d1] cursor-pointer"
+                    className="w-full mt-2 py-2 bg-muted hover:bg-muted text-foreground text-xs font-bold rounded-full border border-border cursor-pointer"
                   >
                     + Restock (+50 {item.unit})
                   </button>
                   <div className="flex items-center space-x-1 mt-1">
                     <button
                       onClick={() => setEditingEntity({ type: 'inventory', data: item })}
-                      className="flex-1 py-1.5 rounded-xl hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
+                      className="flex-1 py-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
                     >
                       <Edit2 className="w-3 h-3" />
                       <span>Edit</span>
                     </button>
                     <button
                       onClick={() => setConfirmDelete({ type: 'inventory', id: item.id, name: item.name })}
-                      className="flex-1 py-1.5 rounded-xl hover:bg-red-50 text-[#737366] hover:text-red-600 text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
+                      className="flex-1 py-1.5 rounded-xl hover:bg-red-50 text-muted-foreground hover:text-red-600 text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
                     >
                       <Trash2 className="w-3 h-3" />
-                      <span>Delete</span>
+                      <span>Deactivate</span>
                     </button>
                   </div>
                 </div>
@@ -1030,14 +1031,14 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       {activeTab === 'commissions' && (
         <div className="space-y-6">
           {/* Commission Rules Configuration Card */}
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl p-6 space-y-4 shadow-sm">
+          <div className="bg-card border border-border rounded-3xl p-6 space-y-4 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center space-x-2">
-                  <Tag className="w-5 h-5 text-[#5A5A40]" />
-                  <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Commission Rules Engine</h3>
+                  <Tag className="w-5 h-5 text-foreground" />
+                  <h3 className="text-lg font-serif font-bold text-foreground">Commission Rules Engine</h3>
                 </div>
-                <p className="text-xs text-[#737366] mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Configure custom commission rules per staff member or per service (percentage % or fixed ETB amount). Applied automatically at checkout.
                 </p>
               </div>
@@ -1048,7 +1049,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   setRuleTargetId(companyStaff[0]?.id || '');
                   setShowCommissionRuleModal(true);
                 }}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm shrink-0"
+                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Configure Commission Rule</span>
@@ -1058,7 +1059,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
             {/* Active Rules Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
               {commissionRules.filter((r) => r.companyId === company.id).length === 0 ? (
-                <div className="col-span-full py-6 text-center text-[#737366] text-xs bg-[#f5f5f0] rounded-2xl border border-[#e5e5d1]">
+                <div className="col-span-full py-6 text-center text-muted-foreground text-xs bg-muted rounded-2xl border border-border">
                   No custom commission rules configured yet. Standard default percentages apply.
                 </div>
               ) : (
@@ -1067,29 +1068,29 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   .map((rule) => (
                     <div
                       key={rule.id}
-                      className="p-4 bg-[#f5f5f0] border border-[#e5e5d1] rounded-2xl space-y-2 flex flex-col justify-between"
+                      className="p-4 bg-muted border border-border rounded-2xl space-y-2 flex flex-col justify-between"
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#737366]">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Target: {rule.targetType === 'staff' ? 'Staff Member' : 'Service'}
                           </span>
-                          <h4 className="font-bold text-sm text-[#2d2d2a]">{rule.targetName}</h4>
+                          <h4 className="font-bold text-sm text-foreground">{rule.targetName}</h4>
                         </div>
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                             rule.isActive
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : 'bg-stone-100 text-stone-500 border-stone-200'
+                              ? 'bg-muted text-foreground border-border'
+                              : 'bg-muted text-stone-500 border-border'
                           }`}
                         >
                           {rule.isActive ? 'Active' : 'Disabled'}
                         </span>
                       </div>
 
-                      <div className="flex justify-between items-center text-xs pt-2 border-t border-[#e5e5d1]">
-                        <span className="text-[#737366]">Payout Rate:</span>
-                        <span className="font-mono font-bold text-[#5A5A40] text-sm">
+                      <div className="flex justify-between items-center text-xs pt-2 border-t border-border">
+                        <span className="text-muted-foreground">Payout Rate:</span>
+                        <span className="font-mono font-bold text-foreground text-sm">
                           {rule.type === 'percentage' ? `${rule.value}%` : `${rule.value.toLocaleString()} ETB (Fixed)`}
                         </span>
                       </div>
@@ -1103,28 +1104,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Staff Commission Logs & Payout Schedule</h3>
-                <p className="text-xs text-[#737366]">
+                <h3 className="text-lg font-serif font-bold text-foreground">Staff Commission Logs & Payout Schedule</h3>
+                <p className="text-xs text-muted-foreground">
                   Calculated automatically per completed service session according to configured rules.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleExportPayrollCsv}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white text-xs font-bold rounded-full cursor-pointer shadow-sm transition-all"
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-bold rounded-full cursor-pointer shadow-sm transition-all"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Export Payroll CSV</span>
                 </button>
-                <div className="text-xs text-emerald-800 font-bold bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200">
+                <div className="text-xs text-foreground font-bold bg-muted px-4 py-2 rounded-full border border-border">
                   Total Earned Commissions: {totalCommissionsEtb.toLocaleString()} ETB
                 </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm font-sans">
-              <table className="w-full text-left text-xs text-[#2d2d2a]">
-                <thead className="bg-[#f5f5f0] text-[#737366] uppercase font-bold text-[10px] tracking-wider">
+            <div className="overflow-x-auto bg-card border border-border rounded-3xl p-5 shadow-sm font-sans">
+              <table className="w-full text-left text-xs text-foreground">
+                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
                   <tr>
                     <th className="px-4 py-3 rounded-l-xl">Staff Member</th>
                     <th className="px-4 py-3">Service Performed</th>
@@ -1134,18 +1135,18 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     <th className="px-4 py-3 rounded-r-xl">Payout Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e5e5d1]">
+                <tbody className="divide-y divide-[#efe8d9]">
                   {companyCommissions.map((log) => (
-                    <tr key={log.id} className="hover:bg-[#f5f5f0]/60">
-                      <td className="px-4 py-3 font-bold text-[#2d2d2a]">{log.staffName}</td>
-                      <td className="px-4 py-3 text-[#737366]">{log.serviceName}</td>
-                      <td className="px-4 py-3 text-[#737366]">{log.servicePriceEtb} ETB</td>
-                      <td className="px-4 py-3 text-emerald-700 font-bold">{log.commissionAmountEtb} ETB</td>
-                      <td className="px-4 py-3 text-[#737366]">{log.ruleApplied}</td>
+                    <tr key={log.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3 font-bold text-foreground">{log.staffName}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{log.serviceName}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{log.servicePriceEtb} ETB</td>
+                      <td className="px-4 py-3 text-foreground font-bold">{log.commissionAmountEtb} ETB</td>
+                      <td className="px-4 py-3 text-muted-foreground">{log.ruleApplied}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.payoutStatus === 'paid' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                          log.payoutStatus === 'payout_requested' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-[#f5f5f0] text-[#737366] border border-[#e5e5d1]'
+                          log.payoutStatus === 'paid' ? 'bg-muted text-foreground border border-border' :
+                          log.payoutStatus === 'payout_requested' ? 'bg-muted text-foreground border border-border' : 'bg-muted text-muted-foreground border border-border'
                         }`}>
                           {log.payoutStatus}
                         </span>
@@ -1175,33 +1176,33 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       {activeTab === 'financials' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
-            <div className="bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm">
-              <div className="text-[#737366] text-xs font-bold uppercase tracking-wider">Total Gross Sales</div>
-              <div className="text-2xl font-serif font-bold text-emerald-700 mt-2">
+            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
+              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider">Total Gross Sales</div>
+              <div className="text-2xl font-serif font-bold text-foreground mt-2">
                 {totalCompletedRevenueEtb.toLocaleString()} ETB
               </div>
             </div>
 
-            <div className="bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm">
-              <div className="text-[#737366] text-xs font-bold uppercase tracking-wider">Total Operating Expenses</div>
-              <div className="text-2xl font-serif font-bold text-amber-800 mt-2">
+            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
+              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider">Total Operating Expenses</div>
+              <div className="text-2xl font-serif font-bold text-foreground mt-2">
                 {totalExpensesEtb.toLocaleString()} ETB
               </div>
             </div>
 
-            <div className="bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm">
-              <div className="text-[#737366] text-xs font-bold uppercase tracking-wider">Net Profit (Sales - Expenses)</div>
-              <div className="text-2xl font-serif font-bold text-[#5A5A40] mt-2">
+            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
+              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider">Net Profit (Sales - Expenses)</div>
+              <div className="text-2xl font-serif font-bold text-foreground mt-2">
                 {(totalCompletedRevenueEtb - totalExpensesEtb).toLocaleString()} ETB
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h4 className="text-lg font-serif font-bold text-[#2d2d2a]">Operating & Recurring Expense Ledger</h4>
-                <p className="text-xs text-[#737366]">
+                <h4 className="text-lg font-serif font-bold text-foreground">Operating & Recurring Expense Ledger</h4>
+                <p className="text-xs text-muted-foreground">
                   Track regular expenses and configure automated recurring billing triggers (monthly rent, software licensing, utility retainers).
                 </p>
               </div>
@@ -1218,7 +1219,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
                 <button
                   onClick={() => setShowAddExpenseModal(true)}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white text-xs font-bold rounded-full shadow-xs cursor-pointer"
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-bold rounded-full shadow-xs cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Record Expense</span>
@@ -1227,8 +1228,8 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
             </div>
 
             <div className="overflow-x-auto font-sans">
-              <table className="w-full text-left text-xs text-[#2d2d2a]">
-                <thead className="bg-[#f5f5f0] text-[#737366] uppercase font-bold text-[10px] tracking-wider">
+              <table className="w-full text-left text-xs text-foreground">
+                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
                   <tr>
                     <th className="px-4 py-3 rounded-l-xl">Description</th>
                     <th className="px-4 py-3">Category</th>
@@ -1239,18 +1240,18 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     <th className="px-4 py-3 rounded-r-xl">Date</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e5e5d1]">
-                  {expenses.map((exp) => (
-                    <tr key={exp.id} className="hover:bg-[#f5f5f0]/60">
-                      <td className="px-4 py-3 font-semibold text-[#2d2d2a]">
+                <tbody className="divide-y divide-[#efe8d9]">
+                  {companyExpenses.map((exp) => (
+                    <tr key={exp.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3 font-semibold text-foreground">
                         <div className="flex items-center space-x-1.5">
                           {exp.isRecurring && <Repeat className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />}
                           <span>{exp.description}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 uppercase text-[10px] text-[#5A5A40] font-bold">{exp.category}</td>
-                      <td className="px-4 py-3 text-amber-800 font-bold">{exp.amountEtb.toLocaleString()} ETB</td>
-                      <td className="px-4 py-3 uppercase text-[#737366]">{exp.paymentMethod}</td>
+                      <td className="px-4 py-3 uppercase text-[10px] text-foreground font-bold">{exp.category}</td>
+                      <td className="px-4 py-3 text-foreground font-bold">{exp.amountEtb.toLocaleString()} ETB</td>
+                      <td className="px-4 py-3 uppercase text-muted-foreground">{exp.paymentMethod}</td>
                       <td className="px-4 py-3">
                         {exp.isRecurring ? (
                           <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
@@ -1258,11 +1259,11 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                             <span className="capitalize">{exp.recurrenceFrequency} (Next: {exp.nextDueDate || 'Pending'})</span>
                           </span>
                         ) : (
-                          <span className="text-[#737366] text-[10px]">One-off</span>
+                          <span className="text-muted-foreground text-[10px]">One-off</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-[#737366]">{exp.recordedBy}</td>
-                      <td className="px-4 py-3 text-[#737366]">{exp.date}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{exp.recordedBy}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{exp.date}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1275,21 +1276,21 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       {/* TAB 8: SECURITY AUDIT */}
       {activeTab === 'audit' && (
         <div className="space-y-6 font-sans">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-700" />
-                  <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Security Audit Trail & Sensitive Action Log</h3>
+                  <ShieldCheck className="w-5 h-5 text-foreground" />
+                  <h3 className="text-lg font-serif font-bold text-foreground">Security Audit Trail & Sensitive Action Log</h3>
                 </div>
-                <p className="text-xs text-[#737366] mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Immutable security record capturing inventory adjustments, staff commission edits, payment overrides, and tenant system updates.
                 </p>
               </div>
 
               <button
                 onClick={handleExportSecurityAuditCsv}
-                className="flex items-center space-x-2 px-4 py-2.5 bg-[#5A5A40] hover:bg-[#4a4a35] text-white text-xs font-bold rounded-full cursor-pointer shadow-sm self-start md:self-auto"
+                className="flex items-center space-x-2 px-4 py-2.5 bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-bold rounded-full cursor-pointer shadow-sm self-start md:self-auto"
               >
                 <Download className="w-4 h-4" />
                 <span>Export Audit CSV</span>
@@ -1297,9 +1298,9 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
             </div>
 
             {/* Filter and Search Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#e5e5d1]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border">
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-[#737366] font-semibold mr-1">Action Type:</span>
+                <span className="text-muted-foreground font-semibold mr-1">Action Type:</span>
                 {[
                   { id: 'all', label: 'All Actions' },
                   { id: 'inventory_adjustment', label: 'Inventory' },
@@ -1312,8 +1313,8 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     onClick={() => setAuditFilterType(type.id)}
                     className={`px-3 py-1 rounded-full font-bold text-[11px] cursor-pointer transition-all ${
                       auditFilterType === type.id
-                        ? 'bg-[#5A5A40] text-white'
-                        : 'bg-[#f5f5f0] text-[#737366] hover:bg-[#e5e5d1]'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted'
                     }`}
                   >
                     {type.label}
@@ -1322,21 +1323,21 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               </div>
 
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-[#737366] absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Search logs by staff or keyword..."
                   value={auditSearchQuery}
                   onChange={(e) => setAuditSearchQuery(e.target.value)}
-                  className="bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] text-xs rounded-xl pl-8 pr-3 py-1.5 outline-none focus:border-[#5A5A40] w-full sm:w-64"
+                  className="bg-muted border border-border text-foreground text-xs rounded-xl pl-8 pr-3 py-1.5 outline-none focus:border-primary w-full sm:w-64"
                 />
               </div>
             </div>
 
             {/* Audit Log Table */}
-            <div className="overflow-x-auto bg-white rounded-2xl border border-[#e5e5d1]">
-              <table className="w-full text-left text-xs text-[#2d2d2a]">
-                <thead className="bg-[#f5f5f0] text-[#737366] uppercase font-bold text-[10px] tracking-wider">
+            <div className="overflow-x-auto bg-card rounded-2xl border border-border">
+              <table className="w-full text-left text-xs text-foreground">
+                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
                   <tr>
                     <th className="px-4 py-3 rounded-l-xl">Timestamp</th>
                     <th className="px-4 py-3">Action Type</th>
@@ -1346,7 +1347,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     <th className="px-4 py-3 rounded-r-xl">IP Address</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e5e5d1]">
+                <tbody className="divide-y divide-[#efe8d9]">
                   {auditLogs
                     .filter((log) => {
                       if (log.companyId !== company.id) return false;
@@ -1365,21 +1366,21 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       const getBadgeColor = (type: string) => {
                         switch (type) {
                           case 'inventory_adjustment':
-                            return 'bg-amber-50 text-amber-800 border-amber-200';
+                            return 'bg-muted text-foreground border-border';
                           case 'commission_change':
                             return 'bg-blue-50 text-blue-800 border-blue-200';
                           case 'payment_edit':
-                            return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                            return 'bg-muted text-foreground border-border';
                           case 'expense_added':
                             return 'bg-purple-50 text-purple-800 border-purple-200';
                           default:
-                            return 'bg-[#f5f5f0] text-[#737366] border-[#e5e5d1]';
+                            return 'bg-muted text-muted-foreground border-border';
                         }
                       };
 
                       return (
-                        <tr key={log.id} className="hover:bg-[#f5f5f0]/60">
-                          <td className="px-4 py-3 text-[#737366] font-mono whitespace-nowrap">
+                        <tr key={log.id} className="hover:bg-muted/60">
+                          <td className="px-4 py-3 text-muted-foreground font-mono whitespace-nowrap">
                             {new Date(log.timestamp).toLocaleString()}
                           </td>
                           <td className="px-4 py-3">
@@ -1391,10 +1392,10 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                               {log.actionType.replace('_', ' ')}
                             </span>
                           </td>
-                          <td className="px-4 py-3 font-semibold text-[#2d2d2a]">{log.description}</td>
-                          <td className="px-4 py-3 text-[#5A5A40] font-bold">{log.performedBy}</td>
-                          <td className="px-4 py-3 text-[#737366] max-w-xs truncate">{log.details || '-'}</td>
-                          <td className="px-4 py-3 text-[#737366] font-mono text-[10px]">
+                          <td className="px-4 py-3 font-semibold text-foreground">{log.description}</td>
+                          <td className="px-4 py-3 text-foreground font-bold">{log.performedBy}</td>
+                          <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{log.details || '-'}</td>
+                          <td className="px-4 py-3 text-muted-foreground font-mono text-[10px]">
                             {log.ipAddress || '197.156.102.88'}
                           </td>
                         </tr>
@@ -1412,23 +1413,23 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">User Management</h3>
-              <p className="text-xs text-[#737366]">
+              <h3 className="text-lg font-serif font-bold text-foreground">User Management</h3>
+              <p className="text-xs text-muted-foreground">
                 Manage system users, roles, and access permissions for this tenant.
               </p>
             </div>
             <button
               onClick={() => setShowAddUserModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add User</span>
             </button>
           </div>
 
-          <div className="overflow-x-auto bg-white border border-[#e5e5d1] rounded-3xl p-5 shadow-sm font-sans">
-            <table className="w-full text-left text-xs text-[#2d2d2a]">
-              <thead className="bg-[#f5f5f0] text-[#737366] uppercase font-bold text-[10px] tracking-wider">
+          <div className="overflow-x-auto bg-card border border-border rounded-3xl p-5 shadow-sm font-sans">
+            <table className="w-full text-left text-xs text-foreground">
+              <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
                 <tr>
                   <th className="px-4 py-3 rounded-l-xl">Name</th>
                   <th className="px-4 py-3">Email</th>
@@ -1438,33 +1439,33 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <th className="px-4 py-3 rounded-r-xl">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e5e5d1]">
+              <tbody className="divide-y divide-[#efe8d9]">
                 {users.filter((u) => company.id === '' || u.companyId === company.id).map((usr) => (
-                  <tr key={usr.id} className="hover:bg-[#f5f5f0]/60">
-                    <td className="px-4 py-3 font-bold text-[#2d2d2a]">{usr.name}</td>
-                    <td className="px-4 py-3 text-[#737366]">{usr.email}</td>
+                  <tr key={usr.id} className="hover:bg-muted/60">
+                    <td className="px-4 py-3 font-bold text-foreground">{usr.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{usr.email}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                         usr.role === 'super_admin' ? 'bg-purple-50 text-purple-800 border border-purple-200' :
                         usr.role === 'tenant_manager' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
-                        usr.role === 'receptionist' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                        'bg-[#f5f5f0] text-[#737366] border border-[#e5e5d1]'
+                        usr.role === 'receptionist' ? 'bg-muted text-foreground border border-border' :
+                        'bg-muted text-muted-foreground border border-border'
                       }`}>
                         {usr.role}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        usr.isActive ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+                        usr.isActive ? 'bg-muted text-foreground border border-border' : 'bg-red-50 text-red-800 border border-red-200'
                       }`}>
                         {usr.isActive ? 'Active' : 'Disabled'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#737366]">{usr.lastLoginAt ? new Date(usr.lastLoginAt).toLocaleDateString() : 'Never'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{usr.lastLoginAt ? new Date(usr.lastLoginAt).toLocaleDateString() : 'Never'}</td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => setEditingEntity({ type: 'user', data: usr })}
-                        className="p-1.5 rounded-lg hover:bg-[#f5f5f0] text-[#737366] hover:text-[#5A5A40] transition-colors"
+                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                         title="Edit User"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -1480,28 +1481,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD BRANCH */}
       {showAddBranchModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Add New Branch</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Add New Branch</h3>
             <form onSubmit={handleCreateBranch} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Branch Name</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Branch Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Kazanchis Executive Branch"
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">City</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">City</label>
                 <select
                   value={branchCity}
                   onChange={(e) => setBranchCity(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 >
                   <option value="Addis Ababa">Addis Ababa</option>
                   <option value="Hawassa">Hawassa</option>
@@ -1511,17 +1512,17 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </select>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddBranchModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
                 >
                   Save Branch
                 </button>
@@ -1533,28 +1534,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD BUSINESS UNIT */}
       {showAddUnitModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Add Business Unit</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Add Business Unit</h3>
             <form onSubmit={handleCreateUnit} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Unit Name</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Unit Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Executive Moroccan Hammam"
                   value={unitName}
                   onChange={(e) => setUnitName(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Unit Type</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Unit Type</label>
                 <select
                   value={unitType}
                   onChange={(e) => setUnitType(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 >
                   <option value="mens_salon">Men's Salon</option>
                   <option value="womens_salon">Women's Salon</option>
@@ -1564,11 +1565,11 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Branch</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Branch</label>
                 <select
                   value={unitBranchId}
                   onChange={(e) => setUnitBranchId(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 >
                   {companyBranches.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -1578,17 +1579,17 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </select>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddUnitModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
                 >
                   Create Unit
                 </button>
@@ -1600,40 +1601,40 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD STAFF */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Add Staff Member</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Add Staff Member</h3>
             <form onSubmit={handleCreateStaff} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Full Name</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Full Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Solomon Kassa"
                   value={staffName}
                   onChange={(e) => setStaffName(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Phone Number</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Phone Number</label>
                 <input
                   type="text"
                   placeholder="+251 91 222 3333"
                   value={staffPhone}
                   onChange={(e) => setStaffPhone(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Role</label>
                   <select
                     value={staffRole}
                     onChange={(e) => setStaffRole(e.target.value)}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   >
                     <option value="barber">Barber</option>
                     <option value="hairstylist">Hairstylist</option>
@@ -1644,27 +1645,27 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Commission (%)</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Commission (%)</label>
                   <input
                     type="number"
                     value={staffCommission}
                     onChange={(e) => setStaffCommission(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddStaffModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
                 >
                   Save Staff Member
                 </button>
@@ -1676,55 +1677,55 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD SERVICE */}
       {showAddServiceModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Create New Service</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Create New Service</h3>
             <form onSubmit={handleCreateService} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Service Title</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Service Title</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Hot Stone Full-Body Massage"
                   value={srvName}
                   onChange={(e) => setSrvName(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Price (ETB)</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Price (ETB)</label>
                   <input
                     type="number"
                     value={srvPrice}
                     onChange={(e) => setSrvPrice(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Duration (Mins)</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Duration (Mins)</label>
                   <input
                     type="number"
                     value={srvDuration}
                     onChange={(e) => setSrvDuration(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddServiceModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
                 >
                   Publish Service
                 </button>
@@ -1736,64 +1737,64 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD INVENTORY */}
       {showAddInventoryModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Add Inventory Stock Item</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Add Inventory Stock Item</h3>
             <form onSubmit={handleCreateInventory} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Item Name</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Item Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Organic Eucalyptus Massage Oil"
                   value={invName}
                   onChange={(e) => setInvName(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Unit</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Unit</label>
                   <input
                     type="text"
                     placeholder="ml / pcs"
                     value={invUnit}
                     onChange={(e) => setInvUnit(e.target.value)}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Initial Stock</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Initial Stock</label>
                   <input
                     type="number"
                     value={invStock}
                     onChange={(e) => setInvStock(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Reorder Level</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Reorder Level</label>
                   <input
                     type="number"
                     value={invReorder}
                     onChange={(e) => setInvReorder(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddInventoryModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
                 >
                   Save Stock Item
                 </button>
@@ -1805,16 +1806,16 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: CONFIGURE COMMISSION RULE */}
       {showCommissionRuleModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Configure Commission Rule</h3>
-            <p className="text-xs text-[#737366]">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Configure Commission Rule</h3>
+            <p className="text-xs text-muted-foreground">
               Set custom payout rates per individual staff member or per service offering.
             </p>
 
             <form onSubmit={handleSaveRuleForm} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Target Scope</label>
+                <label className="block text-xs font-semibold text-foreground mb-1">Target Scope</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -1824,8 +1825,8 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition ${
                       ruleTargetType === 'staff'
-                        ? 'bg-[#5A5A40] text-white'
-                        : 'bg-[#f5f5f0] text-[#737366] border border-[#e5e5d1]'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground border border-border'
                     }`}
                   >
                     Per Staff Member
@@ -1838,8 +1839,8 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition ${
                       ruleTargetType === 'service'
-                        ? 'bg-[#5A5A40] text-white'
-                        : 'bg-[#f5f5f0] text-[#737366] border border-[#e5e5d1]'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground border border-border'
                     }`}
                   >
                     Per Service
@@ -1848,13 +1849,13 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">
+                <label className="block text-xs font-semibold text-foreground mb-1">
                   Select {ruleTargetType === 'staff' ? 'Staff Member' : 'Service'}
                 </label>
                 <select
                   value={ruleTargetId}
                   onChange={(e) => setRuleTargetId(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 >
                   {ruleTargetType === 'staff'
                     ? companyStaff.map((s) => (
@@ -1872,11 +1873,11 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Rule Type</label>
+                  <label className="block text-xs font-semibold text-foreground mb-1">Rule Type</label>
                   <select
                     value={ruleType}
                     onChange={(e) => setRuleType(e.target.value as any)}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   >
                     <option value="percentage">Percentage (%)</option>
                     <option value="fixed_amount">Fixed Amount (ETB)</option>
@@ -1884,7 +1885,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">
+                  <label className="block text-xs font-semibold text-foreground mb-1">
                     {ruleType === 'percentage' ? 'Percentage Rate (%)' : 'Fixed Amount (ETB)'}
                   </label>
                   <input
@@ -1892,22 +1893,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                     required
                     value={ruleValue}
                     onChange={(e) => setRuleValue(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowCommissionRuleModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
                 >
                   Save Commission Rule
                 </button>
@@ -1919,16 +1920,16 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD EXPENSE WITH RECURRING SUPPORT */}
       {showAddExpenseModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans">
-            <div className="flex items-center justify-between border-b border-[#e5e5d1] pb-3">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div>
-                <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Record Operating Expense</h3>
-                <p className="text-xs text-[#737366]">Support one-off expenses and automated recurring schedules.</p>
+                <h3 className="text-lg font-serif font-bold text-foreground">Record Operating Expense</h3>
+                <p className="text-xs text-muted-foreground">Support one-off expenses and automated recurring schedules.</p>
               </div>
               <button
                 onClick={() => setShowAddExpenseModal(false)}
-                className="text-[#737366] hover:text-[#2d2d2a] text-sm font-bold"
+                className="text-muted-foreground hover:text-foreground text-sm font-bold"
               >
                 ✕
               </button>
@@ -1936,24 +1937,24 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
             <form onSubmit={handleCreateExpenseSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-[#2d2d2a] mb-1">Expense Description</label>
+                <label className="block font-semibold text-foreground mb-1">Expense Description</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Monthly Commercial Rent - Kazanchis Branch"
                   value={expDescription}
                   onChange={(e) => setExpDescription(e.target.value)}
-                  className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 outline-none focus:border-[#5A5A40]"
+                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-[#2d2d2a] mb-1">Category</label>
+                  <label className="block font-semibold text-foreground mb-1">Category</label>
                   <select
                     value={expCategory}
                     onChange={(e) => setExpCategory(e.target.value as any)}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
                   >
                     <option value="rent">Rent & Facility</option>
                     <option value="utilities">Utilities & Electricity</option>
@@ -1965,24 +1966,24 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-[#2d2d2a] mb-1">Amount (ETB)</label>
+                  <label className="block font-semibold text-foreground mb-1">Amount (ETB)</label>
                   <input
                     type="number"
                     required
                     value={expAmount}
                     onChange={(e) => setExpAmount(Number(e.target.value))}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-[#2d2d2a] mb-1">Payment Method</label>
+                  <label className="block font-semibold text-foreground mb-1">Payment Method</label>
                   <select
                     value={expPaymentMethod}
                     onChange={(e) => setExpPaymentMethod(e.target.value as any)}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
                   >
                     <option value="cbe_birr">CBE Birr</option>
                     <option value="telebirr">Telebirr</option>
@@ -1992,12 +1993,12 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-[#2d2d2a] mb-1">Recorded By</label>
+                  <label className="block font-semibold text-foreground mb-1">Recorded By</label>
                   <input
                     type="text"
                     value={expRecordedBy}
                     onChange={(e) => setExpRecordedBy(e.target.value)}
-                    className="w-full bg-[#f5f5f0] border border-[#e5e5d1] text-[#2d2d2a] rounded-xl px-3.5 py-2.5 outline-none focus:border-[#5A5A40]"
+                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -2021,7 +2022,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <select
                         value={expRecurrenceFreq}
                         onChange={(e) => setExpRecurrenceFreq(e.target.value as any)}
-                        className="w-full bg-white border border-purple-200 text-purple-950 rounded-xl px-3 py-2 outline-none focus:border-purple-600"
+                        className="w-full bg-card border border-purple-200 text-purple-950 rounded-xl px-3 py-2 outline-none focus:border-purple-600"
                       >
                         <option value="weekly">Weekly</option>
                         <option value="monthly">Monthly</option>
@@ -2035,24 +2036,24 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                         type="date"
                         value={expNextDueDate}
                         onChange={(e) => setExpNextDueDate(e.target.value)}
-                        className="w-full bg-white border border-purple-200 text-purple-950 rounded-xl px-3 py-2 outline-none focus:border-purple-600"
+                        className="w-full bg-card border border-purple-200 text-purple-950 rounded-xl px-3 py-2 outline-none focus:border-purple-600"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddExpenseModal(false)}
-                  className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full shadow-md"
                 >
                   Save Expense
                 </button>
@@ -2064,9 +2065,9 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD USER */}
       {showAddUserModal && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Add New User</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-serif font-bold text-foreground">Add New User</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
               const target = e.target as HTMLFormElement;
@@ -2084,28 +2085,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               setShowAddUserModal(false);
             }} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Full Name</label>
-                <input name="name" required className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+                <label className="block text-xs font-semibold text-foreground mb-1">Full Name</label>
+                <input name="name" required className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Email</label>
-                <input name="email" type="email" required className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+                <label className="block text-xs font-semibold text-foreground mb-1">Email</label>
+                <input name="email" type="email" required className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Password</label>
-                <input name="password" type="password" required className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+                <label className="block text-xs font-semibold text-foreground mb-1">Password</label>
+                <input name="password" type="password" required className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
-                <select name="role" className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]">
+                <label className="block text-xs font-semibold text-foreground mb-1">Role</label>
+                <select name="role" className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]">
                   <option value="tenant_manager">Tenant Manager</option>
                   <option value="receptionist">Receptionist</option>
                   <option value="staff">Staff</option>
                 </select>
               </div>
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
-                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full shadow-md">Create User</button>
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
+                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full shadow-md">Create User</button>
               </div>
             </form>
           </div>
@@ -2114,9 +2115,9 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: EDIT ENTITY */}
       {editingEntity && (
-        <div className="fixed inset-0 z-50 bg-[#2d2d2a]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e5e5d1] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-serif font-bold text-[#2d2d2a]">Edit {editingEntity.type.charAt(0).toUpperCase() + editingEntity.type.slice(1)}</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-serif font-bold text-foreground">Edit {editingEntity.type.charAt(0).toUpperCase() + editingEntity.type.slice(1)}</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
               const target = e.target as HTMLFormElement;
@@ -2136,49 +2137,49 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               setEditingEntity(null);
             }} className="space-y-3 font-sans">
               {editingEntity.type === 'branch' && (<>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">City</label><input name="city" defaultValue={editingEntity.data.city} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Address</label><input name="address" defaultValue={editingEntity.data.address} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">City</label><input name="city" defaultValue={editingEntity.data.city} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Address</label><input name="address" defaultValue={editingEntity.data.address} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
               </>)}
               {editingEntity.type === 'staff' && (<>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
-                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]">
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Role</label>
+                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]">
                     <option value="barber">Barber</option><option value="hairstylist">Hairstylist</option><option value="masseuse">Masseuse</option><option value="esthetician">Esthetician</option><option value="receptionist">Receptionist</option><option value="manager">Manager</option>
                   </select>
                 </div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Commission %</label><input name="commission" type="number" defaultValue={editingEntity.data.defaultCommissionPercentage} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Commission %</label><input name="commission" type="number" defaultValue={editingEntity.data.defaultCommissionPercentage} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
               </>)}
               {editingEntity.type === 'service' && (<>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Category</label><input name="category" defaultValue={editingEntity.data.category} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Price (ETB)</label><input name="price" type="number" defaultValue={editingEntity.data.priceEtb} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Duration (mins)</label><input name="duration" type="number" defaultValue={editingEntity.data.durationMinutes} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Category</label><input name="category" defaultValue={editingEntity.data.category} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Price (ETB)</label><input name="price" type="number" defaultValue={editingEntity.data.priceEtb} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Duration (mins)</label><input name="duration" type="number" defaultValue={editingEntity.data.durationMinutes} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
               </>)}
               {editingEntity.type === 'inventory' && (<>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">SKU</label><input name="sku" defaultValue={editingEntity.data.sku} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Unit</label><input name="unit" defaultValue={editingEntity.data.unit} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Stock</label><input name="stock" type="number" defaultValue={editingEntity.data.currentStock} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Reorder Level</label><input name="reorder" type="number" defaultValue={editingEntity.data.reorderLevel} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Cost per unit (ETB)</label><input name="cost" type="number" defaultValue={editingEntity.data.unitCostEtb} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">SKU</label><input name="sku" defaultValue={editingEntity.data.sku} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Unit</label><input name="unit" defaultValue={editingEntity.data.unit} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Stock</label><input name="stock" type="number" defaultValue={editingEntity.data.currentStock} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Reorder Level</label><input name="reorder" type="number" defaultValue={editingEntity.data.reorderLevel} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Cost per unit (ETB)</label><input name="cost" type="number" defaultValue={editingEntity.data.unitCostEtb} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
               </>)}
               {editingEntity.type === 'user' && (<>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Password (leave blank to keep)</label><input name="password" type="password" className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" /></div>
-                <div><label className="block text-xs font-semibold text-[#2d2d2a] mb-1">Role</label>
-                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-[#f5f5f0] border border-[#e5e5d1] rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5A5A40]">
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Password (leave blank to keep)</label><input name="password" type="password" className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-xs font-semibold text-foreground mb-1">Role</label>
+                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]">
                     <option value="tenant_manager">Tenant Manager</option><option value="receptionist">Receptionist</option><option value="staff">Staff</option>
                   </select>
                 </div>
               </>)}
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e5e5d1]">
-                <button type="button" onClick={() => setEditingEntity(null)} className="px-4 py-2 bg-[#f5f5f0] text-[#737366] font-semibold rounded-full">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-[#5A5A40] hover:bg-[#4a4a35] text-white font-bold rounded-full shadow-md">Save Changes</button>
+              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
+                <button type="button" onClick={() => setEditingEntity(null)} className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full shadow-md">Save Changes</button>
               </div>
             </form>
           </div>

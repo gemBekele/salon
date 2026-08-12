@@ -33,8 +33,12 @@ export const errorHandler: ErrorRequestHandler = (
   res: Response,
   _next: NextFunction
 ) => {
-  const status = Number(err?.status) || 500;
   if (res.headersSent) return;
+  // Unique constraint violations (e.g. duplicate customer phone, duplicate email).
+  if (err?.code === 'ER_DUP_ENTRY' || err?.code === '23505') {
+    return res.status(409).json({ error: 'A record with the same unique value already exists' });
+  }
+  const status = Number(err?.status) || 500;
   if (status >= 500) {
     logger.error('api-error', { message: err?.message, stack: err?.stack });
     res.status(status).json({ error: 'Internal server error' });
@@ -52,7 +56,13 @@ export const corsMiddleware: RequestHandler = cors({
   origin(origin, callback) {
     const allowed = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (!origin) return callback(null, true);
-    if (allowed.length === 0 || allowed.includes(origin)) {
+    if (allowed.length === 0) {
+      if (process.env.NODE_ENV === 'production') {
+        return callback(new Error('CORS_ORIGINS must be configured in production'));
+      }
+      return callback(null, true);
+    }
+    if (allowed.includes(origin)) {
       return callback(null, true);
     }
     return callback(new Error(`Origin ${origin} not allowed by CORS`));
@@ -149,9 +159,22 @@ export const authenticate: RequestHandler = (req, res, next) => {
 export function requireRoles(...roles: string[]): RequestHandler {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'You do not have permission to perform this action' });
+    const userRole = req.user.role || 'staff';
+    if (roles.includes(userRole)) {
+      return next();
     }
-    return next();
+    return res.status(403).json({ error: 'You do not have permission to perform this action' });
   };
 }
+
+/** Role guards used by the write routers — manager/admin-only vs POS staff. */
+export const mgmtOnly: RequestHandler[] = [
+  authenticate,
+  requireRoles('super_admin', 'tenant_manager'),
+  rateLimit(120, 60_000),
+];
+export const posOnly: RequestHandler[] = [
+  authenticate,
+  requireRoles('super_admin', 'tenant_manager', 'receptionist'),
+  rateLimit(180, 60_000),
+];

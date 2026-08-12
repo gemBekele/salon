@@ -34,12 +34,12 @@ export function ToastContainer(_props: ToastContainerProps) {
   if (toasts.length === 0) return null;
 
   const icons = {
-    success: <CheckCircle className="w-4 h-4 text-emerald-500" />,
+    success: <CheckCircle className="w-4 h-4 text-ink-500" />,
     error: <AlertTriangle className="w-4 h-4 text-red-500" />,
     info: <Info className="w-4 h-4 text-blue-500" />,
   };
   const bg = {
-    success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
+    success: 'bg-ink-50 border-ink-200 text-ink-900',
     error: 'bg-red-50 border-red-200 text-red-900',
     info: 'bg-blue-50 border-blue-200 text-blue-900',
   };

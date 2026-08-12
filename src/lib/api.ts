@@ -16,6 +16,36 @@ export function notifySessionExpired() {
   window.dispatchEvent(new Event('auth:expired'));
 }
 
+/** Typed error carrying the HTTP status and the API's error message. */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** Extract the human-readable error message from a non-2xx response. */
+export async function readApiError(res: Response): Promise<string> {
+  let message = `Request failed (${res.status})`;
+  try {
+    const data = await res.json();
+    if (data?.error) message = data.error;
+  } catch {
+    /* body not JSON; fall back to the generic message */
+  }
+  return message;
+}
+
+/**
+ * Resolve a fetch response into a `Response`, throwing an `ApiError` for any
+ * non-2xx status so callers can `await` and catch concrete messages.
+ */
+export async function apiOk(res: Response): Promise<Response> {
+  if (res.ok) return res;
+  throw new ApiError(res.status, await readApiError(res));
+}
+
 /**
  * Fetch wrapper that attaches the JWT bearer token and, on a 401 response,
  * clears the session and alerts the UI to show the login screen.
@@ -31,9 +61,6 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   if (res.status === 401) {
     clearToken();
     notifySessionExpired();
-  }
-  if (res.status === 403) {
-    console.error('[API] Access denied (403):', input);
   }
   return res;
 }

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import type { Pool } from 'mysql2/promise';
+import type { DbPool } from './db';
 import { authenticate } from './middleware';
 
 /**
@@ -45,7 +45,7 @@ function csvResponse(res: Response, filename: string, rows: any[], header: strin
     .send([header.join(','), ...lines].join('\n'));
 }
 
-export function createReportsRouter(pool: Pool): Router {
+export function createReportsRouter(pool: DbPool): Router {
   const router = Router();
   router.use(authenticate);
 
