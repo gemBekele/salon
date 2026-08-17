@@ -1,25 +1,22 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   UserCheck,
   DollarSign,
   Scissors,
   CheckCircle,
   Send,
-  Calendar,
   Clock,
   Award,
   Wallet,
-  Sparkles,
-  Plus,
   Trash2,
   Receipt,
   UserPlus,
   PlayCircle,
+  Users,
   Search,
   Check,
-  ChevronRight,
-  TrendingUp,
-  Lock,
+  LogOut,
+  Star,
 } from 'lucide-react';
 import {
   Staff,
@@ -35,14 +32,39 @@ import {
   PaymentMethod,
 } from '../types';
 import { StaffPerformanceDashboard } from './StaffPerformanceDashboard';
-import { CustomerSearchSelect } from './CustomerSearchSelect';
 import { usePolling } from '../lib/usePolling';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import { PinPad } from './PinPad';
+import { apiFetch, readApiError } from '../lib/api';
+import { getStaffQueue } from '../lib/queue';
+import { cn } from '../lib/utils';
 
 interface StaffPortalViewProps {
   company?: Company | null;
   branch?: Branch | null;
   staffList: Staff[];
+  loggedInStaffId?: string;
   services?: Service[];
   customers?: Customer[];
   inventoryItems?: InventoryItem[];
@@ -55,13 +77,16 @@ interface StaffPortalViewProps {
   onAddCustomer?: (customer: Customer) => Promise<void> | void;
   onUpdateSessionServices?: (sessionId: string, service: SessionServiceItem) => Promise<void> | void;
   onCheckoutSession?: (sessionId: string, paymentMethod: PaymentMethod, reference: string) => Promise<void> | void;
+  onUpdateServiceStatus?: (serviceId: string, status: 'in_progress' | 'completed') => Promise<void> | void;
   onRefresh?: () => void | Promise<void>;
+  onLogout?: () => void;
 }
 
 export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   company,
   branch,
   staffList,
+  loggedInStaffId,
   services = [],
   customers = [],
   inventoryItems = [],
@@ -74,10 +99,14 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   onAddCustomer,
   onUpdateSessionServices,
   onCheckoutSession,
+  onUpdateServiceStatus,
   onRefresh,
+  onLogout,
 }) => {
   // Staff Selection
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(
+    loggedInStaffId && staffList.some((s) => s.id === loggedInStaffId) ? loggedInStaffId : staffList[0]?.id || ''
+  );
   const activeStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
 
   // Active Tab: Workstation vs Ledger
@@ -94,13 +123,22 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     return onRefresh?.();
   }, 15_000);
 
-  // New Client Service Builder State (for Staff Workstation)
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(customers[0] || null);
+  // New Client Service Builder State
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [custName, setCustName] = useState('');
   const [custPhone, setCustPhone] = useState('');
   const [selectedServices, setSelectedServices] = useState<Service[]>([]);
   const [sessionNotes, setSessionNotes] = useState('');
+  const [serviceCategory, setServiceCategory] = useState<string>('all');
+  const [serviceQuery, setServiceQuery] = useState('');
+
+  // Switch Employee Dialog
+  const [showSwitchDialog, setShowSwitchDialog] = useState(false);
+  const [switchStep, setSwitchStep] = useState<'pick' | 'pin'>('pick');
+  const [switchTarget, setSwitchTarget] = useState<Staff | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
 
   // Add Extra Service Modal to existing session
   const [extraServiceModalSession, setExtraServiceModalSession] = useState<VisitSession | null>(null);
@@ -111,30 +149,41 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
 
   // Filtered Services for Active Staff
   const staffBranchId = activeStaff.branchId || branch?.id;
-  const availableServices = services.filter((s) =>
-    activeStaff.businessUnitId ? s.businessUnitId === activeStaff.businessUnitId : true
+  const availableServices = useMemo(
+    () =>
+      services.filter((s) =>
+        activeStaff.businessUnitId ? s.businessUnitId === activeStaff.businessUnitId : true
+      ),
+    [services, activeStaff.businessUnitId]
   );
 
-  // Filter Sessions assigned to this staff member or staff branch
-  const staffSessions = visitSessions.filter((session) => {
-    // Session contains a service assigned to active staff
-    const assignedToStaff = session.services.some((svc) => svc.staffId === activeStaff.id);
-    const matchesBranch = staffBranchId ? session.branchId === staffBranchId : true;
-    return assignedToStaff || (session.status !== 'completed' && matchesBranch);
-  });
+  const categories = useMemo(
+    () => [...new Set(availableServices.map((s) => s.category))].sort(),
+    [availableServices]
+  );
 
-  const queuedSessions = staffSessions.filter((s) => s.status === 'queued');
-  const inProgressSessions = staffSessions.filter((s) => s.status === 'in_progress');
-  const completedSessions = staffSessions.filter((s) => s.status === 'completed');
+  const visibleServices = useMemo(
+    () =>
+      availableServices.filter((s) => {
+        if (serviceCategory !== 'all' && s.category !== serviceCategory) return false;
+        const q = serviceQuery.trim().toLowerCase();
+        if (q && !s.name.toLowerCase().includes(q)) return false;
+        return true;
+      }),
+    [availableServices, serviceCategory, serviceQuery]
+  );
+
+  // Per-service queue for the active staff member
+  const staffQueue = activeStaff ? getStaffQueue(activeStaff.id, visitSessions, customers) : [];
+  const queuedSessions = staffQueue.filter((q) => q.available);
+  const inProgressSessions = staffQueue.filter((q) => q.service.status === 'in_progress');
 
   // Ledger Calculations
   const staffCommissions = commissionLogs.filter((c) => c.staffId === activeStaff.id);
   const totalEarnedCommissions = staffCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
-
   const unpaidCommissions = staffCommissions
     .filter((c) => c.payoutStatus === 'unpaid')
     .reduce((acc, c) => acc + c.commissionAmountEtb, 0);
-
   const paidCommissions = staffCommissions
     .filter((c) => c.payoutStatus === 'paid')
     .reduce((acc, c) => acc + c.commissionAmountEtb, 0);
@@ -144,13 +193,11 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     setTimeout(() => setPayoutRequested(false), 4000);
   };
 
-  // Add Service to Builder
-  const handleAddServiceToBuilder = (srv: Service) => {
-    setSelectedServices((prev) => [...prev, srv]);
-  };
-
-  const handleRemoveServiceFromBuilder = (index: number) => {
-    setSelectedServices((prev) => prev.filter((_, i) => i !== index));
+  // Service toggle in builder
+  const toggleServiceInBuilder = (srv: Service) => {
+    setSelectedServices((prev) =>
+      prev.some((s) => s.id === srv.id) ? prev.filter((s) => s.id !== srv.id) : [...prev, srv]
+    );
   };
 
   // Create Client Session from Staff Workstation
@@ -200,6 +247,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     onCreateVisitSession(newSession);
     setSelectedServices([]);
     setSessionNotes('');
+    setSelectedCustomer(null);
   };
 
   // Register New Customer from Staff Station
@@ -254,413 +302,462 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     setCheckoutSession(null);
   };
 
+  // Switch Active Employee (requires the target employee's PIN)
+  const openSwitchDialog = () => {
+    setSwitchStep('pick');
+    setSwitchTarget(null);
+    setSwitchError(null);
+    setShowSwitchDialog(true);
+  };
+
+  const handleSwitchPin = async (pin: string) => {
+    if (!switchTarget) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      const res = await fetch('/api/staff/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: switchTarget.id, pin }),
+      });
+      if (!res.ok) {
+        setSwitchError(await readApiError(res));
+        return;
+      }
+      setSelectedStaffId(switchTarget.id);
+      setShowSwitchDialog(false);
+    } catch {
+      setSwitchError('Unable to reach the server. Please try again.');
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const cartTotal = selectedServices.reduce((acc, s) => acc + s.priceEtb, 0);
+
+  if (!activeStaff) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center text-muted-foreground">
+          No staff members found. Ask the manager to add staff first.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <div className="space-y-6 font-sans">
-      {/* Top Banner & Active Staff Persona Header */}
-      <div className="bg-primary text-primary-foreground border border-primary/80 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center space-x-2">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-muted/15 text-primary-foreground border border-primary-foreground/30 uppercase tracking-widest">
-              Staff Member Terminal
-            </span>
-            <span className="text-primary-foreground/80 text-xs font-semibold">{activeStaff.name} ({activeStaff.role})</span>
-          </div>
-          <h2 className="text-2xl font-serif font-light mt-1 text-primary-foreground">Client Workstation & Commission Tracker</h2>
-          <p className="text-primary-foreground/80 text-xs mt-0.5 max-w-xl">
-            Add client services, start sessions, track active station queue, calculate service commissions, and submit payout requests.
-          </p>
-        </div>
-
-        {/* Staff Persona Switcher */}
-        <div className="bg-muted p-3 rounded-2xl border border-border text-xs text-foreground">
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1.5">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 bg-card border border-border rounded-md p-4">
+        <span className="text-lg font-semibold tracking-tight text-foreground">{activeStaff.name}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold">Live</span>
-            <span className="font-mono">{lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+            Queue: <span className="font-semibold text-foreground">{queuedSessions.length + inProgressSessions.length}</span>
           </div>
-          <label className="block text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Switch Active Employee:</label>
-          <select
-            value={selectedStaffId}
-            onChange={(e) => setSelectedStaffId(e.target.value)}
-            className="bg-card text-foreground font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer text-xs border border-border"
-          >
-            {staffList.map((st) => (
-              <option key={st.id} value={st.id}>
-                {st.name} ({st.role}) — {st.defaultCommissionPercentage}% Rate
-              </option>
-            ))}
-          </select>
+          <Button variant="outline" size="sm" onClick={openSwitchDialog}>
+            <UserCheck className="size-4" />
+            Switch Employee
+          </Button>
+          {onLogout && (
+            <Button variant="ghost" size="sm" onClick={onLogout}>
+              <LogOut className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Main Tab Navigation */}
-      <div className="flex items-center space-x-2 bg-card p-2 rounded-2xl border border-border text-xs font-bold shadow-sm">
-        <button
-          onClick={() => setActiveTab('workstation')}
-          className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl transition cursor-pointer ${
-            activeTab === 'workstation'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-          }`}
-        >
-          <Scissors className="w-4 h-4" />
-          <span>Client Workstation & Active Queue ({inProgressSessions.length + queuedSessions.length})</span>
-        </button>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'workstation' | 'ledger')}>
+        <TabsList variant="line" className="h-9 w-full">
+          <TabsTrigger value="workstation" className="gap-1.5">
+            <Scissors className="size-4" />
+            Workstation ({queuedSessions.length + inProgressSessions.length})
+          </TabsTrigger>
+          <TabsTrigger value="ledger" className="gap-1.5">
+            <DollarSign className="size-4" />
+            My Earnings ({totalEarnedCommissions.toLocaleString()} ETB)
+          </TabsTrigger>
+        </TabsList>
 
-        <button
-          onClick={() => setActiveTab('ledger')}
-          className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl transition cursor-pointer ${
-            activeTab === 'ledger'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Daily Earnings & Commission Ledger ({totalEarnedCommissions} ETB)</span>
-        </button>
-      </div>
-
-      {/* ========================================================= */}
-      {/* TAB 1: CLIENT WORKSTATION (Add Services & Active Station Queue) */}
-      {/* ========================================================= */}
-      {activeTab === 'workstation' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT: Add Client Service Form (7 Cols) */}
-          <div className="lg:col-span-7 space-y-5">
-            {/* Customer Selection Card */}
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <CustomerSearchSelect
-                customers={customers}
-                selectedCustomer={selectedCustomer}
-                onSelectCustomer={setSelectedCustomer}
-                onOpenNewCustomerModal={() => setShowNewCustomerModal(true)}
-                label="Select Client for Service"
-              />
-            </div>
-
-            {/* Service Touch Tiles */}
-            <div className="bg-card border border-border rounded-3xl p-5 space-y-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center space-x-1.5">
-                  <Scissors className="w-4 h-4 text-foreground" />
-                  <span>Add Services to Client Session</span>
-                </h3>
-                <span className="text-[10px] text-muted-foreground">Commission Rate: {activeStaff.defaultCommissionPercentage}%</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {availableServices.map((srv) => (
-                  <button
-                    key={srv.id}
-                    onClick={() => handleAddServiceToBuilder(srv)}
-                    className="bg-muted/80 hover:bg-muted border border-border hover:border-primary rounded-2xl p-3.5 text-left transition-all hover:scale-[1.01] cursor-pointer flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="font-semibold text-foreground text-xs line-clamp-1">{srv.name}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5 italic">{srv.category} • {srv.durationMinutes}m</div>
-                    </div>
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/60">
-                      <span className="text-foreground font-serif font-bold text-xs">
-                        {srv.priceEtb.toLocaleString()} ETB
-                      </span>
-                      <span className="text-foreground font-bold text-[10px]">
-                        +{Math.round((srv.priceEtb * activeStaff.defaultCommissionPercentage) / 100)} ETB
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Selected Client Services Cart */}
-            <div className="bg-card border border-border rounded-3xl p-5 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center space-x-1.5">
-                  <Receipt className="w-4 h-4 text-foreground" />
-                  <span>Selected Client Services ({selectedServices.length})</span>
-                </h3>
-                <div className="text-xs text-muted-foreground">
-                  Assigned Staff: <strong className="text-foreground">{activeStaff.name}</strong>
-                </div>
-              </div>
-
-              {selectedServices.length === 0 ? (
-                <div className="py-6 text-center text-muted-foreground text-xs italic">
-                  Click any service tile above to assign services for {selectedCustomer?.name || 'this client'}.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedServices.map((srv, idx) => (
-                    <div key={idx} className="bg-muted border border-border p-3.5 rounded-2xl flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-bold text-foreground">{srv.name}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          Price: {srv.priceEtb} ETB • Est. Commission: <strong className="text-foreground">{Math.round((srv.priceEtb * activeStaff.defaultCommissionPercentage) / 100)} ETB</strong>
-                        </div>
+        {/* ============ TAB 1: WORKSTATION ============ */}
+        <TabsContent value="workstation" className="mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* LEFT */}
+            <div className="lg:col-span-7 space-y-5">
+              {/* Customer Selection */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2 justify-between w-full pr-8">
+                    <span className="flex items-center gap-2">
+                      <Users className="size-4 text-muted-foreground" />
+                      Select Client
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={() => setShowNewCustomerModal(true)}>
+                      <UserPlus className="size-3.5" />
+                      New Client
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {selectedCustomer ? (
+                    <div className="flex items-center gap-4 rounded-md border border-primary bg-primary/5 p-4">
+                      <div className="w-12 h-12 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg">
+                        {selectedCustomer.name.charAt(0)}
                       </div>
-
-                      <button
-                        onClick={() => handleRemoveServiceFromBuilder(idx)}
-                        className="text-muted-foreground hover:text-rose-600 p-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-lg font-semibold text-foreground truncate">{selectedCustomer.name}</p>
+                        <p className="text-sm text-muted-foreground">{selectedCustomer.phone}</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedCustomer(null)}>
+                        Change
+                      </Button>
                     </div>
-                  ))}
+                  ) : (
+                    <Select
+                      onValueChange={(id) => {
+                        const c = customers.find((x) => x.id === id);
+                        if (c) setSelectedCustomer(c);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a client..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72 min-w-[320px]">
+                        {customers.map((c) => (
+                          <SelectItem key={c.id} value={c.id} className="py-1.5">
+                            <div className="flex flex-col text-left">
+                              <span className="font-semibold">{c.name}</span>
+                              <span className="text-muted-foreground text-sm">{c.phone}{c.isVip ? ' ⭐' : ''}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </CardContent>
+              </Card>
 
-                  <div className="pt-2">
-                    <input
-                      type="text"
-                      placeholder="Optional notes (e.g. client prefers extra wash or low heat blowdry)..."
-                      value={sessionNotes}
-                      onChange={(e) => setSessionNotes(e.target.value)}
-                      className="w-full bg-muted border border-border text-foreground rounded-xl px-3 py-2 text-xs outline-none focus:border-primary"
+              {/* Service Selection */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2 justify-between w-full pr-8">
+                    <span className="flex items-center gap-2">
+                      <Scissors className="size-4 text-muted-foreground" />
+                      Add Services
+                    </span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {activeStaff.defaultCommissionPercentage}% commission
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="relative">
+                    <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      value={serviceQuery}
+                      onChange={(e) => setServiceQuery(e.target.value)}
+                      placeholder="Search services..."
+                      className="pl-9"
                     />
                   </div>
 
-                  <div className="border-t border-border pt-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Service Cost</div>
-                      <div className="text-2xl font-serif font-bold text-foreground">
-                        {selectedServices.reduce((acc, s) => acc + s.priceEtb, 0).toLocaleString()} ETB
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 w-full sm:w-auto">
-                      <button
-                        onClick={() => handleCreateSession(false)}
-                        className="flex-1 sm:flex-initial px-4 py-2.5 bg-muted hover:bg-muted/80 border border-border text-foreground font-bold rounded-full text-xs cursor-pointer"
+                  <div className="flex gap-1.5 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={serviceCategory === 'all' ? 'default' : 'outline'}
+                      onClick={() => setServiceCategory('all')}
+                    >
+                      All
+                    </Button>
+                    {categories.map((cat) => (
+                      <Button
+                        key={cat}
+                        type="button"
+                        size="sm"
+                        variant={serviceCategory === cat ? 'default' : 'outline'}
+                        onClick={() => setServiceCategory(cat)}
                       >
-                        Add to Queue
-                      </button>
-                      <button
-                        onClick={() => handleCreateSession(true)}
-                        className="flex-1 sm:flex-initial px-5 py-2.5 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs cursor-pointer shadow-md flex items-center justify-center space-x-1.5"
-                      >
-                        <PlayCircle className="w-4 h-4" />
-                        <span>Start Service Now</span>
-                      </button>
-                    </div>
+                        {cat}
+                      </Button>
+                    ))}
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* RIGHT: Active Station Sessions & Workstation Queue (5 Cols) */}
-          <div className="lg:col-span-5 space-y-5">
-            <div className="bg-card border border-border rounded-3xl p-5 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center space-x-1.5">
-                  <Clock className="w-4 h-4 text-foreground" />
-                  <span>My Station Active Queue & Client List</span>
-                </h3>
-                <span className="text-[10px] text-muted-foreground font-semibold">{staffSessions.length} Visits</span>
-              </div>
-
-              {/* Station Queue List */}
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {staffSessions.length === 0 ? (
-                  <div className="py-12 text-center text-muted-foreground text-xs italic">
-                    No active sessions assigned to {activeStaff.name} right now. Use the panel on the left to add client services!
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[380px] overflow-y-auto pr-1">
+                    {visibleServices.map((srv) => {
+                      const selected = selectedServices.some((s) => s.id === srv.id);
+                      return (
+                        <button
+                          key={srv.id}
+                          type="button"
+                          onClick={() => toggleServiceInBuilder(srv)}
+                          className={cn(
+                            'relative rounded-md border p-3 text-left transition-colors cursor-pointer',
+                            selected
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
+                              : 'border-border bg-background hover:border-primary/50 hover:bg-muted/40'
+                          )}
+                        >
+                          {selected && (
+                            <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                              <Check className="size-3.5" />
+                            </span>
+                          )}
+                          <p className="font-semibold text-foreground text-sm line-clamp-1 pr-5">{srv.name}</p>
+                          <p className="text-sm text-muted-foreground mt-0.5">{srv.category} • {srv.durationMinutes}m</p>
+                          <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/60">
+                            <span className="font-semibold text-foreground">{srv.priceEtb.toLocaleString()} ETB</span>
+                            <span className="text-sm font-semibold text-primary">
+                              +{Math.round((srv.priceEtb * activeStaff.defaultCommissionPercentage) / 100)} ETB
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                ) : (
-                  staffSessions.map((session) => {
-                    const isMySession = session.services.some((s) => s.staffId === activeStaff.id);
+                </CardContent>
+              </Card>
 
-                    return (
-                      <div
-                        key={session.id}
-                        className={`p-4 rounded-2xl border transition-all text-xs space-y-3 ${
-                          session.status === 'completed'
-                            ? 'bg-muted/50 border-border'
-                            : session.status === 'in_progress'
-                            ? 'bg-muted/50 border-border'
-                            : 'bg-card border-border'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-muted border border-border rounded-xl flex items-center justify-center font-serif text-foreground font-bold text-sm">
-                              {session.queueNumber}
-                            </div>
+              {/* Cart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2 justify-between w-full pr-8">
+                    <span className="flex items-center gap-2">
+                      <Receipt className="size-4 text-muted-foreground" />
+                      Selected Services ({selectedServices.length})
+                    </span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      Staff: {activeStaff.name}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {selectedServices.length === 0 ? (
+                    <p className="py-6 text-center text-muted-foreground text-sm">
+                      Tap any service above to add it for{' '}
+                      {selectedCustomer ? selectedCustomer.name : 'your client'}.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        {selectedServices.map((srv, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-3"
+                          >
                             <div>
-                              <div className="font-bold text-foreground text-sm">{session.customerName}</div>
-                              <div className="text-[10px] text-muted-foreground">{session.customerPhone}</div>
+                              <p className="font-semibold text-foreground text-sm">{srv.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {srv.priceEtb.toLocaleString()} ETB • Est. commission{' '}
+                                <strong className="text-foreground">
+                                  {Math.round((srv.priceEtb * activeStaff.defaultCommissionPercentage) / 100)} ETB
+                                </strong>
+                              </p>
                             </div>
-                          </div>
-
-                          <Badge variant={session.status === 'in_progress' ? 'default' : 'secondary'} className="uppercase">
-                            {session.status.replace('_', ' ')}
-                          </Badge>
-                        </div>
-
-                        {/* Services List */}
-                        <div className="space-y-1.5 bg-card p-3 rounded-xl border border-border">
-                          <div className="text-[10px] font-bold text-muted-foreground uppercase">Client Services:</div>
-                          {session.services.map((srv, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-foreground">
-                              <div>
-                                <span className="font-semibold">{srv.serviceName}</span>
-                                <span className="text-[10px] text-muted-foreground ml-1.5">({srv.staffName})</span>
-                              </div>
-                              <span className="font-bold text-foreground">{srv.priceEtb} ETB</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Actions Bar */}
-                        <div className="pt-2 border-t border-border space-y-2">
-                          <div className="flex items-center justify-between">
-                            <button
-                              onClick={() => setExtraServiceModalSession(session)}
-                              className="text-[11px] text-foreground hover:text-foreground font-bold flex items-center space-x-1 cursor-pointer"
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => toggleServiceInBuilder(srv)}
+                              aria-label={`Remove ${srv.name}`}
                             >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>+ Add Service to Client</span>
-                            </button>
-
-                            <div className="font-serif font-bold text-foreground text-sm">
-                              Total: {session.netTotalEtb} ETB
-                            </div>
+                              <Trash2 className="size-4" />
+                            </Button>
                           </div>
+                        ))}
+                      </div>
 
-                          <div className="flex items-center space-x-2">
-                            {(() => {
-                              // Check if currently selected active staff is assigned to this session
-                              const assignedStaffIds = session.services.map((s) => s.staffId).filter(Boolean);
-                              const assignedStaffNames = session.services.map((s) => s.staffName).filter(Boolean);
-                              const isAssignedToActiveStaff =
-                                session.services.length === 0 ||
-                                assignedStaffIds.includes(activeStaff.id) ||
-                                assignedStaffNames.includes(activeStaff.name);
+                      <Input
+                        value={sessionNotes}
+                        onChange={(e) => setSessionNotes(e.target.value)}
+                        placeholder="Optional notes (e.g. prefers extra wash or low heat blowdry)..."
+                      />
 
-                              if (!isAssignedToActiveStaff) {
-                                return (
-                                  <div className="w-full py-2 bg-slate-100 border border-slate-300 text-slate-500 font-medium rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-not-allowed opacity-90 shadow-inner">
-                                    <Lock className="w-3.5 h-3.5 text-slate-500" />
-                                    <span>Assigned to {assignedStaffNames[0] || 'another staff'} (Locked)</span>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <>
-                                  {session.status === 'queued' && onUpdateSessionStatus && (
-                                    <button
-                                      onClick={() => onUpdateSessionStatus(session.id, 'in_progress')}
-                                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-primary-foreground font-bold rounded-xl text-xs cursor-pointer shadow-sm flex items-center justify-center space-x-1"
-                                    >
-                                      <PlayCircle className="w-4 h-4" />
-                                      <span>Start Service Session</span>
-                                    </button>
-                                  )}
-
-                                  {session.status === 'in_progress' && onUpdateSessionStatus && (
-                                    <button
-                                      onClick={() => onUpdateSessionStatus(session.id, 'completed')}
-                                      className="w-full py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-xl text-xs cursor-pointer shadow-sm flex items-center justify-center space-x-1"
-                                    >
-                                      <CheckCircle className="w-4 h-4" />
-                                      <span>Mark Completed (Earn Commission)</span>
-                                    </button>
-                                  )}
-
-                                  {session.status === 'completed' && !session.isPaid && onCheckoutSession && (
-                                    <button
-                                      onClick={() => setCheckoutSession(session)}
-                                      className="w-full py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-xl text-xs cursor-pointer shadow-sm flex items-center justify-center space-x-1"
-                                    >
-                                      <DollarSign className="w-4 h-4" />
-                                      <span>Collect Payment</span>
-                                    </button>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </div>
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-3">
+                        <div>
+                          <p className="kpi-label">Total</p>
+                          <p className="kpi-value">{cartTotal.toLocaleString()} ETB</p>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <Button
+                            variant="outline"
+                            className="flex-1 sm:flex-initial"
+                            disabled={!selectedCustomer}
+                            onClick={() => handleCreateSession(false)}
+                          >
+                            Add to Queue
+                          </Button>
+                          <Button
+                            className="flex-1 sm:flex-initial gap-1.5"
+                            disabled={!selectedCustomer}
+                            onClick={() => handleCreateSession(true)}
+                          >
+                            <PlayCircle className="size-4" />
+                            Start Now
+                          </Button>
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* RIGHT: Queue */}
+            <div className="lg:col-span-5">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2 justify-between w-full pr-8">
+                    <span className="flex items-center gap-2">
+                      <Clock className="size-4 text-muted-foreground" />
+                      My Queue
+                    </span>
+                    <Badge variant="secondary" className="text-sm">
+                      {staffQueue.length} assigned
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 max-h-[720px] overflow-y-auto pr-1">
+                  {staffQueue.length === 0 ? (
+                    <p className="py-10 text-center text-muted-foreground text-sm">
+                      No services assigned to you yet.
+                    </p>
+                  ) : (
+                    staffQueue.map((item) => {
+                      const inProgress = item.service.status === 'in_progress';
+                      return (
+                        <div
+                          key={item.service.id}
+                          className={`rounded-md border p-2.5 space-y-2 ${
+                            inProgress ? 'border-amber-300 bg-amber-500/5' :
+                            item.available ? 'border-emerald-300 bg-emerald-500/5' : 'border-border opacity-70'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-mono text-muted-foreground w-5">{item.position}</span>
+                              {item.isVip && <Star className="size-3.5 text-amber-500 fill-amber-500 shrink-0" />}
+                              <div className="min-w-0">
+                                <p className="font-semibold text-foreground text-sm truncate">{item.session.customerName}</p>
+                                <p className="text-sm text-muted-foreground truncate">
+                                  {item.service.serviceName}
+                                </p>
+                              </div>
+                            </div>
+                            {inProgress ? (
+                              <Badge variant="warning" className="text-[10px] uppercase">In Progress</Badge>
+                            ) : item.available ? (
+                              <Badge variant="success" className="text-[10px] uppercase">Ready</Badge>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">busy elsewhere</span>
+                            )}
+                          </div>
+
+                          {onUpdateServiceStatus && (
+                            <div className="flex items-center gap-2">
+                              {item.available && (
+                                <Button
+                                  size="sm"
+                                  className="flex-1 gap-1.5"
+                                  onClick={() => onUpdateServiceStatus(item.service.id, 'in_progress')}
+                                >
+                                  <PlayCircle className="size-4" />
+                                  Start
+                                </Button>
+                              )}
+                              {inProgress && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex-1 gap-1.5"
+                                  onClick={() => onUpdateServiceStatus(item.service.id, 'completed')}
+                                >
+                                  <CheckCircle className="size-4" />
+                                  Complete
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      {/* ========================================================= */}
-      {/* TAB 2: DAILY EARNINGS & COMMISSION LEDGER */}
-      {/* ========================================================= */}
-      {activeTab === 'ledger' && (
-        <div className="space-y-6">
-          {/* Metrics Row */}
+        {/* ============ TAB 2: EARNINGS ============ */}
+        <TabsContent value="ledger" className="mt-4 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-                <span>Total Earned Commissions</span>
-                <DollarSign className="w-4 h-4 text-foreground" />
-              </div>
-              <div className="text-2xl font-serif font-bold text-foreground mt-2">
-                {totalEarnedCommissions.toLocaleString()} <span className="text-xs text-foreground font-sans font-normal">ETB</span>
-              </div>
-              <div className="text-xs text-foreground mt-2 font-medium">Auto-calculated from completed services</div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="kpi-label mb-1.5 flex items-center justify-between">
+                  <span>Total Earned Commissions</span>
+                  <Award className="size-3.5 text-muted-foreground" />
+                </div>
+                <p className="kpi-value">
+                  {totalEarnedCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span>
+                </p>
+                <p className="text-sm text-muted-foreground mt-1.5">From completed services</p>
+              </CardContent>
+            </Card>
 
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-                <span>Unpaid Payout Balance</span>
-                <Wallet className="w-4 h-4 text-foreground" />
-              </div>
-              <div className="text-2xl font-serif font-bold text-foreground mt-2">
-                {unpaidCommissions.toLocaleString()} <span className="text-xs text-muted-foreground font-sans font-normal">ETB</span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-2">Ready for withdrawal request</div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="kpi-label mb-1.5 flex items-center justify-between">
+                  <span>Unpaid Balance</span>
+                  <Wallet className="size-3.5 text-muted-foreground" />
+                </div>
+                <p className="kpi-value">
+                  {unpaidCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span>
+                </p>
+                <p className="text-sm text-muted-foreground mt-1.5">Ready for payout request</p>
+              </CardContent>
+            </Card>
 
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-                <span>Paid Commissions</span>
-                <CheckCircle className="w-4 h-4 text-foreground" />
-              </div>
-              <div className="text-2xl font-serif font-bold text-foreground mt-2">
-                {paidCommissions.toLocaleString()} <span className="text-xs text-muted-foreground font-sans font-normal">ETB</span>
-              </div>
-              <div className="text-xs text-foreground mt-2 font-medium">Dispatched via Telebirr/CBE</div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="kpi-label mb-1.5 flex items-center justify-between">
+                  <span>Paid Commissions</span>
+                  <CheckCircle className="size-3.5 text-muted-foreground" />
+                </div>
+                <p className="kpi-value">
+                  {paidCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span>
+                </p>
+                <p className="text-sm text-muted-foreground mt-1.5">Paid via Telebirr / CBE</p>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Payout Request Card */}
-          <div className="bg-card border border-border rounded-3xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-            <div>
-              <h3 className="text-base font-serif font-bold text-foreground flex items-center space-x-2">
-                <Wallet className="w-4 h-4 text-foreground" />
-                <span>Commission Payout Schedule</span>
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Current balance: <strong className="text-foreground">{unpaidCommissions} ETB</strong>. Payout rate: <span className="text-foreground font-semibold">{activeStaff.defaultCommissionPercentage}% Standard Rate</span>.
-              </p>
-            </div>
+          <Card>
+            <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="section-title flex items-center gap-2">
+                  <Wallet className="size-4" />
+                  Commission Payout
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Balance: <strong className="text-foreground">{unpaidCommissions} ETB</strong> • Rate:{' '}
+                  {activeStaff.defaultCommissionPercentage}%
+                </p>
+              </div>
+              <Button
+                disabled={unpaidCommissions === 0 || payoutRequested}
+                onClick={handleRequestPayout}
+                className="gap-1.5"
+              >
+                {payoutRequested ? <Check className="size-4" /> : <Send className="size-4" />}
+                {payoutRequested
+                  ? 'Request Submitted!'
+                  : `Request Payout (${unpaidCommissions} ETB)`}
+              </Button>
+            </CardContent>
+          </Card>
 
-            <button
-              onClick={handleRequestPayout}
-              disabled={unpaidCommissions === 0}
-              className="px-5 py-2.5 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-sm disabled:opacity-50 cursor-pointer flex items-center space-x-2"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Request Payout Transfer ({unpaidCommissions} ETB)</span>
-            </button>
-          </div>
-
-          {payoutRequested && (
-            <div className="bg-muted border border-border p-4 rounded-2xl text-xs text-foreground font-semibold flex items-center space-x-2">
-              <CheckCircle className="w-4 h-4 text-foreground" />
-              <span>Payout request of {unpaidCommissions} ETB submitted to salon management!</span>
-            </div>
-          )}
-
-          {/* Recharts Analytics Dashboard */}
           <StaffPerformanceDashboard
             activeStaff={activeStaff}
             commissionLogs={commissionLogs}
@@ -669,193 +766,233 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
             businessUnits={businessUnits}
           />
 
-          {/* Commission Breakdown Table */}
-          <div className="bg-card border border-border rounded-3xl p-6 shadow-sm">
-            <h3 className="text-lg font-serif font-bold text-foreground mb-3">Service Commission History</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-foreground">
-                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3 rounded-l-xl">Service Name</th>
-                    <th className="px-4 py-3">Session Price</th>
-                    <th className="px-4 py-3">Commission Earned</th>
-                    <th className="px-4 py-3">Applied Rule</th>
-                    <th className="px-4 py-3">Payout Status</th>
-                    <th className="px-4 py-3 rounded-r-xl">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#efe8d9]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Service Commission History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Commission</TableHead>
+                    <TableHead>Rule</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {staffCommissions.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
                         No commission logs found for {activeStaff.name}.
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     staffCommissions.map((log) => (
-                      <tr key={log.id} className="hover:bg-muted/60">
-                        <td className="px-4 py-3 font-bold text-foreground">{log.serviceName}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{log.servicePriceEtb} ETB</td>
-                        <td className="px-4 py-3 text-foreground font-bold">{log.commissionAmountEtb} ETB</td>
-                        <td className="px-4 py-3 text-muted-foreground">{log.ruleApplied}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant={log.payoutStatus === 'paid' ? 'default' : log.payoutStatus === 'payout_requested' ? 'secondary' : 'outline'} className="uppercase">
+                      <TableRow key={log.id}>
+                        <TableCell className="font-semibold">{log.serviceName}</TableCell>
+                        <TableCell className="num text-right">{log.servicePriceEtb} ETB</TableCell>
+                        <TableCell className="num text-right font-semibold">{log.commissionAmountEtb} ETB</TableCell>
+                        <TableCell className="text-muted-foreground">{log.ruleApplied}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              log.payoutStatus === 'paid'
+                                ? 'success'
+                                : log.payoutStatus === 'payout_requested'
+                                ? 'warning'
+                                : 'neutral'
+                            }
+                            className="uppercase"
+                          >
                             {log.payoutStatus.replace('_', ' ')}
                           </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{log.createdAt.split('T')[0]}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{log.createdAt.split('T')[0]}</TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* ========================================================= */}
       {/* MODAL: REGISTER NEW CUSTOMER */}
       {/* ========================================================= */}
-      {showNewCustomerModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground flex items-center space-x-2">
-              <UserPlus className="w-5 h-5 text-foreground" />
-              <span>Register New Client</span>
-            </h3>
+      <Dialog open={showNewCustomerModal} onOpenChange={(o) => !o && setShowNewCustomerModal(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="size-4" />
+              Register New Client
+            </DialogTitle>
+            <DialogDescription>
+              Add a new client so you can start a service session for them.
+            </DialogDescription>
+          </DialogHeader>
 
-            <form onSubmit={handleCreateNewCustomer} className="space-y-3 font-sans">
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Client Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Bethlehem Assefa"
-                  value={custName}
-                  onChange={(e) => setCustName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2 text-xs outline-none focus:border-primary"
-                />
-              </div>
+          <form onSubmit={handleCreateNewCustomer} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="newCustName">Client Full Name</Label>
+              <Input
+                id="newCustName"
+                required
+                placeholder="e.g. Bethlehem Assefa"
+                value={custName}
+                onChange={(e) => setCustName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="newCustPhone">Phone Number (+251 format)</Label>
+              <Input
+                id="newCustPhone"
+                required
+                placeholder="+251 91 123 4567"
+                value={custPhone}
+                onChange={(e) => setCustPhone(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowNewCustomerModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Register Client</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Phone Number (+251 format)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="+251 91 123 4567"
-                  value={custPhone}
-                  onChange={(e) => setCustPhone(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2 text-xs outline-none focus:border-primary"
-                />
-              </div>
+      {/* ========================================================= */}
+      {/* MODAL: SWITCH ACTIVE EMPLOYEE (PIN protected) */}
+      {/* ========================================================= */}
+      <Dialog open={showSwitchDialog} onOpenChange={(o) => !o && setShowSwitchDialog(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="size-4" />
+              {switchStep === 'pick' ? 'Switch Active Employee' : `Enter PIN — ${switchTarget?.name}`}
+            </DialogTitle>
+            <DialogDescription>
+              {switchStep === 'pick'
+                ? 'Select the employee who is now using this terminal. You will need their PIN.'
+                : 'Enter the 4-digit PIN of the employee to activate their session.'}
+            </DialogDescription>
+          </DialogHeader>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+          {switchStep === 'pick' ? (
+            <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+              {staffList.map((st) => (
+                <Button
+                  key={st.id}
                   type="button"
-                  onClick={() => setShowNewCustomerModal(false)}
-                  className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-full text-xs font-semibold cursor-pointer"
+                  variant={st.id === selectedStaffId ? 'secondary' : 'outline'}
+                  className="h-auto flex-col items-start py-3 px-3 text-left"
+                  onClick={() => {
+                    setSwitchTarget(st);
+                    setSwitchError(null);
+                    setSwitchStep('pin');
+                  }}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground rounded-full text-xs font-bold cursor-pointer shadow-sm"
-                >
-                  Register Client
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                  <span className="text-sm font-semibold">{st.name}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {st.role} • {st.defaultCommissionPercentage}%
+                  </span>
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <PinPad
+              error={switchError}
+              onComplete={handleSwitchPin}
+              onErrorCleared={() => setSwitchError(null)}
+              disabled={switching}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ========================================================= */}
       {/* MODAL: ADD EXTRA SERVICE TO ONGOING SESSION */}
       {/* ========================================================= */}
-      {extraServiceModalSession && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-serif font-bold text-foreground">
-                Add Extra Service for {extraServiceModalSession.customerName} ({extraServiceModalSession.queueNumber})
-              </h3>
+      <Dialog open={!!extraServiceModalSession} onOpenChange={(o) => !o && setExtraServiceModalSession(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Add Extra Service — {extraServiceModalSession?.customerName} ({extraServiceModalSession?.queueNumber})
+            </DialogTitle>
+            <DialogDescription>Select an additional service to append to this visit.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+            {availableServices.map((srv) => (
               <button
-                onClick={() => setExtraServiceModalSession(null)}
-                className="text-muted-foreground hover:text-foreground text-xs font-bold cursor-pointer"
+                key={srv.id}
+                type="button"
+                onClick={() => handleAddExtraServiceToSession(srv)}
+                className="bg-background border border-border hover:border-primary hover:bg-primary/5 p-3 rounded-md text-left cursor-pointer transition-colors"
               >
-                ✕ Close
+                <p className="font-semibold text-foreground text-sm">{srv.name}</p>
+                <p className="text-sm font-semibold text-foreground mt-1">{srv.priceEtb} ETB</p>
               </button>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Select any additional service to append to this client's visit session:
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
-              {availableServices.map((srv) => (
-                <button
-                  key={srv.id}
-                  onClick={() => handleAddExtraServiceToSession(srv)}
-                  className="bg-muted hover:bg-muted border border-border p-3 rounded-xl text-left cursor-pointer transition-colors"
-                >
-                  <div className="font-bold text-foreground text-xs">{srv.name}</div>
-                  <div className="text-[10px] text-foreground font-semibold mt-1">{srv.priceEtb} ETB</div>
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* ========================================================= */}
       {/* MODAL: QUICK CHECKOUT FOR STAFF */}
       {/* ========================================================= */}
-      {checkoutSession && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">
-              Collect Payment — {checkoutSession.customerName} ({checkoutSession.queueNumber})
-            </h3>
+      <Dialog open={!!checkoutSession} onOpenChange={(o) => !o && setCheckoutSession(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Collect Payment — {checkoutSession?.customerName} ({checkoutSession?.queueNumber})
+            </DialogTitle>
+          </DialogHeader>
 
-            <div className="bg-muted p-4 rounded-2xl text-xs space-y-2 border border-border">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Net Amount Payable:</span>
-                <span className="font-serif font-bold text-foreground text-lg">{checkoutSession.netTotalEtb} ETB</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-foreground mb-1.5">Select Payment Method</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                className="w-full bg-muted border border-border text-foreground rounded-xl px-3 py-2 text-xs outline-none"
-              >
-                <option value="telebirr">Telebirr SuperApp</option>
-                <option value="cbe_birr">CBE Birr</option>
-                <option value="cash">Cash</option>
-                <option value="card">Card / POS</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-              <button
-                onClick={() => setCheckoutSession(null)}
-                className="px-4 py-2 bg-muted text-foreground rounded-full text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCheckoutSession}
-                className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground rounded-full text-xs font-bold cursor-pointer shadow-sm"
-              >
-                Confirm Payment & Complete
-              </button>
+          <div className="rounded-md bg-muted p-3.5 text-sm space-y-2">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Net Amount Payable</span>
+              <span className="font-semibold text-foreground text-lg">{checkoutSession?.netTotalEtb} ETB</span>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1.5">
+            <Label>Select Payment Method</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['telebirr', 'Telebirr SuperApp'],
+                  ['cbe_birr', 'CBE Birr'],
+                  ['cash', 'Cash'],
+                  ['card', 'Card / POS'],
+                ] as [PaymentMethod, string][]
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={paymentMethod === value ? 'default' : 'outline'}
+                  onClick={() => setPaymentMethod(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckoutSession(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCheckoutSession}>Confirm Payment &amp; Complete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

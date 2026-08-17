@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Printer, Download, Sparkles, CheckCircle2, Building, Scissors, Phone, FileText, X } from 'lucide-react';
+import { Printer, Sparkles, Building, Scissors, X } from 'lucide-react';
 import { Company, Branch, VisitSession, Customer } from '../types';
 
 interface PrintableInvoiceProps {
@@ -40,33 +40,33 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
     : new Date().toLocaleString();
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#18181b]/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden font-sans border border-[#efe8d9] my-8 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-md max-w-xl w-full overflow-hidden font-sans border border-[#e4e4e7] my-8 flex flex-col max-h-[90vh]">
         {/* Top Modal Controls (Hidden during print) */}
-        <div className="p-4 bg-[#f6f3ec] border-b border-[#efe8d9] flex items-center justify-between shrink-0 print:hidden">
+        <div className="p-4 bg-[#fafafa] border-b border-[#e4e4e7] flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center space-x-2">
             <Printer className="w-5 h-5 text-[#18181b]" />
             <div>
-              <h3 className="font-serif font-bold text-sm text-[#18181b]">Printable Receipt & Tax Invoice</h3>
+              <h3 className="font-serif font-medium text-sm text-[#18181b]">Printable Receipt & Tax Invoice</h3>
               <p className="text-[11px] text-[#71717a]">Official fiscal receipt formatted for standard & thermal receipt printers.</p>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
             {/* Format Switcher */}
-            <div className="flex items-center bg-white border border-[#efe8d9] p-0.5 rounded-full text-xs">
+            <div className="flex items-center bg-white border border-[#e4e4e7] p-0.5 rounded-full text-sm">
               <button
                 onClick={() => setPrintFormat('thermal')}
-                className={`px-3 py-1 rounded-full font-bold transition-all cursor-pointer ${
-                  printFormat === 'thermal' ? 'bg-[#18181b] text-white shadow-xs' : 'text-[#71717a]'
+                className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
+                  printFormat === 'thermal' ? 'bg-[#18181b] text-white' : 'text-[#71717a]'
                 }`}
               >
                 80mm Thermal
               </button>
               <button
                 onClick={() => setPrintFormat('standard')}
-                className={`px-3 py-1 rounded-full font-bold transition-all cursor-pointer ${
-                  printFormat === 'standard' ? 'bg-[#18181b] text-white shadow-xs' : 'text-[#71717a]'
+                className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
+                  printFormat === 'standard' ? 'bg-[#18181b] text-white' : 'text-[#71717a]'
                 }`}
               >
                 A4 Invoice
@@ -75,7 +75,7 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
 
             <button
               onClick={handlePrint}
-              className="flex items-center space-x-1.5 px-4 py-1.5 bg-ink-800 hover:bg-ink-900 text-white font-bold text-xs rounded-full shadow-xs cursor-pointer transition-all"
+              className="flex items-center space-x-1.5 px-4 py-1.5 bg-ink-800 hover:bg-ink-900 text-white font-medium text-sm rounded-md cursor-pointer transition-all"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print Receipt</span>
@@ -91,39 +91,39 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
         </div>
 
         {/* PRINTABLE RECEIPT CONTENT AREA */}
-        <div className="p-6 overflow-y-auto flex-1 bg-stone-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+        <div className="p-6 overflow-y-auto flex-1 bg-muted flex justify-center print:p-0 print:bg-white print:overflow-visible">
           <div
             id="printable-receipt"
-            className={`bg-white shadow-md border border-[#efe8d9] p-6 text-[#18181b] transition-all print:shadow-none print:border-none print:p-0 ${
+            className={`bg-white border border-[#e4e4e7] p-6 text-[#18181b] transition-all print:shadow-none print:border-none print:p-0 ${
               printFormat === 'thermal'
-                ? 'w-[320px] font-mono text-xs rounded-xl print:w-[80mm]'
-                : 'w-full max-w-lg font-sans text-xs rounded-2xl print:w-full'
+                ? 'w-[320px] font-mono text-sm rounded-md print:w-[80mm]'
+                : 'w-full max-w-lg font-sans text-sm rounded-md print:w-full'
             }`}
           >
             {/* Thermal Receipt Header */}
             <div className="text-center space-y-1 pb-4 border-b border-dashed border-stone-300">
               <div className="flex items-center justify-center space-x-1.5">
                 <Building className="w-4 h-4 text-[#18181b]" />
-                <h2 className="font-serif font-bold text-base uppercase tracking-wider">{company.name}</h2>
+                <h2 className="font-serif font-medium text-base uppercase tracking-wider">{company.name}</h2>
               </div>
               <p className="text-[11px] font-semibold text-[#18181b]">
                 {branch?.name || 'Main Branch'} — {branch?.city || 'Addis Ababa'}
               </p>
               <p className="text-[10px] text-stone-500">
-                TIN: <span className="font-mono font-bold">008492031-ET</span> | Tel: +251 911 234 567
+                TIN: <span className="font-mono font-medium">008492031-ET</span> | Tel: +251 911 234 567
               </p>
               <p className="text-[10px] text-stone-500">{branch?.address || 'Kazanchis Commercial Mall, Floor 2'}</p>
             </div>
 
             {/* Invoice Meta Bar */}
             <div className="py-3 border-b border-dashed border-stone-300 space-y-1 text-[11px]">
-              <div className="flex justify-between font-bold">
+              <div className="flex justify-between font-medium">
                 <span>RECEIPT NO:</span>
                 <span className="font-mono text-ink-800">{receiptNumber}</span>
               </div>
               <div className="flex justify-between text-stone-600">
                 <span>Queue Token:</span>
-                <span className="font-mono font-bold text-[#18181b]">{session.queueNumber}</span>
+                <span className="font-mono font-medium text-[#18181b]">{session.queueNumber}</span>
               </div>
               <div className="flex justify-between text-stone-600">
                 <span>Date & Time:</span>
@@ -131,16 +131,16 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
               </div>
               <div className="flex justify-between text-stone-600">
                 <span>Payment Method:</span>
-                <span className="uppercase font-bold text-stone-800">{session.paymentMethod || 'CBE Birr'}</span>
+                <span className="uppercase font-medium text-stone-800">{session.paymentMethod || 'CBE Birr'}</span>
               </div>
             </div>
 
             {/* Customer & Loyalty Banner */}
-            <div className="py-2.5 my-2 px-3 bg-ink-50/80 border border-ink-200/80 rounded-xl space-y-1">
+            <div className="py-2.5 my-2 px-3 bg-ink-50/80 border border-ink-200/80 rounded-md space-y-1">
               <div className="flex justify-between items-center text-[11px]">
-                <span className="font-bold text-ink-950">Customer: {session.customerName}</span>
+                <span className="font-medium text-ink-950">Customer: {session.customerName}</span>
                 {customer?.isVip && (
-                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-ink-200 text-ink-900">
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-ink-200 text-ink-900">
                     VIP
                   </span>
                 )}
@@ -150,17 +150,17 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                   <Sparkles className="w-3 h-3 text-ink-600 shrink-0" />
                   <span>Loyalty Points Earned:</span>
                 </span>
-                <span className="font-bold font-mono text-ink-950">+{pointsEarned} pts</span>
+                <span className="font-medium font-mono text-ink-950">+{pointsEarned} pts</span>
               </div>
               <div className="flex justify-between text-[10px] text-ink-800">
                 <span>Updated Point Balance:</span>
-                <span className="font-bold font-mono">{totalCustomerPoints} pts</span>
+                <span className="font-medium font-mono">{totalCustomerPoints} pts</span>
               </div>
             </div>
 
             {/* Itemized Services Breakdown */}
             <div className="py-3 space-y-2">
-              <div className="flex justify-between text-[10px] uppercase font-bold text-stone-500 border-b pb-1">
+              <div className="flex justify-between text-[10px] uppercase font-medium text-stone-500 border-b pb-1">
                 <span>Service Description</span>
                 <span>Amount (ETB)</span>
               </div>
@@ -170,7 +170,7 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 return (
                   <div key={idx} className="flex justify-between items-start text-[11px] py-0.5">
                     <div>
-                      <div className="font-bold text-[#18181b] flex items-center space-x-1">
+                      <div className="font-medium text-[#18181b] flex items-center space-x-1">
                         <Scissors className="w-3 h-3 text-[#18181b] shrink-0" />
                         <span>{srv.serviceName}</span>
                       </div>
@@ -179,7 +179,7 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                         <span className="text-ink-700 font-semibold">(Comm: {estimatedComm} ETB)</span>
                       </div>
                     </div>
-                    <div className="font-mono font-bold text-[#18181b]">
+                    <div className="font-mono font-medium text-[#18181b]">
                       {srv.priceEtb.toLocaleString()} ETB
                     </div>
                   </div>
@@ -206,9 +206,9 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
                 </div>
               )}
 
-              <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-stone-400 text-[#18181b]">
+              <div className="flex justify-between items-center text-sm font-medium pt-2 border-t border-stone-400 text-[#18181b]">
                 <span>TOTAL PAID:</span>
-                <span className="font-serif text-base font-bold text-ink-800">
+                <span className="font-serif text-base font-medium text-ink-800">
                   {finalTotalEtb.toLocaleString()} ETB
                 </span>
               </div>
@@ -217,11 +217,11 @@ export const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({
             {/* Footer & QR Code Simulation */}
             <div className="mt-5 pt-4 border-t border-dashed border-stone-300 text-center space-y-2 text-[10px] text-stone-500">
               <div className="flex justify-center">
-                <div className="w-16 h-16 border-2 border-dashed border-stone-400 rounded-lg flex items-center justify-center font-mono text-[8px] text-stone-400 bg-stone-50">
+                <div className="w-16 h-16 border-2 border-dashed border-stone-400 rounded-md flex items-center justify-center font-mono text-[8px] text-stone-400 bg-stone-50">
                   [QR Fiscal]
                 </div>
               </div>
-              <p className="font-bold text-[#18181b]">Ameseginalehu! Thank you for your visit.</p>
+              <p className="font-medium text-[#18181b]">Ameseginalehu! Thank you for your visit.</p>
               <p>Powered by Groomly Salon OS • Ethiopian Tax Authority Compliant</p>
             </div>
           </div>

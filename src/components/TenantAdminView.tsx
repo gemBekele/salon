@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import {
   GitBranch,
-  Layers,
-  Users,
   Scissors,
   Package,
   DollarSign,
@@ -11,7 +9,6 @@ import {
   AlertTriangle,
   CheckCircle,
   TrendingUp,
-  Tag,
   Clock,
   Building2,
   Trash2,
@@ -25,6 +22,7 @@ import {
   FileText,
   Search,
   Zap,
+  Minus,
 } from 'lucide-react';
 import {
   Company,
@@ -43,6 +41,11 @@ import {
 import { ReportsDashboard } from './ReportsDashboard';
 import { apiFetch } from '../lib/api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useAdminTab } from '../lib/adminNav';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 interface TenantAdminViewProps {
   company: Company;
@@ -59,7 +62,6 @@ interface TenantAdminViewProps {
   users?: User[];
   selectedBranch?: Branch;
   onAddBranch: (br: Branch) => void;
-  onAddBusinessUnit: (bu: BusinessUnit) => void;
   onAddStaff: (stf: Staff) => void;
   onAddService: (srv: Service) => void;
   onAddInventoryItem: (inv: InventoryItem) => void;
@@ -94,7 +96,6 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   users = [],
   selectedBranch,
   onAddBranch,
-  onAddBusinessUnit,
   onAddStaff,
   onAddService,
   onAddInventoryItem,
@@ -113,14 +114,17 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   onAddUser,
   onUpdateUser,
 }) => {
-  const [activeTab, setActiveTab] = useState<
-    'branches' | 'staff' | 'services' | 'inventory' | 'commissions' | 'financials' | 'reports' | 'audit' | 'users'
-  >('branches');
+  const { adminTab } = useAdminTab();
 
   // Branch Metric Selection State
   const [selectedMetricBranchId, setSelectedMetricBranchId] = useState<string>(
     selectedBranch?.id || branches[0]?.id || ''
   );
+
+  // Keep the in-page metric branch in sync with the sidebar branch selector
+  React.useEffect(() => {
+    if (selectedBranch?.id) setSelectedMetricBranchId(selectedBranch.id);
+  }, [selectedBranch?.id]);
 
   // Expense Form State
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -140,33 +144,25 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
   // Modal States
   const [showAddBranchModal, setShowAddBranchModal] = useState(false);
-  const [showAddUnitModal, setShowAddUnitModal] = useState(false);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
-  const [showCommissionRuleModal, setShowCommissionRuleModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   // Edit Modal States
   const [editingEntity, setEditingEntity] = useState<{ type: string; data: any } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ type: string; id: string; name: string } | null>(null);
 
-  // Commission Rule Form
-  const [ruleTargetType, setRuleTargetType] = useState<'staff' | 'service'>('staff');
-  const [ruleTargetId, setRuleTargetId] = useState('');
-  const [ruleType, setRuleType] = useState<'percentage' | 'fixed_amount'>('percentage');
-  const [ruleValue, setRuleValue] = useState(30);
+  // Inventory Use (Deduction) State
+  const [useStockItem, setUseStockItem] = useState<InventoryItem | null>(null);
+  const [useStockQty, setUseStockQty] = useState(1);
 
   // Branch Form
   const [branchName, setBranchName] = useState('');
   const [branchCity, setBranchCity] = useState('Addis Ababa');
   const [branchAddress, setBranchAddress] = useState('');
   const [branchPhone, setBranchPhone] = useState('');
-
-  // Business Unit Form
-  const [unitName, setUnitName] = useState('');
-  const [unitBranchId, setUnitBranchId] = useState(branches[0]?.id || '');
-  const [unitType, setUnitType] = useState<any>('mens_salon');
+  const [branchExpenseLimit, setBranchExpenseLimit] = useState('0');
 
   // Staff Form
   const [staffName, setStaffName] = useState('');
@@ -174,7 +170,10 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const [staffRole, setStaffRole] = useState<any>('barber');
   const [staffCommission, setStaffCommission] = useState(30);
   const [staffBranchId, setStaffBranchId] = useState(branches[0]?.id || '');
-  const [staffUnitId, setStaffUnitId] = useState(businessUnits[0]?.id || '');
+  const [staffRuleEnabled, setStaffRuleEnabled] = useState(false);
+  const [staffRuleType, setStaffRuleType] = useState<'percentage' | 'fixed_amount'>('percentage');
+  const [staffRuleValue, setStaffRuleValue] = useState(30);
+  const [staffRuleActive, setStaffRuleActive] = useState(true);
 
   // Service Form
   const [srvName, setSrvName] = useState('');
@@ -182,7 +181,6 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const [srvPrice, setSrvPrice] = useState(500);
   const [srvDuration, setSrvDuration] = useState(45);
   const [srvCommissionVal, setSrvCommissionVal] = useState(30);
-  const [srvUnitId, setSrvUnitId] = useState(businessUnits[0]?.id || '');
 
   // Inventory Form
   const [invName, setInvName] = useState('');
@@ -201,17 +199,38 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const companyCommissions = commissionLogs.filter((c) => c.companyId === company.id);
   const companyExpenses = expenses.filter((e) => e.companyId === company.id);
 
-  const totalCompletedRevenueEtb = visitSessions
-    .filter((s) => s.companyId === company.id && s.status === 'completed')
-    .reduce((acc, s) => acc + s.netTotalEtb, 0);
-
-  const totalCommissionsEtb = companyCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
-  const totalExpensesEtb = companyExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
-  const lowStockCount = companyInventory.filter((i) => i.currentStock <= i.reorderLevel).length;
+  const filteredAuditLogs = auditLogs.filter((log) => {
+    if (log.companyId !== company.id) return false;
+    if (auditFilterType !== 'all' && log.actionType !== auditFilterType) return false;
+    if (auditSearchQuery) {
+      const q = auditSearchQuery.toLowerCase();
+      return (
+        log.description.toLowerCase().includes(q) ||
+        log.performedBy.toLowerCase().includes(q) ||
+        (log.details && log.details.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
 
   // Real-time Branch Metrics Calculation
   const activeBranchId = selectedMetricBranchId || selectedBranch?.id || companyBranches[0]?.id || '';
   const currentMetricBranch = companyBranches.find((b) => b.id === activeBranchId) || companyBranches[0];
+
+  const branchUnitIds = companyBusinessUnits.filter((bu) => bu.branchId === activeBranchId).map((bu) => bu.id);
+  const branchStaff = companyStaff.filter((st) => st.branchId === activeBranchId);
+  const branchServices = companyServices.filter((s) => branchUnitIds.includes(s.businessUnitId));
+  const branchInventory = companyInventory.filter((i) => i.branchId === activeBranchId);
+  const branchExpenses = companyExpenses.filter((e) => e.branchId === activeBranchId);
+  const branchCommissions = companyCommissions.filter((c) => c.branchId === activeBranchId);
+
+  const totalCompletedRevenueEtb = visitSessions
+    .filter((s) => s.companyId === company.id && s.status === 'completed' && s.branchId === activeBranchId)
+    .reduce((acc, s) => acc + s.netTotalEtb, 0);
+
+  const totalCommissionsEtb = branchCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
+  const totalExpensesEtb = branchExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
+  const lowStockInventory = branchInventory.filter((i) => i.currentStock <= i.reorderLevel);
 
   const todayDateStr = new Date().toISOString().split('T')[0];
   const branchSessions = visitSessions.filter(
@@ -278,7 +297,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   };
 
   const handleRunRecurringExpensesTrigger = () => {
-    const recurringList = companyExpenses.filter((e) => e.isRecurring);
+    const recurringList = branchExpenses.filter((e) => e.isRecurring);
     let createdCount = 0;
     recurringList.forEach((rec) => {
       if (onAddExpense) {
@@ -382,35 +401,22 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       phone: branchPhone || '+251 11 000 0000',
       isMainBranch: false,
       status: 'active',
+      dailyExpenseLimitEtb: Number(branchExpenseLimit) || 0,
     });
     setShowAddBranchModal(false);
     setBranchName('');
-  };
-
-  const handleCreateUnit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!unitName) return;
-    onAddBusinessUnit({
-      id: `bu_${Date.now()}`,
-      companyId: company.id,
-      branchId: unitBranchId,
-      type: unitType,
-      name: unitName,
-      code: `BU-${Date.now().toString().slice(-4)}`,
-      status: 'active',
-    });
-    setShowAddUnitModal(false);
-    setUnitName('');
+    setBranchExpenseLimit('0');
   };
 
   const handleCreateStaff = (e: React.FormEvent) => {
     e.preventDefault();
     if (!staffName) return;
-    onAddStaff({
-      id: `stf_${Date.now()}`,
+    const staffId = `stf_${Date.now()}`;
+    const staffRecord: Staff = {
+      id: staffId,
       companyId: company.id,
       branchId: staffBranchId,
-      businessUnitId: staffUnitId,
+      businessUnitId: companyBusinessUnits.find((u) => u.branchId === staffBranchId)?.id || companyBusinessUnits[0]?.id || '',
       name: staffName,
       phone: staffPhone || '+251 91 000 0000',
       email: `${staffName.toLowerCase().replace(/\s+/g, '')}@${company.slug}.et`,
@@ -418,9 +424,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       specialties: ['General Salon Services'],
       defaultCommissionPercentage: staffCommission,
       status: 'available',
-    });
+    };
+    onAddStaff(staffRecord);
+    if (staffRuleEnabled) {
+      onSaveCommissionRule({
+        id: `rule_staff_${Date.now()}`,
+        companyId: company.id,
+        targetType: 'staff',
+        targetId: staffId,
+        targetName: `${staffName} (${staffRole})`,
+        type: staffRuleType,
+        value: staffRuleValue,
+        isActive: staffRuleActive,
+        updatedAt: new Date().toISOString().split('T')[0],
+      });
+    }
     setShowAddStaffModal(false);
     setStaffName('');
+    setStaffPhone('');
+    setStaffRuleEnabled(false);
+    setStaffRuleType('percentage');
+    setStaffRuleValue(30);
+    setStaffRuleActive(true);
   };
 
   const handleCreateService = (e: React.FormEvent) => {
@@ -429,7 +454,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
     onAddService({
       id: `srv_${Date.now()}`,
       companyId: company.id,
-      businessUnitId: srvUnitId,
+      businessUnitId: companyBusinessUnits[0]?.id || '',
       name: srvName,
       category: srvCategory,
       priceEtb: srvPrice,
@@ -463,709 +488,617 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
     setInvName('');
   };
 
-  const handleSaveRuleForm = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ruleTargetId) return;
-
-    let targetName = '';
-    if (ruleTargetType === 'staff') {
-      const stf = companyStaff.find((s) => s.id === ruleTargetId);
-      targetName = stf ? `${stf.name} (${stf.role})` : 'Staff Member';
-    } else {
-      const srv = companyServices.find((s) => s.id === ruleTargetId);
-      targetName = srv ? srv.name : 'Service';
-    }
-
-    const newRule: CommissionRule = {
-      id: `rule_${ruleTargetType}_${Date.now()}`,
-      companyId: company.id,
-      targetType: ruleTargetType,
-      targetId: ruleTargetId,
-      targetName,
-      type: ruleType,
-      value: Number(ruleValue),
-      isActive: true,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-
-    onSaveCommissionRule(newRule);
-    setShowCommissionRuleModal(false);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-primary text-primary-foreground rounded-3xl p-6 shadow-sm border border-primary/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center space-x-2">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-muted/15 text-primary-foreground border border-primary-foreground/30 uppercase tracking-widest">
-              Tenant Company Operations Manager
-            </span>
-            <span className="text-primary-foreground/80 text-xs">{company.name}</span>
-          </div>
-          <h2 className="text-2xl font-serif font-light text-primary-foreground mt-1">
-            Salon & Spa Multi-Branch Management
-          </h2>
-          <p className="text-primary-foreground/80 text-xs mt-1 font-sans">
-            Manage branches, business units (Men's/Women's/Spa/Massage), staff shifts, service catalog, auto-inventory stock rules, and commission schedules.
-          </p>
-        </div>
-
-        {/* Quick Metric Pills */}
-        <div className="flex items-center space-x-3 text-xs font-sans">
-          <div className="bg-muted/10 px-4 py-2.5 rounded-2xl border border-primary-foreground/20">
-            <div className="text-primary-foreground/70 text-[11px]">Total Completed Revenue</div>
-            <div className="text-base font-serif font-bold text-primary-foreground mt-0.5">
-              {totalCompletedRevenueEtb.toLocaleString()} ETB
-            </div>
-          </div>
-
-          <div className="bg-muted/10 px-4 py-2.5 rounded-2xl border border-primary-foreground/20">
-            <div className="text-primary-foreground/70 text-[11px]">Low Stock Items</div>
-            <div className={`text-base font-serif font-bold mt-0.5 ${lowStockCount > 0 ? 'text-ink-200' : 'text-ink-200'}`}>
-              {lowStockCount} Items
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* REAL-TIME BRANCH TOP-LEVEL METRIC CARDS */}
-      <div className="bg-card border border-border rounded-3xl p-5 shadow-sm space-y-4 font-sans">
+      {/* TAB 1: BRANCHES & BUSINESS UNITS */}
+      {adminTab === 'branches' && (
+        <div className="space-y-6">
+          {/* REAL-TIME BRANCH OPERATIONS */}
+          <div className="bg-card border border-border rounded-md p-5 space-y-4 font-sans">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
           <div className="flex items-center space-x-2">
-            <Activity className="w-5 h-5 text-muted-foreground animate-pulse" />
-            <h3 className="font-serif font-bold text-foreground text-base">Real-Time Branch Operations Dashboard</h3>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-muted text-foreground border border-border">
-              Live Stream
+            <h3 className="section-title">Real-Time Branch Operations</h3>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-muted text-foreground border border-border">
+              <span className="w-1.5 h-1.5 rounded-full bg-brass-600" />
+              Live
             </span>
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="text-xs font-semibold text-muted-foreground">Selected Branch:</span>
-            <select
+            <span className="text-sm font-medium text-muted-foreground">Selected Branch:</span>
+            <Select
               value={activeBranchId}
-              onChange={(e) => setSelectedMetricBranchId(e.target.value)}
-              className="bg-muted border border-border text-foreground font-bold text-xs rounded-xl px-3 py-1.5 outline-none focus:border-primary"
+              onValueChange={(v) => setSelectedMetricBranchId(v)}
             >
-              {companyBranches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.city})
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-8 w-auto rounded-md bg-background border border-input text-sm font-medium">
+                <SelectValue placeholder="Select branch..." />
+              </SelectTrigger>
+              <SelectContent>
+                {companyBranches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name} ({b.city})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border border border-border rounded-md overflow-hidden">
           {/* Card 1: Revenue Today */}
-          <div className="bg-gradient-to-br from-[#f6f3ec] to-white border border-border rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+          <div className="bg-muted/30 p-4 flex flex-col justify-between gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Revenue Today</span>
-              <div className="p-2 rounded-xl bg-muted text-foreground">
-                <DollarSign className="w-4 h-4" />
+              <span className="kpi-label">Revenue Today</span>
+              <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                <DollarSign className="size-3.5" />
               </div>
             </div>
-            <div className="mt-2">
-              <div className="text-2xl font-serif font-bold text-foreground">
-                {revenueTodayEtb.toLocaleString()} ETB
+            <div>
+              <div className="kpi-value">
+                {revenueTodayEtb.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">ETB</span>
               </div>
-              <div className="text-[11px] text-muted-foreground mt-1 flex items-center space-x-1">
-                <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                <span>Today's completed revenue at {currentMetricBranch?.name}</span>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                Completed revenue at {currentMetricBranch?.name}
               </div>
             </div>
           </div>
 
           {/* Card 2: Active Visits */}
-          <div className="bg-gradient-to-br from-[#f6f3ec] to-white border border-border rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+          <div className="bg-muted/30 p-4 flex flex-col justify-between gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Visits</span>
-              <div className="p-2 rounded-xl bg-blue-100 text-blue-800">
-                <Clock className="w-4 h-4" />
+              <span className="kpi-label">Active Visits</span>
+              <div className="w-7 h-7 rounded-md bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900">
+                <Clock className="size-3.5" />
               </div>
             </div>
-            <div className="mt-2">
-              <div className="text-2xl font-serif font-bold text-blue-900">
-                {activeVisitsCount} <span className="text-xs font-sans font-normal text-muted-foreground">Visits Active</span>
+            <div>
+              <div className="kpi-value">
+                {activeVisitsCount} <span className="text-sm font-medium text-muted-foreground">Visits</span>
               </div>
-              <div className="text-[11px] text-muted-foreground mt-1 flex items-center space-x-2">
-                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold">{inProgressCount} In Service</span>
-                <span className="px-1.5 py-0.5 rounded bg-muted text-foreground font-bold">{queuedCount} Waiting</span>
+              <div className="text-[11px] text-muted-foreground mt-1 flex items-center space-x-3">
+                <span><strong className="text-foreground font-semibold num">{inProgressCount}</strong> In Service</span>
+                <span><strong className="text-foreground font-semibold num">{queuedCount}</strong> Waiting</span>
               </div>
             </div>
           </div>
 
           {/* Card 3: Staff Occupancy */}
-          <div className="bg-gradient-to-br from-[#f6f3ec] to-white border border-border rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+          <div className="bg-muted/30 p-4 flex flex-col justify-between gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Staff Occupancy</span>
-              <div className="p-2 rounded-xl bg-purple-100 text-purple-800">
-                <Users className="w-4 h-4" />
+              <span className="kpi-label">Staff Occupancy</span>
+              <div className="w-7 h-7 rounded-md bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900">
+                <Activity className="size-3.5" />
               </div>
             </div>
-            <div className="mt-2">
-              <div className="text-2xl font-serif font-bold text-purple-950">
-                {staffOccupancyPct}%
-              </div>
-              <div className="w-full bg-muted rounded-full h-1.5 mt-2 overflow-hidden">
+            <div>
+              <div className="kpi-value">{staffOccupancyPct}%</div>
+              <div className="w-full bg-muted h-1 mt-2 overflow-hidden">
                 <div
-                  className="bg-purple-700 h-1.5 rounded-full transition-all duration-500"
+                  className="bg-primary h-1 transition-all duration-500"
                   style={{ width: `${Math.min(100, staffOccupancyPct)}%` }}
                 />
               </div>
-              <div className="text-[11px] text-muted-foreground mt-1 flex justify-between">
-                <span>{busyBranchStaffCount} Working/Busy</span>
-                <span>{totalBranchStaffCount} Total Staff</span>
+              <div className="text-[11px] text-muted-foreground mt-1.5 flex justify-between">
+                <span><strong className="text-foreground font-semibold num">{busyBranchStaffCount}</strong> Busy</span>
+                <span><strong className="text-foreground font-semibold num">{totalBranchStaffCount}</strong> Total Staff</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs Bar */}
-      <div className="flex items-center space-x-2 border-b border-border overflow-x-auto pb-2 font-sans">
-        {[
-          { id: 'branches', label: 'Branches & Units', icon: GitBranch },
-          { id: 'staff', label: 'Staff Roster', icon: Users },
-          { id: 'services', label: 'Service Catalog', icon: Scissors },
-          { id: 'inventory', label: 'Inventory & Stock', icon: Package },
-          { id: 'commissions', label: 'Staff Commissions & Rules', icon: DollarSign },
-          { id: 'financials', label: 'Financials & Expenses', icon: BarChart3 },
-          { id: 'reports', label: 'Reports & Analytics', icon: TrendingUp },
-          { id: 'audit', label: 'Security Audit', icon: ShieldCheck },
-          { id: 'users', label: 'User Management', icon: ShieldCheck },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              id={`tab-${tab.id}`}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center space-x-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'bg-card text-muted-foreground hover:text-foreground border border-border'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* TAB 1: BRANCHES & BUSINESS UNITS */}
-      {activeTab === 'branches' && (
-        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-foreground">Company Branches & Business Units</h3>
-              <p className="text-xs text-muted-foreground">
+              <h3 className="section-title">Company Branches & Business Units</h3>
+              <p className="text-sm text-muted-foreground">
                 A single company can operate multiple branches across cities, each with specialized units (e.g. Men's Salon + Moroccan Hammam).
               </p>
             </div>
             <div className="flex items-center space-x-2">
-              <button
+              <Button
                 onClick={() => setShowAddBranchModal(true)}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Branch</span>
-              </button>
-              <button
-                onClick={() => setShowAddUnitModal(true)}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-muted hover:bg-muted text-foreground font-semibold text-xs rounded-full border border-border cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Business Unit</span>
-              </button>
+              </Button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {companyBranches.map((branch) => {
-              const branchUnits = companyBusinessUnits.filter((bu) => bu.branchId === branch.id);
-              const branchStaff = companyStaff.filter((s) => s.branchId === branch.id);
-              return (
-                <div key={branch.id} className="bg-card border border-border rounded-3xl p-5 space-y-4 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <GitBranch className="w-4 h-4 text-foreground" />
-                        <h4 className="text-base font-serif font-bold text-foreground">{branch.name}</h4>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">{branch.city} — {branch.address}</p>
-                    </div>
-                    {branch.isMainBranch && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-foreground border border-border text-[10px] font-bold">
-                        Main Flagship
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <button
-                      onClick={() => setEditingEntity({ type: 'branch', data: branch })}
-                      className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Edit Branch"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete({ type: 'branch', id: branch.id, name: branch.name })}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
-                      title="Deactivate Branch"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="border-t border-border pt-3 space-y-2">
-                    <div className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      <span>Business Units ({branchUnits.length})</span>
-                      <span className="text-muted-foreground text-[11px]">{branchStaff.length} Staff Assigned</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {branchUnits.map((bu) => (
-                        <div key={bu.id} className="bg-muted p-2.5 rounded-2xl text-xs flex items-center justify-between border border-border">
-                          <div className="flex items-center space-x-2">
-                            <Layers className="w-3.5 h-3.5 text-foreground" />
-                            <span className="font-semibold text-foreground">{bu.name}</span>
-                          </div>
-                          <span className="text-[10px] px-2 py-0.5 bg-card text-muted-foreground rounded font-mono border border-border">
-                            {bu.code}
-                          </span>
+            {companyBranches.length === 0 ? (
+              <div className="col-span-full py-12 text-center bg-muted/50 border border-dashed border-border rounded-md">
+                <GitBranch className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm font-medium text-foreground">No branches yet</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-4">Add your first branch to start structuring operations.</p>
+                <Button
+                  onClick={() => setShowAddBranchModal(true)}
+                  className="px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="ml-1.5">Add Branch</span>
+                </Button>
+              </div>
+            ) : (
+              companyBranches.map((branch) => {
+                const branchStaffCount = companyStaff.filter((s) => s.branchId === branch.id).length;
+                const branchServiceCount = companyServices.filter((s) =>
+                  companyBusinessUnits.some((bu) => bu.branchId === branch.id && bu.id === s.businessUnitId)
+                ).length;
+                return (
+                  <div key={branch.id} className="bg-card border border-border rounded-md p-5 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-3 min-w-0">
+                        <div className="w-9 h-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <GitBranch className="w-4 h-4" />
                         </div>
-                      ))}
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="data-primary truncate">{branch.name}</h4>
+                            {branch.isMainBranch && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold whitespace-nowrap dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900">
+                                Main Flagship
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5 truncate">{branch.city} — {branch.address}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1 shrink-0">
+                        <Button
+                          onClick={() => setEditingEntity({ type: 'branch', data: branch })}
+                          className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/80 transition-colors"
+                          title="Edit Branch"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          onClick={() => setConfirmDelete({ type: 'branch', id: branch.id, name: branch.name })}
+                          className="p-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                          title="Deactivate Branch"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-px bg-border border border-border rounded-md overflow-hidden">
+                      <div className="bg-muted/30 py-3 text-center">
+                        <div className="text-lg font-semibold tabular-nums text-foreground">{branchStaffCount}</div>
+                        <div className="text-[11px] text-muted-foreground">Staff Assigned</div>
+                      </div>
+                      <div className="bg-muted/30 py-3 text-center">
+                        <div className="text-lg font-semibold tabular-nums text-foreground">{branchServiceCount}</div>
+                        <div className="text-[11px] text-muted-foreground">Services</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       )}
 
       {/* TAB 2: STAFF ROSTER */}
-      {activeTab === 'staff' && (
-        <div className="space-y-4">
+      {adminTab === 'staff' && (
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-foreground">Staff Roster & Commission Rates</h3>
-              <p className="text-xs text-muted-foreground">
-                Staff members work across shifts and business units. Commissions earn automatically on session completion.
+              <h3 className="section-title">Staff Roster & Commission Rules</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage staff, their commission rates, and custom commission rules — all from one place.
               </p>
             </div>
-            <button
+            <Button
               onClick={() => setShowAddStaffModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Staff Member</span>
-            </button>
+            </Button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {companyStaff.map((staff) => {
-              const staffBr = companyBranches.find((b) => b.id === staff.branchId);
-              const staffBu = companyBusinessUnits.find((u) => u.id === staff.businessUnitId);
-              return (
-                <div key={staff.id} className="bg-card border border-border rounded-3xl p-5 space-y-3 shadow-sm">
-                  <div className="flex items-center space-x-3">
-                    <img
-                      src={staff.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
-                      alt={staff.name}
-                      className="w-12 h-12 rounded-full object-cover border border-border"
-                    />
-                    <div>
-                      <h4 className="text-base font-serif font-bold text-foreground">{staff.name}</h4>
-                      <p className="text-xs text-foreground capitalize font-medium">{staff.role}</p>
-                      <p className="text-[11px] text-muted-foreground">{staff.phone}</p>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-border pt-3 space-y-1.5 text-xs font-sans">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Branch & Unit:</span>
-                      <span className="text-foreground font-medium">{staffBr?.name} ({staffBu?.name || 'All'})</span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Commission Rate:</span>
-                      <span className="text-foreground font-bold">{staff.defaultCommissionPercentage}% Rate</span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Shift Status:</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        staff.status === 'available' ? 'bg-muted text-foreground border border-border' :
-                        staff.status === 'busy' ? 'bg-muted text-foreground border border-border' : 'bg-muted text-muted-foreground border border-border'
-                      }`}>
-                        {staff.status}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-1 pt-2 border-t border-border">
-                    <button
-                      onClick={() => setEditingEntity({ type: 'staff', data: staff })}
-                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground text-[11px] font-medium transition-colors"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      <span>Edit</span>
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete({ type: 'staff', id: staff.id, name: staff.name })}
-                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 text-[11px] font-medium transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Remove</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: SERVICES */}
-      {activeTab === 'services' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-serif font-bold text-foreground">Service Pricing Catalog & Rules</h3>
-              <p className="text-xs text-muted-foreground">
-                Services configure default duration, price in ETB, staff commission calculation rules, and required inventory items.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAddServiceModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Service</span>
-            </button>
-          </div>
-
-          <div className="overflow-x-auto bg-card border border-border rounded-3xl p-5 shadow-sm font-sans">
-            <table className="w-full text-left text-xs text-foreground">
-              <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-                <tr>
-                  <th className="px-4 py-3 rounded-l-xl">Service Name</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Price (ETB)</th>
-                  <th className="px-4 py-3">Duration</th>
-                  <th className="px-4 py-3">Staff Commission</th>
-                  <th className="px-4 py-3">Business Unit</th>
-                  <th className="px-4 py-3 rounded-r-xl">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#efe8d9]">
-                {companyServices.map((srv) => {
-                  const bu = companyBusinessUnits.find((u) => u.id === srv.businessUnitId);
-                  return (
-                    <tr key={srv.id} className="hover:bg-muted/60">
-                      <td className="px-4 py-3 font-bold text-foreground flex items-center space-x-2">
-                        <Scissors className="w-3.5 h-3.5 text-foreground" />
-                        <span>{srv.name}</span>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{srv.category}</td>
-                      <td className="px-4 py-3 text-foreground font-bold">{srv.priceEtb.toLocaleString()} ETB</td>
-                      <td className="px-4 py-3 text-muted-foreground">{srv.durationMinutes} mins</td>
-                      <td className="px-4 py-3 text-foreground font-bold">{srv.commissionValue}% Rate</td>
-                      <td className="px-4 py-3 text-muted-foreground">{bu?.name || 'General'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center space-x-1">
-                          <button onClick={() => setEditingEntity({ type: 'service', data: srv })} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setConfirmDelete({ type: 'service', id: srv.id, name: srv.name })} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: INVENTORY */}
-      {activeTab === 'inventory' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-serif font-bold text-foreground">Branch Stock & Auto-Deduction Inventory</h3>
-              <p className="text-xs text-muted-foreground">
-                Stock decrements automatically upon completing visit sessions. Reorder alerts trigger when threshold is reached.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAddInventoryModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Stock Item</span>
-            </button>
-          </div>
-
-          {/* Low Stock Alert Toast / Warning Banner */}
-          {companyInventory.some((item) => item.currentStock <= item.reorderLevel) && (
-            <div className="bg-muted border-2 border-border rounded-2xl p-4 shadow-sm text-foreground space-y-2 animate-fadeIn">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-muted text-foreground rounded-xl">
-                    <AlertTriangle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-serif font-bold text-sm text-foreground">
-                      Low Stock Warning Alert! ({companyInventory.filter((i) => i.currentStock <= i.reorderLevel).length} items below reorder threshold)
-                    </h4>
-                    <p className="text-xs text-foreground/90 mt-0.5">
-                      The following consumables are running low and may affect scheduled services. Click + Restock to order supply.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    companyInventory
-                      .filter((i) => i.currentStock <= i.reorderLevel)
-                      .forEach((i) => onUpdateInventoryStock(i.id, 50));
-                  }}
-                  className="px-3.5 py-1.5 bg-primary hover:bg-primary/80 text-primary-foreground font-bold text-xs rounded-full cursor-pointer shadow-sm shrink-0"
-                >
-                  Restock All Low Items (+50)
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-border/80">
-                {companyInventory
-                  .filter((i) => i.currentStock <= i.reorderLevel)
-                  .map((item) => (
-                    <span
-                      key={item.id}
-                      className="px-3 py-1 bg-card border border-border rounded-xl text-xs font-bold text-foreground flex items-center space-x-2"
-                    >
-                      <span>{item.name}:</span>
-                      <span className="text-red-700 font-mono">{item.currentStock} {item.unit}</span>
-                      <span className="text-[10px] text-foreground">(Min: {item.reorderLevel})</span>
-                    </span>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
-            {companyInventory.map((item) => {
-              const isLow = item.currentStock <= item.reorderLevel;
-              return (
-                <div
-                  key={item.id}
-                  className={`bg-card border rounded-3xl p-5 space-y-3 shadow-sm ${
-                    isLow ? 'border-primary/40 bg-muted/20' : 'border-border'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-base font-serif font-bold text-foreground">{item.name}</h4>
-                      <p className="text-[10px] text-muted-foreground font-mono">SKU: {item.sku}</p>
-                    </div>
-                    {isLow && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-foreground border border-border text-[10px] font-bold flex items-center space-x-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        <span>Low Stock</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Current Stock:</span>
-                      <span className={`font-bold ${isLow ? 'text-foreground' : 'text-foreground'}`}>
-                        {item.currentStock} {item.unit}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Reorder Threshold:</span>
-                      <span className="text-foreground font-medium">{item.reorderLevel} {item.unit}</span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Cost per unit:</span>
-                      <span className="text-foreground font-medium">{item.unitCostEtb} ETB</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => onUpdateInventoryStock(item.id, 50)}
-                    className="w-full mt-2 py-2 bg-muted hover:bg-muted text-foreground text-xs font-bold rounded-full border border-border cursor-pointer"
-                  >
-                    + Restock (+50 {item.unit})
-                  </button>
-                  <div className="flex items-center space-x-1 mt-1">
-                    <button
-                      onClick={() => setEditingEntity({ type: 'inventory', data: item })}
-                      className="flex-1 py-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      <span>Edit</span>
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete({ type: 'inventory', id: item.id, name: item.name })}
-                      className="flex-1 py-1.5 rounded-xl hover:bg-red-50 text-muted-foreground hover:text-red-600 text-[11px] font-medium transition-colors flex items-center justify-center space-x-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Deactivate</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: COMMISSIONS & RULES */}
-      {activeTab === 'commissions' && (
-        <div className="space-y-6">
-          {/* Commission Rules Configuration Card */}
-          <div className="bg-card border border-border rounded-3xl p-6 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <Tag className="w-5 h-5 text-foreground" />
-                  <h3 className="text-lg font-serif font-bold text-foreground">Commission Rules Engine</h3>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Configure custom commission rules per staff member or per service (percentage % or fixed ETB amount). Applied automatically at checkout.
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setRuleTargetType('staff');
-                  setRuleTargetId(companyStaff[0]?.id || '');
-                  setShowCommissionRuleModal(true);
-                }}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Configure Commission Rule</span>
-              </button>
-            </div>
-
-            {/* Active Rules Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-              {commissionRules.filter((r) => r.companyId === company.id).length === 0 ? (
-                <div className="col-span-full py-6 text-center text-muted-foreground text-xs bg-muted rounded-2xl border border-border">
-                  No custom commission rules configured yet. Standard default percentages apply.
-                </div>
-              ) : (
-                commissionRules
-                  .filter((r) => r.companyId === company.id)
-                  .map((rule) => (
-                    <div
-                      key={rule.id}
-                      className="p-4 bg-muted border border-border rounded-2xl space-y-2 flex flex-col justify-between"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Target: {rule.targetType === 'staff' ? 'Staff Member' : 'Service'}
+          {/* Staff Table */}
+          <div className="overflow-x-auto bg-card border border-border rounded-md p-5 font-sans">
+            <Table className="w-full text-left text-sm text-foreground">
+              <TableHeader className="">
+                <TableRow>
+                  <TableHead className="">Staff Member</TableHead>
+                  <TableHead className="">Role</TableHead>
+                  <TableHead className="">Branch</TableHead>
+                  <TableHead className="">Commission Rate</TableHead>
+                  <TableHead className="">Status</TableHead>
+                  <TableHead className="">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="">
+                {branchStaff.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
+                      No staff members yet — add your team to start tracking commissions and shifts.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  branchStaff.map((staff) => {
+                    const staffBr = companyBranches.find((b) => b.id === staff.branchId);
+                    const statusColor =
+                      staff.status === 'available'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
+                        : staff.status === 'busy'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900'
+                        : 'bg-muted text-muted-foreground border-border';
+                    return (
+                      <TableRow key={staff.id} className="hover:bg-muted/40">
+                        <TableCell className="">
+                          <div className="flex items-center space-x-3">
+                            <img
+                              src={staff.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
+                              alt={staff.name}
+                              className="w-9 h-9 rounded-full object-cover border border-border shrink-0"
+                            />
+                            <div>
+                              <div className="font-medium text-foreground">{staff.name}</div>
+                              <div className="text-[11px] text-muted-foreground">{staff.phone}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-foreground font-medium capitalize">{staff.role}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {staffBr?.name || staff.branchId}
+                        </TableCell>
+                        <TableCell className="">
+                          <div>
+                            <div className="text-foreground font-medium">{staff.defaultCommissionPercentage}%</div>
+                            {commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === staff.id && r.isActive) && (
+                              <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                                {(() => {
+                                  const r = commissionRules.find((x) => x.targetType === 'staff' && x.targetId === staff.id && x.isActive);
+                                  return r ? (r.type === 'percentage' ? `Rule: ${r.value}%` : `Rule: ${r.value.toLocaleString()} ETB`) : '';
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold capitalize border ${statusColor}`}>
+                            {staff.status}
                           </span>
-                          <h4 className="font-bold text-sm text-foreground">{rule.targetName}</h4>
-                        </div>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                            rule.isActive
-                              ? 'bg-muted text-foreground border-border'
-                              : 'bg-muted text-stone-500 border-border'
-                          }`}
-                        >
-                          {rule.isActive ? 'Active' : 'Disabled'}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-xs pt-2 border-t border-border">
-                        <span className="text-muted-foreground">Payout Rate:</span>
-                        <span className="font-mono font-bold text-foreground text-sm">
-                          {rule.type === 'percentage' ? `${rule.value}%` : `${rule.value.toLocaleString()} ETB (Fixed)`}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
+                        </TableCell>
+                        <TableCell className="">
+                          <div className="flex items-center space-x-1.5">
+                            <Button
+                              onClick={() => setEditingEntity({ type: 'staff', data: staff })}
+                              className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/80 transition-colors"
+                              title="Edit Staff & Commission Rules"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              onClick={() => setConfirmDelete({ type: 'staff', id: staff.id, name: staff.name })}
+                              className="p-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                              title="Deactivate Staff"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </div>
 
-          {/* Commission Logs Table */}
-          <div className="space-y-4">
+          {/* Staff Commission Logs & Payout Schedule */}
+          <div className="bg-card border border-border rounded-md p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-serif font-bold text-foreground">Staff Commission Logs & Payout Schedule</h3>
-                <p className="text-xs text-muted-foreground">
-                  Calculated automatically per completed service session according to configured rules.
+                <h4 className="section-title">Staff Commission Logs & Payout Schedule</h4>
+                <p className="text-sm text-muted-foreground">
+                  Calculated automatically per completed service session — export payroll or track payout status from the roster.
                 </p>
               </div>
+
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <Button
                   onClick={handleExportPayrollCsv}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-bold rounded-full cursor-pointer shadow-sm transition-all"
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md cursor-pointer transition-all"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Export Payroll CSV</span>
-                </button>
-                <div className="text-xs text-foreground font-bold bg-muted px-4 py-2 rounded-full border border-border">
+                </Button>
+                <div className="text-sm text-foreground font-semibold num bg-muted px-3 h-8 flex items-center rounded-md border border-border">
                   Total Earned Commissions: {totalCommissionsEtb.toLocaleString()} ETB
                 </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto bg-card border border-border rounded-3xl p-5 shadow-sm font-sans">
-              <table className="w-full text-left text-xs text-foreground">
-                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3 rounded-l-xl">Staff Member</th>
-                    <th className="px-4 py-3">Service Performed</th>
-                    <th className="px-4 py-3">Session Price</th>
-                    <th className="px-4 py-3">Earned Commission</th>
-                    <th className="px-4 py-3">Rule Applied</th>
-                    <th className="px-4 py-3 rounded-r-xl">Payout Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#efe8d9]">
-                  {companyCommissions.map((log) => (
-                    <tr key={log.id} className="hover:bg-muted/60">
-                      <td className="px-4 py-3 font-bold text-foreground">{log.staffName}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{log.serviceName}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{log.servicePriceEtb} ETB</td>
-                      <td className="px-4 py-3 text-foreground font-bold">{log.commissionAmountEtb} ETB</td>
-                      <td className="px-4 py-3 text-muted-foreground">{log.ruleApplied}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.payoutStatus === 'paid' ? 'bg-muted text-foreground border border-border' :
-                          log.payoutStatus === 'payout_requested' ? 'bg-muted text-foreground border border-border' : 'bg-muted text-muted-foreground border border-border'
-                        }`}>
-                          {log.payoutStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="overflow-x-auto font-sans">
+              <Table className="w-full text-left text-sm text-foreground">
+                <TableHeader className="">
+                  <TableRow>
+                    <TableHead className="">Staff Member</TableHead>
+                    <TableHead className="">Service Performed</TableHead>
+                    <TableHead className="">Session Price</TableHead>
+                    <TableHead className="">Earned Commission</TableHead>
+                    <TableHead className="">Rule Applied</TableHead>
+                    <TableHead className="">Payout Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="">
+                  {branchCommissions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
+                        No commission logs yet — commissions appear here automatically after completed sessions.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    branchCommissions.map((log) => (
+                      <TableRow key={log.id} className="hover:bg-muted/40">
+                        <TableCell className=" font-medium text-foreground">{log.staffName}</TableCell>
+                        <TableCell className=" text-muted-foreground">{log.serviceName}</TableCell>
+                        <TableCell className=" text-muted-foreground">{log.servicePriceEtb} ETB</TableCell>
+                        <TableCell className=" text-foreground font-medium">{log.commissionAmountEtb} ETB</TableCell>
+                        <TableCell className=" text-muted-foreground">{log.ruleApplied}</TableCell>
+                        <TableCell className="">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                            log.payoutStatus === 'paid'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
+                              : log.payoutStatus === 'payout_requested'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900'
+                              : 'bg-muted text-muted-foreground border-border'
+                          }`}>
+                            {log.payoutStatus === 'payout_requested' ? 'Requested' : log.payoutStatus}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>
       )}
 
+      {/* TAB 3: SERVICES */}
+      {adminTab === 'services' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="section-title">Service Pricing Catalog & Rules</h3>
+              <p className="text-sm text-muted-foreground">
+                Services configure default duration, price in ETB, staff commission calculation rules, and required inventory items.
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowAddServiceModal(true)}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create Service</span>
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto bg-card border border-border rounded-md p-5  font-sans">
+            <Table className="w-full text-left text-sm text-foreground">
+              <TableHeader className="">
+                <TableRow>
+                  <TableHead className="">Service Name</TableHead>
+                  <TableHead className="">Category</TableHead>
+                  <TableHead className="">Price (ETB)</TableHead>
+                  <TableHead className="">Duration</TableHead>
+                  <TableHead className="">Staff Commission</TableHead>
+                  <TableHead className="">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="">
+                {branchServices.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
+                      No services in the catalog yet — create your first service to start booking.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  branchServices.map((srv) => {
+                  return (
+                    <TableRow key={srv.id} className="hover:bg-muted/40">
+                      <TableCell className=" font-medium text-foreground flex items-center space-x-2">
+                        <Scissors className="w-3.5 h-3.5 text-foreground" />
+                        <span>{srv.name}</span>
+                      </TableCell>
+                      <TableCell className=" text-muted-foreground">{srv.category}</TableCell>
+                      <TableCell className=" text-foreground font-medium">{srv.priceEtb.toLocaleString()} ETB</TableCell>
+                      <TableCell className=" text-muted-foreground">{srv.durationMinutes} mins</TableCell>
+                      <TableCell className=" text-foreground font-medium">{srv.commissionValue}% Rate</TableCell>
+                      <TableCell className="">
+                        <div className="flex items-center space-x-1">
+                          <Button onClick={() => setEditingEntity({ type: 'service', data: srv })} className="p-1 rounded-md bg-primary text-white hover:bg-primary/80">
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button onClick={() => setConfirmDelete({ type: 'service', id: srv.id, name: srv.name })} className="p-1 rounded-md bg-red-600 text-white hover:bg-red-700">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: INVENTORY */}
+      {adminTab === 'inventory' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="section-title">Branch Stock & Auto-Deduction Inventory</h3>
+              <p className="text-sm text-muted-foreground">
+                Stock decrements automatically upon completing visit sessions. Reorder alerts trigger when threshold is reached.
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowAddInventoryModal(true)}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Stock Item</span>
+            </Button>
+          </div>
+
+          {/* Low Stock Alert Banner */}
+          {lowStockInventory.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3.5 dark:bg-amber-950/40 dark:border-amber-900">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 dark:bg-amber-900/60 dark:text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-semibold text-sm text-amber-900 dark:text-amber-400">
+                      {lowStockInventory.length} item{lowStockInventory.length > 1 ? 's' : ''} below reorder threshold
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {lowStockInventory.map((item) => (
+                        <span
+                          key={item.id}
+                          className="px-2.5 py-0.5 bg-white border border-amber-200 rounded-md text-xs font-medium text-amber-900 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300"
+                        >
+                          {item.name}: <span className="font-mono">{item.currentStock} {item.unit}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => lowStockInventory.forEach((i) => onUpdateInventoryStock(i.id, 50))}
+                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm rounded-md cursor-pointer shrink-0"
+                >
+                  Restock All (+50)
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-x-auto bg-card border border-border rounded-md font-sans">
+            <Table className="w-full text-left text-sm text-foreground">
+              <TableHeader className="">
+                <TableRow>
+                  <TableHead className="px-4 py-3.5">Item & SKU</TableHead>
+                  <TableHead className="px-4 py-3.5 text-center">Unit</TableHead>
+                  <TableHead className="px-4 py-3.5 text-center">In Stock</TableHead>
+                  <TableHead className="px-4 py-3.5 text-center">Reorder Level</TableHead>
+                  <TableHead className="px-4 py-3.5 text-right">Unit Cost</TableHead>
+                  <TableHead className="px-4 py-3.5 text-center">Status</TableHead>
+                  <TableHead className="px-4 py-3.5 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="">
+                {branchInventory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-14 text-center text-muted-foreground text-sm">
+                      <Package className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm font-medium text-foreground">No stock items yet</p>
+                      <p className="text-xs text-muted-foreground mt-1 mb-4">Add consumables to enable auto-deduction on checkouts.</p>
+                      <Button
+                        onClick={() => setShowAddInventoryModal(true)}
+                        className="px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span className="ml-1.5">Add Stock Item</span>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  branchInventory.map((item) => {
+                    const isLow = item.currentStock <= item.reorderLevel;
+                    const isOut = item.currentStock <= 0;
+                    return (
+                      <TableRow key={item.id} className={`hover:bg-muted/40 border-b border-border/50 ${isLow ? 'bg-amber-50/40 dark:bg-amber-950/20' : ''}`}>
+                        <TableCell className="px-4 py-3.5 font-medium text-foreground/90">
+                          <div className="flex items-center space-x-2">
+                            <Package className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span>{item.name}</span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">SKU: {item.sku}</div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5 text-center font-mono text-muted-foreground">{item.unit}</TableCell>
+                        <TableCell className="px-4 py-3.5 text-center">
+                          <span className={`font-mono font-semibold text-sm ${isOut ? 'text-red-600' : isLow ? 'text-amber-600 dark:text-amber-400' : 'text-foreground/90'}`}>
+                            {item.currentStock}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5 text-center font-mono text-muted-foreground">{item.reorderLevel}</TableCell>
+                        <TableCell className="px-4 py-3.5 text-right font-mono text-muted-foreground">{item.unitCostEtb.toLocaleString()} ETB</TableCell>
+                        <TableCell className="px-4 py-3.5 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                            isOut
+                              ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900'
+                              : isLow
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
+                          }`}>
+                            {isOut ? (
+                              <><AlertTriangle className="w-3 h-3" />Out of Stock</>
+                            ) : isLow ? (
+                              <><AlertTriangle className="w-3 h-3" />Low</>
+                            ) : (
+                              'In Stock'
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <div className="flex items-center justify-end space-x-1.5">
+                            <Button
+                              onClick={() => onUpdateInventoryStock(item.id, 50)}
+                              className="px-2.5 py-1.5 bg-muted hover:bg-muted text-foreground text-xs font-semibold rounded-md border border-border cursor-pointer"
+                            >
+                              + Restock 50
+                            </Button>
+                            <Button
+                              onClick={() => { setUseStockItem(item); setUseStockQty(1); }}
+                              className="px-2.5 py-1.5 bg-foreground text-background hover:bg-foreground/80 text-xs font-semibold rounded-md cursor-pointer"
+                              title="Deduct stock used"
+                            >
+                              <Minus className="w-3 h-3" /> Use
+                            </Button>
+                            <Button
+                              onClick={() => setEditingEntity({ type: 'inventory', data: item })}
+                              className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/80 transition-colors"
+                              title="Edit Item"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              onClick={() => setConfirmDelete({ type: 'inventory', id: item.id, name: item.name })}
+                              className="p-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                              title="Deactivate Item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
       {/* TAB 7: REPORTS & ANALYTICS */}
-      {activeTab === 'reports' && (
+      {adminTab === 'reports' && (
         <ReportsDashboard
           company={company}
           branches={branches}
-          businessUnits={businessUnits}
           staffList={staffList}
           services={services}
           visitSessions={visitSessions}
@@ -1173,133 +1106,155 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
           expenses={expenses}
         />
       )}
-      {activeTab === 'financials' && (
+      {adminTab === 'financials' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-sans">
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider">Total Gross Sales</div>
-              <div className="text-2xl font-serif font-bold text-foreground mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border border border-border rounded-md overflow-hidden font-sans">
+            <div className="bg-muted/30 p-5">
+              <div className="flex items-center justify-between">
+                <div className="kpi-label">Total Gross Sales</div>
+                <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                  <TrendingUp className="size-3.5" />
+                </div>
+              </div>
+              <div className="kpi-value mt-1">
                 {totalCompletedRevenueEtb.toLocaleString()} ETB
               </div>
             </div>
 
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider">Total Operating Expenses</div>
-              <div className="text-2xl font-serif font-bold text-foreground mt-2">
+            <div className="bg-muted/30 p-5">
+              <div className="flex items-center justify-between">
+                <div className="kpi-label">Total Operating Expenses</div>
+                <div className="w-7 h-7 rounded-md bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900">
+                  <AlertTriangle className="size-3.5" />
+                </div>
+              </div>
+              <div className="kpi-value mt-1">
                 {totalExpensesEtb.toLocaleString()} ETB
               </div>
             </div>
 
-            <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-              <div className="text-muted-foreground text-xs font-bold uppercase tracking-wider">Net Profit (Sales - Expenses)</div>
-              <div className="text-2xl font-serif font-bold text-foreground mt-2">
+            <div className="bg-muted/30 p-5">
+              <div className="flex items-center justify-between">
+                <div className="kpi-label">Net Profit (Sales - Expenses)</div>
+                <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900">
+                  <CheckCircle className="size-3.5" />
+                </div>
+              </div>
+              <div className="kpi-value mt-1">
                 {(totalCompletedRevenueEtb - totalExpensesEtb).toLocaleString()} ETB
               </div>
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="bg-card border border-border rounded-md p-6  space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h4 className="text-lg font-serif font-bold text-foreground">Operating & Recurring Expense Ledger</h4>
-                <p className="text-xs text-muted-foreground">
-                  Track regular expenses and configure automated recurring billing triggers (monthly rent, software licensing, utility retainers).
-                </p>
+                <h4 className="section-title">Operating & Recurring Expense Ledger</h4>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <Button
                   onClick={handleRunRecurringExpensesTrigger}
-                  className="flex items-center space-x-1.5 px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold rounded-full cursor-pointer transition-all"
+                  className="flex items-center space-x-1.5 px-3.5 py-2 bg-muted hover:bg-muted text-foreground border border-border text-sm font-semibold rounded-md cursor-pointer transition-colors"
                   title="Simulate automated creation trigger for recurring schedules"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-purple-700" />
+                  <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Run Recurring Trigger Check</span>
-                </button>
+                </Button>
 
-                <button
+                <Button
                   onClick={() => setShowAddExpenseModal(true)}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-bold rounded-full shadow-xs cursor-pointer"
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Record Expense</span>
-                </button>
+                </Button>
               </div>
             </div>
 
             <div className="overflow-x-auto font-sans">
-              <table className="w-full text-left text-xs text-foreground">
-                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3 rounded-l-xl">Description</th>
-                    <th className="px-4 py-3">Category</th>
-                    <th className="px-4 py-3">Amount (ETB)</th>
-                    <th className="px-4 py-3">Payment Method</th>
-                    <th className="px-4 py-3">Recurrence Schedule</th>
-                    <th className="px-4 py-3">Recorded By</th>
-                    <th className="px-4 py-3 rounded-r-xl">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#efe8d9]">
-                  {companyExpenses.map((exp) => (
-                    <tr key={exp.id} className="hover:bg-muted/60">
-                      <td className="px-4 py-3 font-semibold text-foreground">
+              <Table className="w-full text-left text-sm text-foreground">
+                <TableHeader className="">
+                  <TableRow className="border-b border-border">
+                    <TableHead className="pb-3">Description</TableHead>
+                    <TableHead className="pb-3">Category</TableHead>
+                    <TableHead className="pb-3">Amount (ETB)</TableHead>
+                    <TableHead className="pb-3">Payment Method</TableHead>
+                    <TableHead className="pb-3">Recurrence Schedule</TableHead>
+                    <TableHead className="pb-3">Recorded By</TableHead>
+                    <TableHead className="pb-3">Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="">
+                  {branchExpenses.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-14 text-center text-muted-foreground text-sm">
+                        No expenses recorded yet — record your first operating expense above.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    branchExpenses.map((exp) => (
+                    <TableRow key={exp.id} className="hover:bg-muted/40 border-b border-border/50">
+                      <TableCell className="px-3.5 py-3.5 font-medium text-foreground/90">
                         <div className="flex items-center space-x-1.5">
-                          {exp.isRecurring && <Repeat className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />}
+                          {exp.isRecurring && <Repeat className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
                           <span>{exp.description}</span>
                         </div>
-                      </td>
-                      <td className="px-4 py-3 uppercase text-[10px] text-foreground font-bold">{exp.category}</td>
-                      <td className="px-4 py-3 text-foreground font-bold">{exp.amountEtb.toLocaleString()} ETB</td>
-                      <td className="px-4 py-3 uppercase text-muted-foreground">{exp.paymentMethod}</td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell className="px-3.5 py-3.5 uppercase text-[10px] text-muted-foreground/90 font-medium">{exp.category}</TableCell>
+                      <TableCell className="px-3.5 py-3.5 text-muted-foreground font-semibold">{exp.amountEtb.toLocaleString()} ETB</TableCell>
+                      <TableCell className="px-3.5 py-3.5 uppercase text-muted-foreground/90">{exp.paymentMethod}</TableCell>
+                      <TableCell className="px-3.5 py-3.5">
                         {exp.isRecurring ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                          <span className="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border-border">
                             <Repeat className="w-3 h-3" />
                             <span className="capitalize">{exp.recurrenceFrequency} (Next: {exp.nextDueDate || 'Pending'})</span>
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-[10px]">One-off</span>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{exp.recordedBy}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{exp.date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </TableCell>
+                      <TableCell className="px-3.5 py-3.5 text-muted-foreground/90">{exp.recordedBy}</TableCell>
+                      <TableCell className="px-3.5 py-3.5 text-muted-foreground/90">{exp.date}</TableCell>
+                    </TableRow>
+                  ))
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>
       )}
 
       {/* TAB 8: SECURITY AUDIT */}
-      {activeTab === 'audit' && (
+      {adminTab === 'audit' && (
         <div className="space-y-6 font-sans">
-          <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="bg-card border border-border rounded-md p-6  space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-5 h-5 text-foreground" />
-                  <h3 className="text-lg font-serif font-bold text-foreground">Security Audit Trail & Sensitive Action Log</h3>
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <h3 className="section-title">Security Audit Trail & Sensitive Action Log</h3>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Immutable security record capturing inventory adjustments, staff commission edits, payment overrides, and tenant system updates.
                 </p>
               </div>
 
-              <button
+              <Button
                 onClick={handleExportSecurityAuditCsv}
-                className="flex items-center space-x-2 px-4 py-2.5 bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-bold rounded-full cursor-pointer shadow-sm self-start md:self-auto"
+                className="flex items-center space-x-2 px-4 py-2.5 bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md cursor-pointer self-start md:self-auto"
               >
                 <Download className="w-4 h-4" />
                 <span>Export Audit CSV</span>
-              </button>
+              </Button>
             </div>
 
             {/* Filter and Search Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="text-muted-foreground font-semibold mr-1">Action Type:</span>
                 {[
                   { id: 'all', label: 'All Actions' },
@@ -1308,291 +1263,242 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   { id: 'payment_edit', label: 'Payments' },
                   { id: 'expense_added', label: 'Expenses' },
                 ].map((type) => (
-                  <button
+                  <Button
                     key={type.id}
                     onClick={() => setAuditFilterType(type.id)}
-                    className={`px-3 py-1 rounded-full font-bold text-[11px] cursor-pointer transition-all ${
+                    className={`px-3 h-9 text-xs font-medium rounded-md cursor-pointer transition-colors ${
                       auditFilterType === type.id
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted'
+                        ? 'bg-foreground text-background'
+                        : 'bg-muted text-muted-foreground hover:bg-border'
                     }`}
                   >
                     {type.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
 
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
+                <Input
                   type="text"
                   placeholder="Search logs by staff or keyword..."
                   value={auditSearchQuery}
                   onChange={(e) => setAuditSearchQuery(e.target.value)}
-                  className="bg-muted border border-border text-foreground text-xs rounded-xl pl-8 pr-3 py-1.5 outline-none focus:border-primary w-full sm:w-64"
+                  className="bg-muted border border-border text-foreground text-sm rounded-md pl-8 pr-3 py-1.5 outline-none focus:border-primary w-full sm:w-64"
                 />
               </div>
             </div>
 
             {/* Audit Log Table */}
-            <div className="overflow-x-auto bg-card rounded-2xl border border-border">
-              <table className="w-full text-left text-xs text-foreground">
-                <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3 rounded-l-xl">Timestamp</th>
-                    <th className="px-4 py-3">Action Type</th>
-                    <th className="px-4 py-3">Description</th>
-                    <th className="px-4 py-3">Performed By</th>
-                    <th className="px-4 py-3">Details / Reference</th>
-                    <th className="px-4 py-3 rounded-r-xl">IP Address</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#efe8d9]">
-                  {auditLogs
-                    .filter((log) => {
-                      if (log.companyId !== company.id) return false;
-                      if (auditFilterType !== 'all' && log.actionType !== auditFilterType) return false;
-                      if (auditSearchQuery) {
-                        const q = auditSearchQuery.toLowerCase();
-                        return (
-                          log.description.toLowerCase().includes(q) ||
-                          log.performedBy.toLowerCase().includes(q) ||
-                          (log.details && log.details.toLowerCase().includes(q))
-                        );
-                      }
-                      return true;
-                    })
-                    .map((log) => {
+            <div className="overflow-x-auto bg-card rounded-md border border-border">
+              <Table className="w-full text-left text-sm text-foreground">
+                <TableHeader className="">
+                  <TableRow>
+                    <TableHead className="">Timestamp</TableHead>
+                    <TableHead className="">Action Type</TableHead>
+                    <TableHead className="">Description</TableHead>
+                    <TableHead className="">Performed By</TableHead>
+                    <TableHead className="">Details / Reference</TableHead>
+                    <TableHead className="">IP Address</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="">
+                  {filteredAuditLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
+                        No audit events match the current filters.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredAuditLogs.map((log) => {
                       const getBadgeColor = (type: string) => {
                         switch (type) {
                           case 'inventory_adjustment':
-                            return 'bg-muted text-foreground border-border';
+                            return 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-900';
                           case 'commission_change':
-                            return 'bg-blue-50 text-blue-800 border-blue-200';
+                            return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900';
                           case 'payment_edit':
-                            return 'bg-muted text-foreground border-border';
+                            return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900';
                           case 'expense_added':
-                            return 'bg-purple-50 text-purple-800 border-purple-200';
+                            return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900';
                           default:
                             return 'bg-muted text-muted-foreground border-border';
                         }
                       };
 
                       return (
-                        <tr key={log.id} className="hover:bg-muted/60">
-                          <td className="px-4 py-3 text-muted-foreground font-mono whitespace-nowrap">
+                        <TableRow key={log.id} className="hover:bg-muted/40">
+                          <TableCell className=" text-muted-foreground font-mono whitespace-nowrap">
                             {new Date(log.timestamp).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3">
+                          </TableCell>
+                          <TableCell className="">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getBadgeColor(
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wider ${getBadgeColor(
                                 log.actionType
                               )}`}
                             >
                               {log.actionType.replace('_', ' ')}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-foreground">{log.description}</td>
-                          <td className="px-4 py-3 text-foreground font-bold">{log.performedBy}</td>
-                          <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{log.details || '-'}</td>
-                          <td className="px-4 py-3 text-muted-foreground font-mono text-[10px]">
+                          </TableCell>
+                          <TableCell className=" font-semibold text-foreground">{log.description}</TableCell>
+                          <TableCell className=" text-foreground font-medium">{log.performedBy}</TableCell>
+                          <TableCell className=" text-muted-foreground max-w-xs truncate">{log.details || '-'}</TableCell>
+                          <TableCell className=" text-muted-foreground font-mono text-[10px]">
                             {log.ipAddress || '197.156.102.88'}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
-                    })}
-                </tbody>
-              </table>
+                    })
+                    )}
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>
       )}
 
       {/* TAB 9: USER MANAGEMENT */}
-      {activeTab === 'users' && (
+      {adminTab === 'users' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-serif font-bold text-foreground">User Management</h3>
-              <p className="text-xs text-muted-foreground">
+              <h3 className="section-title">User Management</h3>
+              <p className="text-sm text-muted-foreground">
                 Manage system users, roles, and access permissions for this tenant.
               </p>
             </div>
-            <button
+            <Button
               onClick={() => setShowAddUserModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-xs rounded-full cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add User</span>
-            </button>
+            </Button>
           </div>
 
-          <div className="overflow-x-auto bg-card border border-border rounded-3xl p-5 shadow-sm font-sans">
-            <table className="w-full text-left text-xs text-foreground">
-              <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-                <tr>
-                  <th className="px-4 py-3 rounded-l-xl">Name</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Last Login</th>
-                  <th className="px-4 py-3 rounded-r-xl">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#efe8d9]">
-                {users.filter((u) => company.id === '' || u.companyId === company.id).map((usr) => (
-                  <tr key={usr.id} className="hover:bg-muted/60">
-                    <td className="px-4 py-3 font-bold text-foreground">{usr.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{usr.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        usr.role === 'super_admin' ? 'bg-purple-50 text-purple-800 border border-purple-200' :
-                        usr.role === 'tenant_manager' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
-                        usr.role === 'receptionist' ? 'bg-muted text-foreground border border-border' :
-                        'bg-muted text-muted-foreground border border-border'
+          <div className="overflow-x-auto bg-card border border-border rounded-md p-5  font-sans">
+            <Table className="w-full text-left text-sm text-foreground">
+              <TableHeader className="">
+                <TableRow>
+                  <TableHead className="">Name</TableHead>
+                  <TableHead className="">Email</TableHead>
+                  <TableHead className="">Role</TableHead>
+                  <TableHead className="">Status</TableHead>
+                  <TableHead className="">Last Login</TableHead>
+                  <TableHead className="">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="">
+                {users.filter((u) => company.id === '' || u.companyId === company.id).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
+                      No users yet — invite your first user to collaborate.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.filter((u) => company.id === '' || u.companyId === company.id).map((usr) => (
+                  <TableRow key={usr.id} className="hover:bg-muted/40">
+                    <TableCell className=" font-medium text-foreground">{usr.name}</TableCell>
+                    <TableCell className=" text-muted-foreground">{usr.email}</TableCell>
+                    <TableCell className="">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        usr.role === 'super_admin' ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900' :
+                        usr.role === 'tenant_manager' ? 'bg-primary/10 text-primary border-primary/20' :
+                        usr.role === 'receptionist' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900' :
+                        'bg-muted text-muted-foreground border-border'
                       }`}>
-                        {usr.role}
+                        {usr.role === 'tenant_manager' ? 'Manager' : usr.role === 'super_admin' ? 'Super Admin' : usr.role}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        usr.isActive ? 'bg-muted text-foreground border border-border' : 'bg-red-50 text-red-800 border border-red-200'
+                    </TableCell>
+                    <TableCell className="">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        usr.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900' : 'bg-red-50 text-red-800 border-red-200'
                       }`}>
                         {usr.isActive ? 'Active' : 'Disabled'}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{usr.lastLoginAt ? new Date(usr.lastLoginAt).toLocaleDateString() : 'Never'}</td>
-                    <td className="px-4 py-3">
-                      <button
+                    </TableCell>
+                    <TableCell className=" text-muted-foreground">{usr.lastLoginAt ? new Date(usr.lastLoginAt).toLocaleDateString() : 'Never'}</TableCell>
+                    <TableCell className="">
+                      <Button
                         onClick={() => setEditingEntity({ type: 'user', data: usr })}
-                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/80 transition-colors"
                         title="Edit User"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
 
       {/* MODAL: ADD BRANCH */}
       {showAddBranchModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Add New Branch</h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 className="section-title">Add New Branch</h3>
             <form onSubmit={handleCreateBranch} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Branch Name</label>
-                <input
+                <label className="block text-sm font-semibold text-foreground mb-1">Branch Name</label>
+                <Input
                   type="text"
                   required
                   placeholder="e.g. Kazanchis Executive Branch"
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                  className="w-full bg-background border-input text-foreground"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">City</label>
-                <select
+                <label className="block text-sm font-semibold text-foreground mb-1">City</label>
+                <Select
                   value={branchCity}
-                  onChange={(e) => setBranchCity(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                  onValueChange={(v) => setBranchCity(v)}
                 >
-                  <option value="Addis Ababa">Addis Ababa</option>
-                  <option value="Hawassa">Hawassa</option>
-                  <option value="Adama">Adama</option>
-                  <option value="Bahir Dar">Bahir Dar</option>
-                  <option value="Dire Dawa">Dire Dawa</option>
-                </select>
+                  <SelectTrigger className="w-full bg-background border-input text-foreground">
+                    <SelectValue placeholder="Select city" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Addis Ababa">Addis Ababa</SelectItem>
+                    <SelectItem value="Hawassa">Hawassa</SelectItem>
+                    <SelectItem value="Adama">Adama</SelectItem>
+                    <SelectItem value="Bahir Dar">Bahir Dar</SelectItem>
+                    <SelectItem value="Dire Dawa">Dire Dawa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1">Daily Expense Limit (ETB)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 2000 — daily cap for receptionist expenses (0 = unlimited)"
+                  value={branchExpenseLimit}
+                  onChange={(e) => setBranchExpenseLimit(e.target.value)}
+                  className="w-full bg-background border-input text-foreground"
+                />
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowAddBranchModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md"
                 >
                   Save Branch
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD BUSINESS UNIT */}
-      {showAddUnitModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Add Business Unit</h3>
-            <form onSubmit={handleCreateUnit} className="space-y-3 font-sans">
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Unit Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Executive Moroccan Hammam"
-                  value={unitName}
-                  onChange={(e) => setUnitName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Unit Type</label>
-                <select
-                  value={unitType}
-                  onChange={(e) => setUnitType(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                >
-                  <option value="mens_salon">Men's Salon</option>
-                  <option value="womens_salon">Women's Salon</option>
-                  <option value="spa_center">Spa Center</option>
-                  <option value="massage_center">Massage Center</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Branch</label>
-                <select
-                  value={unitBranchId}
-                  onChange={(e) => setUnitBranchId(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                >
-                  {companyBranches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setShowAddUnitModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
-                >
-                  Create Unit
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1601,74 +1507,142 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD STAFF */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Add Staff Member</h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 className="section-title">Add Staff Member</h3>
             <form onSubmit={handleCreateStaff} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Full Name</label>
-                <input
+                <label className="block text-sm font-semibold text-foreground mb-1">Full Name</label>
+                <Input
                   type="text"
                   required
                   placeholder="e.g. Solomon Kassa"
                   value={staffName}
                   onChange={(e) => setStaffName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                  className="w-full bg-background border-input text-foreground"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Phone Number</label>
-                <input
+                <label className="block text-sm font-semibold text-foreground mb-1">Phone Number</label>
+                <Input
                   type="text"
                   placeholder="+251 91 222 3333"
                   value={staffPhone}
                   onChange={(e) => setStaffPhone(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                  className="w-full bg-background border-input text-foreground"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Role</label>
-                  <select
+                  <label className="block text-sm font-semibold text-foreground mb-1">Role</label>
+                  <Select
                     value={staffRole}
-                    onChange={(e) => setStaffRole(e.target.value)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    onValueChange={(v) => setStaffRole(v)}
                   >
-                    <option value="barber">Barber</option>
-                    <option value="hairstylist">Hairstylist</option>
-                    <option value="masseuse">Masseuse</option>
-                    <option value="esthetician">Esthetician</option>
-                    <option value="receptionist">Receptionist</option>
-                  </select>
+                    <SelectTrigger className="w-full bg-background border-input text-foreground">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="barber">Barber</SelectItem>
+                      <SelectItem value="hairstylist">Hairstylist</SelectItem>
+                      <SelectItem value="masseuse">Masseuse</SelectItem>
+                      <SelectItem value="esthetician">Esthetician</SelectItem>
+                      <SelectItem value="receptionist">Receptionist</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Commission (%)</label>
-                  <input
+                  <label className="block text-sm font-semibold text-foreground mb-1">Commission (%)</label>
+                  <Input
                     type="number"
                     value={staffCommission}
                     onChange={(e) => setStaffCommission(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
               </div>
 
+              {/* Commission Rule */}
+              <div className="border-t border-border pt-3 space-y-3">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={staffRuleEnabled}
+                    onChange={(e) => setStaffRuleEnabled(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm font-semibold text-foreground">Custom commission rule</span>
+                </label>
+                {staffRuleEnabled && (
+                  <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1">Category</label>
+                <Input
+                  type="text"
+                  required
+                  placeholder="e.g. Hair & Grooming, Spa & Bath, Nails"
+                  value={srvCategory}
+                  onChange={(e) => setSrvCategory(e.target.value)}
+                  className="w-full bg-background border-input text-foreground"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-semibold text-foreground mb-1">Rule Type</label>
+                        <Select value={staffRuleType} onValueChange={(v) => setStaffRuleType(v as any)}>
+                          <SelectTrigger className="w-full bg-background border-input text-foreground">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percentage">Percentage (%)</SelectItem>
+                            <SelectItem value="fixed_amount">Fixed Amount (ETB)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-foreground mb-1">
+                          {staffRuleType === 'percentage' ? 'Rate (%)' : 'Amount (ETB)'}
+                        </label>
+                        <Input
+                          type="number"
+                          required
+                          value={staffRuleValue}
+                          onChange={(e) => setStaffRuleValue(Number(e.target.value))}
+                          className="w-full bg-background border-input text-foreground"
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={staffRuleActive}
+                        onChange={(e) => setStaffRuleActive(e.target.checked)}
+                        className="accent-primary"
+                      />
+                      <span className="text-sm text-muted-foreground">Rule active immediately</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowAddStaffModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md"
                 >
                   Save Staff Member
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1677,58 +1651,58 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD SERVICE */}
       {showAddServiceModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Create New Service</h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 className="section-title">Create New Service</h3>
             <form onSubmit={handleCreateService} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Service Title</label>
-                <input
+                <label className="block text-sm font-semibold text-foreground mb-1">Service Title</label>
+                <Input
                   type="text"
                   required
                   placeholder="e.g. Hot Stone Full-Body Massage"
                   value={srvName}
                   onChange={(e) => setSrvName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                  className="w-full bg-background border-input text-foreground"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Price (ETB)</label>
-                  <input
+                  <label className="block text-sm font-semibold text-foreground mb-1">Price (ETB)</label>
+                  <Input
                     type="number"
                     value={srvPrice}
                     onChange={(e) => setSrvPrice(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Duration (Mins)</label>
-                  <input
+                  <label className="block text-sm font-semibold text-foreground mb-1">Duration (Mins)</label>
+                  <Input
                     type="number"
                     value={srvDuration}
                     onChange={(e) => setSrvDuration(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowAddServiceModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md"
                 >
                   Publish Service
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1737,242 +1711,198 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD INVENTORY */}
       {showAddInventoryModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Add Inventory Stock Item</h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 className="section-title">Add Inventory Stock Item</h3>
             <form onSubmit={handleCreateInventory} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Item Name</label>
-                <input
+                <label className="block text-sm font-semibold text-foreground mb-1">Item Name</label>
+                <Input
                   type="text"
                   required
                   placeholder="e.g. Organic Eucalyptus Massage Oil"
                   value={invName}
                   onChange={(e) => setInvName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                  className="w-full bg-background border-input text-foreground"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Unit</label>
-                  <input
+                  <label className="block text-sm font-semibold text-foreground mb-1">Unit</label>
+                  <Input
                     type="text"
                     placeholder="ml / pcs"
                     value={invUnit}
                     onChange={(e) => setInvUnit(e.target.value)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Initial Stock</label>
-                  <input
+                  <label className="block text-sm font-semibold text-foreground mb-1">Initial Stock</label>
+                  <Input
                     type="number"
                     value={invStock}
                     onChange={(e) => setInvStock(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Reorder Level</label>
-                  <input
+                  <label className="block text-sm font-semibold text-foreground mb-1">Reorder Level</label>
+                  <Input
                     type="number"
                     value={invReorder}
                     onChange={(e) => setInvReorder(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowAddInventoryModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md"
                 >
                   Save Stock Item
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL: CONFIGURE COMMISSION RULE */}
-      {showCommissionRuleModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Configure Commission Rule</h3>
-            <p className="text-xs text-muted-foreground">
-              Set custom payout rates per individual staff member or per service offering.
+      {/* MODAL: USE STOCK (DEDUCTION) */}
+      {useStockItem && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="section-title">Use Stock</h3>
+            <p className="text-sm text-muted-foreground">
+              Record stock consumed for <span className="font-medium text-foreground">{useStockItem.name}</span> (SKU: {useStockItem.sku}).
+              Current stock: <span className="font-mono font-medium text-foreground">{useStockItem.currentStock} {useStockItem.unit}</span>
             </p>
 
-            <form onSubmit={handleSaveRuleForm} className="space-y-3 font-sans">
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Target Scope</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRuleTargetType('staff');
-                      setRuleTargetId(companyStaff[0]?.id || '');
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition ${
-                      ruleTargetType === 'staff'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground border border-border'
-                    }`}
-                  >
-                    Per Staff Member
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRuleTargetType('service');
-                      setRuleTargetId(companyServices[0]?.id || '');
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition ${
-                      ruleTargetType === 'service'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground border border-border'
-                    }`}
-                  >
-                    Per Service
-                  </button>
-                </div>
-              </div>
+            <div>
+              <label className="block text-sm font-semibold text-foreground mb-1">Quantity Used ({useStockItem.unit})</label>
+              <Input
+                type="number"
+                min={1}
+                max={useStockItem.currentStock}
+                value={useStockQty}
+                onChange={(e) => setUseStockQty(Number(e.target.value))}
+                className="w-full bg-background border-input text-foreground font-mono"
+              />
+              {useStockQty > useStockItem.currentStock && (
+                <p className="text-xs text-red-600 mt-1">Quantity exceeds current stock ({useStockItem.currentStock}).</p>
+              )}
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">
-                  Select {ruleTargetType === 'staff' ? 'Staff Member' : 'Service'}
-                </label>
-                <select
-                  value={ruleTargetId}
-                  onChange={(e) => setRuleTargetId(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                >
-                  {ruleTargetType === 'staff'
-                    ? companyStaff.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.role})
-                        </option>
-                      ))
-                    : companyServices.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.priceEtb} ETB)
-                        </option>
-                      ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Rule Type</label>
-                  <select
-                    value={ruleType}
-                    onChange={(e) => setRuleType(e.target.value as any)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                  >
-                    <option value="percentage">Percentage (%)</option>
-                    <option value="fixed_amount">Fixed Amount (ETB)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">
-                    {ruleType === 'percentage' ? 'Percentage Rate (%)' : 'Fixed Amount (ETB)'}
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={ruleValue}
-                    onChange={(e) => setRuleValue(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+            <div className="flex gap-2">
+              {[1, 2, 5, 10].map((q) => (
+                <Button
+                  key={q}
                   type="button"
-                  onClick={() => setShowCommissionRuleModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
+                  onClick={() => setUseStockQty(q)}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-semibold border ${
+                    useStockQty === q ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground border-border'
+                  }`}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
-                >
-                  Save Commission Rule
-                </button>
-              </div>
-            </form>
+                  {q} {useStockItem.unit}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-border">
+              <Button
+                type="button"
+                onClick={() => setUseStockItem(null)}
+                className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={useStockQty <= 0 || useStockQty > useStockItem.currentStock}
+                onClick={() => {
+                  onUpdateInventoryStock(useStockItem.id, -useStockQty);
+                  setUseStockItem(null);
+                  setUseStockQty(1);
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-md"
+              >
+                <Minus className="w-3.5 h-3.5" />
+                Deduct {useStockQty} {useStockItem.unit}
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
       {/* MODAL: ADD EXPENSE WITH RECURRING SUPPORT */}
       {showAddExpenseModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans">
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-lg w-full p-6 space-y-4 shadow-xl font-sans">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div>
-                <h3 className="text-lg font-serif font-bold text-foreground">Record Operating Expense</h3>
-                <p className="text-xs text-muted-foreground">Support one-off expenses and automated recurring schedules.</p>
+                <h3 className="section-title">Record Operating Expense</h3>
+                <p className="text-sm text-muted-foreground">Support one-off expenses and automated recurring schedules.</p>
               </div>
-              <button
+              <Button
                 onClick={() => setShowAddExpenseModal(false)}
-                className="text-muted-foreground hover:text-foreground text-sm font-bold"
+                className="text-muted-foreground hover:text-foreground text-sm font-medium"
               >
                 ✕
-              </button>
+              </Button>
             </div>
 
-            <form onSubmit={handleCreateExpenseSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateExpenseSubmit} className="space-y-3 text-sm">
               <div>
                 <label className="block font-semibold text-foreground mb-1">Expense Description</label>
-                <input
+                <Input
                   type="text"
                   required
                   placeholder="e.g. Monthly Commercial Rent - Kazanchis Branch"
                   value={expDescription}
                   onChange={(e) => setExpDescription(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
+                  className="w-full bg-background border-input text-foreground"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-foreground mb-1">Category</label>
-                  <select
+                  <Select
                     value={expCategory}
-                    onChange={(e) => setExpCategory(e.target.value as any)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
+                    onValueChange={(v) => setExpCategory(v as any)}
                   >
-                    <option value="rent">Rent & Facility</option>
-                    <option value="utilities">Utilities & Electricity</option>
-                    <option value="salary">Staff Salaries & Advances</option>
-                    <option value="inventory_purchase">Inventory Supplies</option>
-                    <option value="marketing">Marketing & Ads</option>
-                    <option value="other">Other Overhead</option>
-                  </select>
+                    <SelectTrigger className="w-full bg-background border-input text-foreground">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="rent">Rent & Facility</SelectItem>
+                      <SelectItem value="utilities">Utilities & Electricity</SelectItem>
+                      <SelectItem value="salary">Staff Salaries & Advances</SelectItem>
+                      <SelectItem value="inventory_purchase">Inventory Supplies</SelectItem>
+                      <SelectItem value="marketing">Marketing & Ads</SelectItem>
+                      <SelectItem value="other">Other Overhead</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-foreground mb-1">Amount (ETB)</label>
-                  <input
+                  <Input
                     type="number"
                     required
                     value={expAmount}
                     onChange={(e) => setExpAmount(Number(e.target.value))}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
               </div>
@@ -1980,63 +1910,71 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-foreground mb-1">Payment Method</label>
-                  <select
+                  <Select
                     value={expPaymentMethod}
-                    onChange={(e) => setExpPaymentMethod(e.target.value as any)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
+                    onValueChange={(v) => setExpPaymentMethod(v as any)}
                   >
-                    <option value="cbe_birr">CBE Birr</option>
-                    <option value="telebirr">Telebirr</option>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card / POS</option>
-                  </select>
+                    <SelectTrigger className="w-full bg-background border-input text-foreground">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cbe_birr">CBE Birr</SelectItem>
+                      <SelectItem value="telebirr">Telebirr</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="card">Card / POS</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-foreground mb-1">Recorded By</label>
-                  <input
+                  <Input
                     type="text"
                     value={expRecordedBy}
                     onChange={(e) => setExpRecordedBy(e.target.value)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 outline-none focus:border-primary"
+                    className="w-full bg-background border-input text-foreground"
                   />
                 </div>
               </div>
 
               {/* RECURRENCE TOGGLE */}
-              <div className="p-3.5 bg-purple-50/60 border border-purple-200 rounded-2xl space-y-2.5">
+              <div className="p-3.5 bg-muted border border-border rounded-md space-y-2.5">
                 <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={expIsRecurring}
                     onChange={(e) => setExpIsRecurring(e.target.checked)}
-                    className="rounded text-purple-700 focus:ring-purple-500 w-4 h-4"
+                    className="w-4 h-4 accent-foreground"
                   />
-                  <span className="font-bold text-purple-900">Set as Recurring Expense Schedule</span>
+                  <span className="font-semibold text-foreground">Set as Recurring Expense Schedule</span>
                 </label>
 
                 {expIsRecurring && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-purple-200/80">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border">
                     <div>
-                      <label className="block font-semibold text-purple-900 mb-1">Recurrence Frequency</label>
-                      <select
+                      <label className="block font-semibold text-foreground mb-1">Recurrence Frequency</label>
+                      <Select
                         value={expRecurrenceFreq}
-                        onChange={(e) => setExpRecurrenceFreq(e.target.value as any)}
-                        className="w-full bg-card border border-purple-200 text-purple-950 rounded-xl px-3 py-2 outline-none focus:border-purple-600"
+                        onValueChange={(v) => setExpRecurrenceFreq(v as any)}
                       >
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="quarterly">Quarterly</option>
-                      </select>
+                        <SelectTrigger className="w-full bg-background border-input text-foreground">
+                          <SelectValue placeholder="Select frequency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div>
-                      <label className="block font-semibold text-purple-900 mb-1">Next Due Date</label>
-                      <input
+                      <label className="block font-semibold text-foreground mb-1">Next Due Date</label>
+                      <Input
                         type="date"
                         value={expNextDueDate}
                         onChange={(e) => setExpNextDueDate(e.target.value)}
-                        className="w-full bg-card border border-purple-200 text-purple-950 rounded-xl px-3 py-2 outline-none focus:border-purple-600"
+                        className="w-full"
                       />
                     </div>
                   </div>
@@ -2044,19 +1982,19 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowAddExpenseModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full"
+                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full shadow-md"
+                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md"
                 >
                   Save Expense
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -2065,9 +2003,9 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: ADD USER */}
       {showAddUserModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-serif font-bold text-foreground">Add New User</h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 className="section-title">Add New User</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
               const target = e.target as HTMLFormElement;
@@ -2085,28 +2023,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               setShowAddUserModal(false);
             }} className="space-y-3 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Full Name</label>
-                <input name="name" required className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" />
+                <label className="block text-sm font-semibold text-foreground mb-1">Full Name</label>
+                <Input name="name" required className="w-full" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Email</label>
-                <input name="email" type="email" required className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" />
+                <label className="block text-sm font-semibold text-foreground mb-1">Email</label>
+                <Input name="email" type="email" required className="w-full" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Password</label>
-                <input name="password" type="password" required className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" />
+                <label className="block text-sm font-semibold text-foreground mb-1">Password</label>
+                <Input name="password" type="password" required className="w-full" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Role</label>
-                <select name="role" className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]">
+                <label className="block text-sm font-semibold text-foreground mb-1">Role</label>
+                <select name="role" className="w-full">
                   <option value="tenant_manager">Tenant Manager</option>
                   <option value="receptionist">Receptionist</option>
                   <option value="staff">Staff</option>
                 </select>
               </div>
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full shadow-md">Create User</button>
+                <Button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md">Cancel</Button>
+                <Button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md">Create User</Button>
               </div>
             </form>
           </div>
@@ -2115,18 +2053,32 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
       {/* MODAL: EDIT ENTITY */}
       {editingEntity && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-serif font-bold text-foreground">Edit {editingEntity.type.charAt(0).toUpperCase() + editingEntity.type.slice(1)}</h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-md w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 className="section-title">Edit {editingEntity.type.charAt(0).toUpperCase() + editingEntity.type.slice(1)}</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
               const target = e.target as HTMLFormElement;
               const fd = new FormData(target);
               const data = editingEntity.data;
               if (editingEntity.type === 'branch') {
-                onUpdateBranch?.({ ...data, name: fd.get('name') as string, city: fd.get('city') as string, address: fd.get('address') as string, phone: fd.get('phone') as string });
+                onUpdateBranch?.({ ...data, name: fd.get('name') as string, city: fd.get('city') as string, address: fd.get('address') as string, phone: fd.get('phone') as string, dailyExpenseLimitEtb: Number(fd.get('expenseLimit')) || 0 });
               } else if (editingEntity.type === 'staff') {
-                onUpdateStaff?.({ ...data, name: fd.get('name') as string, phone: fd.get('phone') as string, email: fd.get('email') as string, role: fd.get('role') as any, defaultCommissionPercentage: Number(fd.get('commission')) });
+                const commission = Number(fd.get('commission')) || 0;
+                const updatedStaff = { ...data, name: fd.get('name') as string, phone: fd.get('phone') as string, email: fd.get('email') as string, role: fd.get('role') as any, defaultCommissionPercentage: commission };
+                onUpdateStaff?.(updatedStaff);
+                const existingRule = commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === data.id);
+                onSaveCommissionRule({
+                  id: existingRule?.id || `rule_staff_${Date.now()}`,
+                  companyId: company.id,
+                  targetType: 'staff',
+                  targetId: data.id,
+                  targetName: `${fd.get('name')} (${fd.get('role')})`,
+                  type: (fd.get('ruleType') as any) || 'percentage',
+                  value: Number(fd.get('ruleValue')) || 0,
+                  isActive: fd.get('ruleEnabled') === 'on' && fd.get('ruleActive') === 'on',
+                  updatedAt: new Date().toISOString().split('T')[0],
+                });
               } else if (editingEntity.type === 'service') {
                 onUpdateService?.({ ...data, name: fd.get('name') as string, category: fd.get('category') as string, priceEtb: Number(fd.get('price')), durationMinutes: Number(fd.get('duration')) });
               } else if (editingEntity.type === 'inventory') {
@@ -2137,49 +2089,73 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               setEditingEntity(null);
             }} className="space-y-3 font-sans">
               {editingEntity.type === 'branch' && (<>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">City</label><input name="city" defaultValue={editingEntity.data.city} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Address</label><input name="address" defaultValue={editingEntity.data.address} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Name</label><Input name="name" defaultValue={editingEntity.data.name} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">City</label><Input name="city" defaultValue={editingEntity.data.city} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Address</label><Input name="address" defaultValue={editingEntity.data.address} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Phone</label><Input name="phone" defaultValue={editingEntity.data.phone} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Daily Expense Limit (ETB) — max receptionists can record per day</label><Input name="expenseLimit" type="number" min="0" defaultValue={editingEntity.data.dailyExpenseLimitEtb || 0} className="w-full" /></div>
               </>)}
               {editingEntity.type === 'staff' && (<>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Phone</label><input name="phone" defaultValue={editingEntity.data.phone} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Role</label>
-                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]">
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Name</label><Input name="name" defaultValue={editingEntity.data.name} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Phone</label><Input name="phone" defaultValue={editingEntity.data.phone} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Email</label><Input name="email" defaultValue={editingEntity.data.email} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Role</label>
+                  <select name="role" defaultValue={editingEntity.data.role} className="w-full">
                     <option value="barber">Barber</option><option value="hairstylist">Hairstylist</option><option value="masseuse">Masseuse</option><option value="esthetician">Esthetician</option><option value="receptionist">Receptionist</option><option value="manager">Manager</option>
                   </select>
                 </div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Commission %</label><input name="commission" type="number" defaultValue={editingEntity.data.defaultCommissionPercentage} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Commission %</label><Input name="commission" type="number" defaultValue={editingEntity.data.defaultCommissionPercentage} className="w-full" /></div>
+                <div className="border-t border-border pt-3 space-y-3">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" name="ruleEnabled" defaultChecked={!!commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === editingEntity.data.id)} className="accent-primary" />
+                    <span className="text-sm font-semibold text-foreground">Custom commission rule</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-foreground mb-1">Rule Type</label>
+                      <select name="ruleType" defaultValue={commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === editingEntity.data.id)?.type || 'percentage'} className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm">
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed_amount">Fixed Amount (ETB)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-foreground mb-1">Value</label>
+                      <Input name="ruleValue" type="number" defaultValue={commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === editingEntity.data.id)?.value ?? 30} className="w-full" />
+                    </div>
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" name="ruleActive" defaultChecked={commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === editingEntity.data.id)?.isActive ?? true} className="accent-primary" />
+                    <span className="text-sm text-muted-foreground">Rule active</span>
+                  </label>
+                </div>
               </>)}
               {editingEntity.type === 'service' && (<>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Category</label><input name="category" defaultValue={editingEntity.data.category} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Price (ETB)</label><input name="price" type="number" defaultValue={editingEntity.data.priceEtb} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Duration (mins)</label><input name="duration" type="number" defaultValue={editingEntity.data.durationMinutes} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Name</label><Input name="name" defaultValue={editingEntity.data.name} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Category</label><Input name="category" defaultValue={editingEntity.data.category} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Price (ETB)</label><Input name="price" type="number" defaultValue={editingEntity.data.priceEtb} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Duration (mins)</label><Input name="duration" type="number" defaultValue={editingEntity.data.durationMinutes} className="w-full" /></div>
               </>)}
               {editingEntity.type === 'inventory' && (<>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">SKU</label><input name="sku" defaultValue={editingEntity.data.sku} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Unit</label><input name="unit" defaultValue={editingEntity.data.unit} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Stock</label><input name="stock" type="number" defaultValue={editingEntity.data.currentStock} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Reorder Level</label><input name="reorder" type="number" defaultValue={editingEntity.data.reorderLevel} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Cost per unit (ETB)</label><input name="cost" type="number" defaultValue={editingEntity.data.unitCostEtb} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Name</label><Input name="name" defaultValue={editingEntity.data.name} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">SKU</label><Input name="sku" defaultValue={editingEntity.data.sku} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Unit</label><Input name="unit" defaultValue={editingEntity.data.unit} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Stock</label><Input name="stock" type="number" defaultValue={editingEntity.data.currentStock} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Reorder Level</label><Input name="reorder" type="number" defaultValue={editingEntity.data.reorderLevel} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Cost per unit (ETB)</label><Input name="cost" type="number" defaultValue={editingEntity.data.unitCostEtb} className="w-full" /></div>
               </>)}
               {editingEntity.type === 'user' && (<>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Name</label><input name="name" defaultValue={editingEntity.data.name} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Email</label><input name="email" defaultValue={editingEntity.data.email} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Password (leave blank to keep)</label><input name="password" type="password" className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]" /></div>
-                <div><label className="block text-xs font-semibold text-foreground mb-1">Role</label>
-                  <select name="role" defaultValue={editingEntity.data.role} className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#18181b]">
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Name</label><Input name="name" defaultValue={editingEntity.data.name} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Email</label><Input name="email" defaultValue={editingEntity.data.email} className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Password (leave blank to keep)</label><Input name="password" type="password" className="w-full" /></div>
+                <div><label className="block text-sm font-semibold text-foreground mb-1">Role</label>
+                  <select name="role" defaultValue={editingEntity.data.role} className="w-full">
                     <option value="tenant_manager">Tenant Manager</option><option value="receptionist">Receptionist</option><option value="staff">Staff</option>
                   </select>
                 </div>
               </>)}
               <div className="flex justify-end space-x-2 pt-3 border-t border-border">
-                <button type="button" onClick={() => setEditingEntity(null)} className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full shadow-md">Save Changes</button>
+                <Button type="button" onClick={() => setEditingEntity(null)} className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-md">Cancel</Button>
+                <Button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md">Save Changes</Button>
               </div>
             </form>
           </div>

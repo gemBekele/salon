@@ -14,6 +14,15 @@ export interface AuthUser {
   name: string;
   email: string;
   role: AuthUserRole;
+  pinChanged?: boolean;
+}
+
+/** A staff member shown on the PIN login screen (names only). */
+export interface StaffLoginOption {
+  id: string;
+  name: string;
+  branchId: string;
+  branchName: string;
 }
 
 export type BusinessUnitType =
@@ -56,6 +65,7 @@ export interface Branch {
   phone: string;
   isMainBranch: boolean;
   status: 'active' | 'inactive';
+  dailyExpenseLimitEtb?: number;
 }
 
 export interface BusinessUnit {
@@ -79,7 +89,7 @@ export interface Staff {
   role: 'receptionist' | 'barber' | 'hairstylist' | 'masseuse' | 'esthetician' | 'manager';
   specialties: string[];
   defaultCommissionPercentage: number;
-  status: 'available' | 'busy' | 'off_shift';
+  status: 'available' | 'busy' | 'off_shift' | 'inactive';
   avatarUrl?: string;
 }
 
@@ -125,7 +135,8 @@ export interface SessionServiceItem {
   priceEtb: number;
   durationMinutes: number;
   commissionEarnedEtb: number;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  createdAt?: string;
 }
 
 export type SessionStatus = 'queued' | 'in_progress' | 'completed' | 'cancelled';
@@ -152,6 +163,7 @@ export interface VisitSession {
   startedAt: string;
   completedAt?: string;
   notes?: string;
+  createdAt?: string;
 }
 
 export interface CommissionRule {

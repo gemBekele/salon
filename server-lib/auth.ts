@@ -15,6 +15,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  pinChanged?: boolean;
 }
 
 function jwtSecret(): string {
@@ -112,3 +113,15 @@ export function verifyPassword(password: string, stored: string): boolean {
 
 /** In-memory access token blacklist for logout (resets on restart). */
 export const tokenBlacklist = new Set<string>();
+
+/** A staff PIN is always exactly 4 numeric digits. */
+export function isValidPin(pin: string): boolean {
+  return /^\d{4}$/.test(pin);
+}
+
+/**
+ * Generate the default PIN for a staff member: the universal default code 7788.
+ */
+export function defaultPinForPhone(_phone: string | null | undefined): string {
+  return '7788';
+}

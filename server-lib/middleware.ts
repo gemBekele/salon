@@ -175,6 +175,6 @@ export const mgmtOnly: RequestHandler[] = [
 ];
 export const posOnly: RequestHandler[] = [
   authenticate,
-  requireRoles('super_admin', 'tenant_manager', 'receptionist'),
+  requireRoles('super_admin', 'tenant_manager', 'receptionist', 'staff'),
   rateLimit(180, 60_000),
 ];

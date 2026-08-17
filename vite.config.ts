@@ -12,11 +12,21 @@ export default defineConfig(() => {
       },
     },
     build: {
+      sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks: {
-            recharts: ['recharts'],
-            'react-vendor': ['react', 'react-dom'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) {
+                return 'react-vendor';
+              }
+              if (id.includes('/lucide-react/')) return 'lucide';
+              if (id.includes('/recharts/') || id.includes('/d3-') || id.includes('/victory-') || id.includes('decimal.js')) {
+                return 'recharts';
+              }
+              if (id.includes('/motion/') || id.includes('/framer-motion/')) return 'motion';
+              return 'react-vendor';
+            }
           },
         },
       },

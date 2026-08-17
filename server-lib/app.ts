@@ -11,6 +11,7 @@ import type { SmsService } from './sms';
 import { createReportsRouter } from './reports';
 import { createAuthRouter } from './routes/auth';
 import { createEntitiesRouter } from './routes/entities';
+import { createStaffRouter } from './routes/staff';
 import { createFinanceRouter } from './routes/finance';
 import { createPosRouter } from './routes/pos';
 import { createAdminRouter } from './routes/admin';
@@ -48,6 +49,7 @@ export function createApp(pool: DbPool, opts: AppOptions): express.Express {
   app.use(requestLogger);
 
   app.use('/api/auth', createAuthRouter(pool));
+  app.use('/api/staff', createStaffRouter(pool));
   app.use('/api/reports', createReportsRouter(pool));
   app.use('/api', createEntitiesRouter(pool));
   app.use('/api', createFinanceRouter(pool));

@@ -157,7 +157,12 @@ export function createPosRouter(pool: DbPool, sms: SmsService): Router {
     if (errs.length) return res.status(400).json({ error: errs.join('; ') });
 
     const b = req.body;
-    const id = uid('cust');
+    // Honor a client-supplied id (e.g. an optimistic `cust_<timestamp>`) so the
+    // subsequent session insert can reference it; regenerate on collision.
+    let id = b.id && String(b.id).length <= 50 ? String(b.id) : uid('cust');
+    const [existing] = (await pool.query(`SELECT id FROM customers WHERE id = ?`, [id])) as any;
+    if (existing && existing[0]) id = uid('cust');
+
     await pool.query(`INSERT INTO customers (id, company_id, name, phone, email, notes) VALUES (?,?,?,?,?,?)`,
       [id, b.companyId, b.name, b.phone, b.email || null, b.notes || null]);
     res.json({ success: true, id });
@@ -196,6 +201,20 @@ export function createPosRouter(pool: DbPool, sms: SmsService): Router {
 
     const b = req.body;
     const id = uid('vst');
+
+    // Every service must reference an existing staff member (fk_vss_staff).
+    if (Array.isArray(b.services)) {
+      for (const s of b.services) {
+        if (!s.staffId) {
+          return res.status(400).json({ error: `Service "${s.serviceName || 'Unknown service'}" must have an assigned staff member.` });
+        }
+        const [staffRows] = (await pool.query(`SELECT id FROM staff WHERE id = ?`, [s.staffId])) as any;
+        if (!staffRows[0]) {
+          return res.status(400).json({ error: `Assigned staff member for "${s.serviceName || 'Unknown service'}" does not exist.` });
+        }
+      }
+    }
+
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -258,6 +277,9 @@ export function createPosRouter(pool: DbPool, sms: SmsService): Router {
   router.patch('/visit-sessions/services', asyncHandler(async (req, res) => {
     const { sessionId, service } = req.body;
     if (!sessionId || !service) return res.status(400).json({ error: 'sessionId and service required' });
+    if (!service.staffId) return res.status(400).json({ error: 'Service must have an assigned staff member.' });
+    const [staffRows] = (await pool.query(`SELECT id FROM staff WHERE id = ?`, [service.staffId])) as any;
+    if (!staffRows[0]) return res.status(400).json({ error: 'Assigned staff member does not exist.' });
 
     const [rows] = (await pool.query(`SELECT company_id FROM visit_sessions WHERE id = ?`, [sessionId])) as any;
     const session = rows[0];
@@ -276,6 +298,101 @@ export function createPosRouter(pool: DbPool, sms: SmsService): Router {
     await pool.query(`UPDATE visit_sessions SET subtotal_etb = ?, net_total_etb = subtotal_etb - discount_etb + tax_etb WHERE id = ?`, [subtotal, sessionId]);
 
     res.json({ success: true, id });
+  }));
+
+  // ==========================================================
+  // Queue management: per-service status transitions (staff)
+  // ==========================================================
+  router.patch('/visit-sessions/services/:id/status', asyncHandler(async (req, res) => {
+    const errs = validate(req.body, {
+      status: { required: true, enum: ['in_progress', 'completed'] },
+    });
+    if (errs.length) return res.status(400).json({ error: errs.join('; ') });
+
+    const b = req.body as any;
+    const [rows] = (await pool.query(
+      `SELECT vss.id, vss.visit_session_id, vss.status, vss.staff_id, vss.staff_name, vss.service_name,
+              vs.company_id, vs.branch_id, vs.status AS session_status
+       FROM visit_session_services vss
+       JOIN visit_sessions vs ON vs.id = vss.visit_session_id
+       WHERE vss.id = ?`,
+      [req.params.id]
+    )) as any;
+    const svc = rows[0];
+    if (!svc) return notFound('Service not found');
+    if (!canAccessCompany(req.user!, svc.company_id)) return res.status(403).json({ error: 'Company not found' });
+    if (svc.session_status === 'cancelled') return res.status(409).json({ error: 'Session is cancelled' });
+
+    if (b.status === 'in_progress') {
+      // A client can only be served at one station at a time.
+      const [busy] = (await pool.query(
+        `SELECT id, service_name, staff_name FROM visit_session_services
+         WHERE visit_session_id = ? AND status = 'in_progress' AND id <> ?`,
+        [svc.visit_session_id, svc.id]
+      )) as any;
+      if (busy.length > 0) {
+        return res.status(409).json({
+          error: `Client is already being served: ${busy[0].service_name} (${busy[0].staff_name})`,
+        });
+      }
+      await pool.query(`UPDATE visit_session_services SET status = 'in_progress' WHERE id = ?`, [svc.id]);
+      await pool.query(`UPDATE visit_sessions SET status = 'in_progress' WHERE id = ?`, [svc.visit_session_id]);
+      await sms.dispatch({
+        companyId: svc.company_id, recipientPhone: '', messageType: 'queue_turn_alert',
+        content: `Service "${svc.service_name}" started by ${svc.staff_name}.`,
+      });
+      return res.json({ success: true, status: 'in_progress' });
+    }
+
+    // completed
+    await pool.query(`UPDATE visit_session_services SET status = 'completed' WHERE id = ?`, [svc.id]);
+    const [remaining] = (await pool.query(
+      `SELECT COUNT(*) AS c FROM visit_session_services
+       WHERE visit_session_id = ? AND status IN ('pending', 'in_progress')`,
+      [svc.visit_session_id]
+    )) as any;
+    if (Number(remaining[0]?.c || 0) === 0) {
+      await pool.query(`UPDATE visit_sessions SET status = 'completed' WHERE id = ?`, [svc.visit_session_id]);
+    }
+    return res.json({ success: true, status: 'completed', sessionCompleted: Number(remaining[0]?.c || 0) === 0 });
+  }));
+
+  // Soft-cancel a whole queue entry (receptionist "delete a queue")
+  router.delete('/visit-sessions/:id', asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT id, company_id, branch_id, queue_number, customer_name FROM visit_sessions WHERE id = ?`, [req.params.id])) as any;
+    const s = rows[0];
+    if (!s) return notFound('Session not found');
+    if (!canAccessCompany(req.user!, s.company_id)) return res.status(403).json({ error: 'Company not found' });
+
+    await pool.query(`UPDATE visit_sessions SET status = 'cancelled' WHERE id = ?`, [req.params.id]);
+    await pool.query(`UPDATE visit_session_services SET status = 'cancelled' WHERE visit_session_id = ? AND status <> 'completed'`, [req.params.id]);
+    await pool.query(
+      `INSERT INTO audit_logs (id, company_id, branch_id, action_type, description, performed_by, timestamp) VALUES (?,?,?,?,?,?,NOW())`,
+      [uid('aud'), s.company_id, s.branch_id, 'queue_cancel', `Removed ${s.customer_name} (${s.queue_number}) from queue. Reason: ${req.body?.reason || 'not provided'}`, `Receptionist (${req.user!.name})`]
+    );
+    res.json({ success: true });
+  }));
+
+  // Remove a single service from a queued client
+  router.delete('/visit-sessions/:id/services/:sid', asyncHandler(async (req, res) => {
+    const [rows] = (await pool.query(`SELECT id, company_id, branch_id, queue_number, customer_name FROM visit_sessions WHERE id = ?`, [req.params.id])) as any;
+    const s = rows[0];
+    if (!s) return notFound('Session not found');
+    if (!canAccessCompany(req.user!, s.company_id)) return res.status(403).json({ error: 'Company not found' });
+
+    const [svcRows] = (await pool.query(`SELECT service_name, staff_name FROM visit_session_services WHERE id = ? AND visit_session_id = ?`, [req.params.sid, req.params.id])) as any;
+    const svc = svcRows[0];
+    if (!svc) return notFound('Service not found');
+
+    await pool.query(`DELETE FROM visit_session_services WHERE id = ? AND visit_session_id = ?`, [req.params.sid, req.params.id]);
+    const [svcs] = (await pool.query(`SELECT SUM(price_etb) AS subtotal FROM visit_session_services WHERE visit_session_id = ?`, [req.params.id])) as any;
+    const subtotal = Number(svcs[0]?.subtotal || 0);
+    await pool.query(`UPDATE visit_sessions SET subtotal_etb = ?, net_total_etb = subtotal_etb - discount_etb + tax_etb WHERE id = ?`, [subtotal, req.params.id]);
+    await pool.query(
+      `INSERT INTO audit_logs (id, company_id, branch_id, action_type, description, performed_by, timestamp) VALUES (?,?,?,?,?,?,NOW())`,
+      [uid('aud'), s.company_id, s.branch_id, 'service_remove', `Removed service "${svc.service_name}" (${svc.staff_name}) from ${s.customer_name} (${s.queue_number})`, `Receptionist (${req.user!.name})`]
+    );
+    res.json({ success: true });
   }));
 
   // ==========================================================
@@ -299,9 +416,9 @@ export function createPosRouter(pool: DbPool, sms: SmsService): Router {
         throw e;
       }
 
-      // Idempotence guard: already-completed sessions are never re-processed
+      // Idempotence guard: already-paid sessions are never re-processed
       // (would duplicate commissions and double-deduct inventory/loyalty).
-      if (session.status === 'completed') {
+      if (session.is_paid) {
         await connection.commit();
         return res.json({ success: true, alreadyCompleted: true });
       }

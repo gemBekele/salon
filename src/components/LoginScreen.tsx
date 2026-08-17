@@ -1,34 +1,72 @@
-import React, { useState } from 'react';
-import { Scissors, Mail, Lock, Loader2, Sparkles, ShieldCheck, AlertCircle, Tv } from 'lucide-react';
-import { apiFetch } from '../lib/api';
-import { AuthUser } from '../types';
+import React, { useEffect, useState } from 'react';
+import {
+  Scissors,
+  Loader2,
+  ShieldCheck,
+  AlertCircle,
+  Tv,
+  Users,
+  Mail,
+  Lock,
+  ArrowLeft,
+} from 'lucide-react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Card, CardContent, CardDescription, CardHeader } from './ui/card';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { PinPad } from './PinPad';
+import { AuthUser, StaffLoginOption } from '../types';
+import { cn } from '../lib/utils';
 
 interface LoginScreenProps {
-  onLogin: (user: AuthUser) => void;
+  onLogin: (user: AuthUser, pin?: string) => void;
   onLaunchTv?: () => void;
   onReturnToWebsite?: () => void;
 }
 
+interface StaffLoginGroup {
+  companyId: string;
+  companyName: string;
+  staff: StaffLoginOption[];
+}
+
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, onReturnToWebsite }) => {
-  const [email, setEmail] = useState('admin@gechsalon.et');
-  const [password, setPassword] = useState('Manager123!');
+  const [mode, setMode] = useState<'staff' | 'manager'>('staff');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Protected TV Launch State
+  const [groups, setGroups] = useState<StaffLoginGroup[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [selectedStaff, setSelectedStaff] = useState<StaffLoginOption | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
   const [showTvPinPrompt, setShowTvPinPrompt] = useState(false);
   const [tvPin, setTvPin] = useState('');
   const [tvPinError, setTvPinError] = useState('');
 
+  useEffect(() => {
+    fetch('/api/auth/staff-login-options')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const list = data?.companies ?? [];
+        setGroups(list.filter((g: StaffLoginGroup) => g.staff.length > 0));
+      })
+      .catch(() => setGroups([]))
+      .then(() => setOptionsLoading(false));
+  }, []);
+
   const handleTvPinSubmit = () => {
     if (tvPin.trim() === '7777' || tvPin.trim() === 'Manager123!' || tvPin.trim() === '1234') {
       if (onLaunchTv) onLaunchTv();
+      setShowTvPinPrompt(false);
+      setTvPin('');
     } else {
-      setTvPinError('Invalid TV PIN/Password. Default PIN is 7777.');
+      setTvPinError('Invalid TV PIN. Default PIN is 7777.');
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleManagerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -45,202 +83,298 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
       }
       localStorage.setItem('sserp_token', data.token);
       onLogin(data.user as AuthUser);
-    } catch (err) {
+    } catch {
       setError('Unable to reach the server. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const fill = (em: string, pw: string) => {
-    setEmail(em);
-    setPassword(pw);
-    setError('');
+  const handleStaffPin = async (pin: string) => {
+    if (!selectedStaff) return;
+    setPinError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/staff-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: selectedStaff.id, pin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPinError(data.error || 'Incorrect PIN');
+        return;
+      }
+      localStorage.setItem('sserp_token', data.token);
+      onLogin(data.user as AuthUser, pin);
+    } catch {
+      setPinError('Unable to reach the server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const allStaff = groups.flatMap((g) => g.staff);
+
   return (
-    <div className="min-h-screen bg-muted flex items-center justify-center p-6 font-sans">
-      <div className="w-full max-w-md">
-        {onReturnToWebsite && (
-          <div className="mb-4 text-center">
-            <button
-              onClick={onReturnToWebsite}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-full border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted shadow-sm transition-all"
-            >
-              <span>← Return to Public Barbershop Website</span>
-            </button>
-          </div>
-        )}
-
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg border border-primary/80">
-            <Scissors className="w-8 h-8" />
-          </div>
-          <h1 className="mt-4 text-2xl font-serif font-bold text-foreground">Gech Beauty Salon</h1>
-          <p className="text-xs text-muted-foreground mt-1">Hawassa Salon Management System — Secure Sign In</p>
-        </div>
-
-        <div className="bg-card border border-border rounded-3xl p-7 shadow-sm space-y-5">
-          <div className="flex items-center space-x-2 text-foreground bg-muted border border-border rounded-2xl px-3 py-2 text-xs">
-            <ShieldCheck className="w-4 h-4 shrink-0" />
-            <span>Role-based access control is enabled. Use the demo accounts below.</span>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-foreground mb-1.5">Email Address</label>
-              <div className="relative">
-                <MailIcon />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-primary"
-                  placeholder="admin@salon.et"
-                />
-              </div>
+    <div className="min-h-screen flex bg-background font-sans selection:bg-primary selection:text-primary-foreground">
+      {/* Login panel — centered */}
+      <div className="flex-1 flex items-center justify-center p-6 bg-[#fafafa] dark:bg-[#09090b]">
+        <div className="w-full max-w-md space-y-4">
+          {onReturnToWebsite && (
+            <div className="text-center">
+              <Button type="button" variant="ghost" size="sm" onClick={onReturnToWebsite} className="text-muted-foreground hover:text-foreground font-semibold text-sm gap-1.5">
+                <ArrowLeft className="size-3.5" />
+                Back to Public Website
+              </Button>
             </div>
+          )}
 
-            <div>
-              <label className="block text-xs font-semibold text-foreground mb-1.5">Password</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-primary"
-                  placeholder="••••••••"
-                />
-              </div>
+          {/* Brand */}
+          <div className="text-center mb-2">
+            <div className="w-14 h-14 mx-auto rounded-md bg-primary flex items-center justify-center text-primary-foreground">
+              <Scissors className="w-7 h-7" />
             </div>
+            <h1 className="mt-3 text-xl font-semibold tracking-tight text-foreground">Gech Beauty Salon</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Hawassa Salon ERP & POS</p>
+          </div>
 
-            {error && (
-              <div className="flex items-center space-x-2 text-rose-700 bg-rose-50 border border-rose-200 rounded-2xl px-3 py-2 text-xs">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
+          <Card className="border-border bg-card rounded-md overflow-hidden">
+            <CardHeader className="pb-3 bg-muted/30 border-b border-border">
+              <Tabs
+                value={mode}
+                onValueChange={(v) => {
+                  setMode(v as 'staff' | 'manager');
+                  setError('');
+                  setPinError(null);
+                  setSelectedStaff(null);
+                }}
+              >
+                <TabsList className="w-full p-1 bg-muted rounded-md">
+                  <TabsTrigger value="staff" className="flex-1 gap-2 text-sm font-semibold rounded-md">
+                    <Users className="size-4" />
+                    Staff Quick PIN
+                  </TabsTrigger>
+                  <TabsTrigger value="manager" className="flex-1 gap-2 text-sm font-semibold rounded-md">
+                    <ShieldCheck className="size-4" />
+                    Manager / Admin
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </CardHeader>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-sm shadow-md disabled:opacity-60 transition-all flex items-center justify-center space-x-2"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span>{loading ? 'Signing in...' : 'Sign In'}</span>
-            </button>
-          </form>
-
-          <div className="pt-3 border-t border-border space-y-3">
-            {/* TV Launch Button with Password Protection */}
-            {onLaunchTv && (
-              <div className="bg-[#141417] text-primary-foreground p-3.5 rounded-2xl border border-[#26262b] space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Tv className="w-4 h-4 text-ink-300 animate-pulse" />
-                    <span className="text-xs font-bold font-serif text-primary-foreground">Lounge TV Display</span>
-                  </div>
-                  <span className="text-[9px] bg-ink-400/20 text-ink-300 border border-ink-400/30 px-2 py-0.5 rounded-full font-mono uppercase">
-                    PIN Protected
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-300">
-                  Launch 100% Fullscreen Lounge Queue Board on Smart TVs. Password required for internet security.
-                </p>
-
-                {showTvPinPrompt ? (
-                  <div className="space-y-2 pt-1">
-                    <input
-                      type="password"
-                      placeholder="Enter TV Password or PIN (e.g. 7777)"
-                      value={tvPin}
-                      onChange={(e) => setTvPin(e.target.value)}
-                      className="w-full bg-[#1f1f24] border border-primary/80 text-primary-foreground text-xs px-3 py-2 rounded-xl outline-none focus:border-ink-400 font-mono"
-                    />
-                    {tvPinError && <p className="text-[10px] text-rose-400">{tvPinError}</p>}
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={handleTvPinSubmit}
-                        className="flex-1 py-1.5 bg-muted0 hover:bg-ink-600 text-slate-950 font-bold text-xs rounded-xl shadow transition-colors"
-                      >
-                        Unlock & Open TV
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowTvPinPrompt(false); setTvPinError(''); }}
-                        className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl hover:bg-slate-700"
-                      >
-                        Cancel
-                      </button>
+            <CardContent className="pt-6 pb-6 px-6">
+              {mode === 'manager' ? (
+                <form onSubmit={handleManagerSubmit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="kpi-label">Email Address</Label>
+                    <div className="relative">
+                      <Mail className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Input
+                        id="email"
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10 text-sm"
+                        placeholder="admin@gechsalon.et"
+                      />
                     </div>
                   </div>
-                ) : (
-                  <button
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password" className="kpi-label">Password</Label>
+                    <div className="relative">
+                      <Lock className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Input
+                        id="password"
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10 text-sm"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </div>
+
+                  {error && (
+                    <div className="flex items-center gap-2 text-sm font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3.5 py-2.5">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+
+                  <Button type="submit" className="w-full font-semibold text-sm" disabled={loading}>
+                    {loading && <Loader2 className="size-4 animate-spin mr-2" />}
+                    {loading ? 'Authenticating...' : 'Sign In to Dashboard'}
+                  </Button>
+
+                  <div className="pt-3 space-y-2 border-t border-border">
+                    <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Quick Demo Manager Credentials
+                    </CardDescription>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Salon Admin', email: 'admin@gechsalon.et', pw: 'Manager123!' },
+                        { label: 'Receptionist', email: 'liya@gechsalon.et', pw: 'Staff123!' },
+                        { label: 'Super Admin', email: 'admin@serenity.et', pw: 'Admin123!' },
+                        { label: 'Staff Member', email: 'bereket@gechsalon.et', pw: 'Staff123!' },
+                      ].map((acc) => (
+                        <Button
+                          key={acc.email}
+                          type="button"
+                          variant="outline"
+                          className="h-auto flex-col items-start py-2 px-3 text-left border-border hover:border-primary/50 hover:bg-primary/5 rounded-md transition-colors"
+                          onClick={() => {
+                            setEmail(acc.email);
+                            setPassword(acc.pw);
+                            setError('');
+                          }}
+                        >
+                          <span className="text-sm font-semibold text-foreground">{acc.label}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono truncate w-full">{acc.email}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </form>
+              ) : selectedStaff ? (
+                <div className="space-y-3">
+                  <Button
                     type="button"
-                    onClick={() => setShowTvPinPrompt(true)}
-                    className="w-full py-2 bg-gradient-to-r from-ink-500 to-ink-600 hover:from-ink-600 hover:to-ink-700 text-slate-950 font-bold text-xs rounded-xl shadow transition-all flex items-center justify-center space-x-1.5"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground text-sm font-semibold"
+                    onClick={() => {
+                      setSelectedStaff(null);
+                      setPinError(null);
+                    }}
                   >
-                    <Tv className="w-3.5 h-3.5" />
-                    <span>Open Lounge TV Board (PIN: 7777)</span>
-                  </button>
-                )}
-              </div>
-            )}
+                    <ArrowLeft className="size-3.5 mr-1" />
+                    Back to Staff List
+                  </Button>
 
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Demo Accounts (Click to Fill)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
-              <button type="button" onClick={() => fill('admin@gechsalon.et', 'Manager123!')} className="flex justify-between items-center bg-muted hover:bg-muted px-3 py-2 rounded-xl text-left border border-border transition-colors">
-                <div>
-                  <div className="text-foreground font-semibold">Salon Admin</div>
-                  <div className="text-muted-foreground text-[10px] font-mono">admin@gechsalon.et</div>
+                  <div className="text-center py-2 space-y-2">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-muted text-foreground flex items-center justify-center border-2 border-border">
+                      <span className="text-2xl font-semibold">{selectedStaff.name.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground text-lg">{selectedStaff.name}</p>
+                      <p className="text-sm text-muted-foreground font-medium">{selectedStaff.branchName}</p>
+                    </div>
+                  </div>
+
+                  <PinPad
+                    error={pinError}
+                    onComplete={handleStaffPin}
+                    onErrorCleared={() => setPinError(null)}
+                    disabled={loading}
+                  />
                 </div>
-              </button>
-              <button type="button" onClick={() => fill('liya@gechsalon.et', 'Staff123!')} className="flex justify-between items-center bg-muted hover:bg-muted px-3 py-2 rounded-xl text-left border border-border transition-colors">
-                <div>
-                  <div className="text-foreground font-semibold">Receptionist</div>
-                  <div className="text-muted-foreground text-[10px] font-mono">liya@gechsalon.et</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">Select Your Staff Name</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {optionsLoading
+                        ? 'Fetching active staff list...'
+                        : allStaff.length === 0
+                        ? 'No active staff registered.'
+                        : 'Tap your profile to enter your 4-digit PIN'}
+                    </p>
+                  </div>
+
+                  {optionsLoading ? (
+                    <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                      <Loader2 className="size-7 animate-spin text-primary" />
+                      <span className="text-sm text-muted-foreground font-medium">Loading employee list...</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2.5 max-h-[340px] overflow-y-auto pr-1">
+                      {allStaff.map((st) => (
+                        <Button
+                          key={st.id}
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            'flex items-center gap-3 rounded-md border-border bg-card px-3.5 py-3 text-left transition-colors cursor-pointer h-auto justify-start',
+                            'hover:border-primary hover:bg-primary/5 active:scale-95'
+                          )}
+                          onClick={() => {
+                            setSelectedStaff(st);
+                            setPinError(null);
+                          }}
+                        >
+                          <div className="w-10 h-10 shrink-0 rounded-md bg-muted text-foreground flex items-center justify-center font-semibold text-sm border border-border">
+                            {st.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">{st.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{st.branchName}</p>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </button>
-              <button type="button" onClick={() => fill('bereket@gechsalon.et', 'Staff123!')} className="flex justify-between items-center bg-muted hover:bg-muted px-3 py-2 rounded-xl text-left border border-border transition-colors">
-                <div>
-                  <div className="text-foreground font-semibold">Staff Member</div>
-                  <div className="text-muted-foreground text-[10px] font-mono">bereket@gechsalon.et</div>
-                </div>
-              </button>
-              <button type="button" onClick={() => fill('admin@serenity.et', 'Admin123!')} className="flex justify-between items-center bg-muted hover:bg-muted px-3 py-2 rounded-xl text-left border border-border transition-colors">
-                <div>
-                  <div className="text-foreground font-semibold">Super Admin</div>
-                  <div className="text-muted-foreground text-[10px] font-mono">admin@serenity.et</div>
-                </div>
-              </button>
+              )}
+            </CardContent>
+          </Card>
+
+          {onLaunchTv && (
+            <div className="pt-1">
+              {showTvPinPrompt ? (
+                <Card className="border-border rounded-md">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <Tv className="size-4 text-primary" />
+                        Lounge Queue TV Unlock
+                      </div>
+                      <span className="text-[10px] text-muted-foreground font-mono">PIN: 7777</span>
+                    </div>
+                    <Input
+                      type="password"
+                      placeholder="Enter TV PIN (7777)"
+                      value={tvPin}
+                      onChange={(e) => setTvPin(e.target.value)}
+                      className="font-mono text-center text-sm tracking-widest"
+                    />
+                    {tvPinError && <p className="text-sm text-destructive font-medium text-center">{tvPinError}</p>}
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 font-semibold text-sm" onClick={handleTvPinSubmit}>
+                        Launch TV Board
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setShowTvPinPrompt(false);
+                          setTvPinError('');
+                        }}
+                        className="text-sm"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-md border-border hover:border-primary/40 font-semibold text-sm gap-2"
+                  onClick={() => setShowTvPinPrompt(true)}
+                >
+                  <Tv className="size-4 text-primary" />
+                  Launch Lounge Queue TV Screen
+                </Button>
+              )}
             </div>
-          </div>
+          )}
         </div>
-
-        <p className="text-center text-[10px] text-muted-foreground mt-6">
-          Powered by XAMPP MySQL • React • Express — Designed & Built by <strong className="text-foreground">EngelsTech</strong>
-        </p>
       </div>
     </div>
   );
 };
-
-const MailIcon = () => (
-  <MailSvg />
-);
-
-const MailSvg = () => (
-  <svg
-    className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    viewBox="0 0 24 24"
-  >
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-  </svg>
-);

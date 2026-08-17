@@ -87,6 +87,27 @@ export function createFinanceRouter(pool: DbPool): Router {
 
     const b = req.body;
     const id = uid('exp');
+
+    // Enforce the branch daily expense limit (set by salon admin) for receptionist-recorded expenses
+    if (req.user && req.user.role === 'receptionist') {
+      const [brRows] = (await pool.query(`SELECT daily_expense_limit_etb FROM branches WHERE id = ?`, [b.branchId])) as any;
+      const br = brRows[0];
+      const limit = br ? Number(br.daily_expense_limit_etb || 0) : 0;
+      if (limit > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        const [expRows] = (await pool.query(
+          `SELECT COALESCE(SUM(amount_etb), 0) AS total FROM expenses WHERE company_id = ? AND branch_id = ? AND date = ?`,
+          [b.companyId, b.branchId, today]
+        )) as any;
+        const spent = Number(expRows[0]?.total || 0);
+        if (spent + Number(b.amountEtb) > limit) {
+          return res.status(400).json({
+            error: `Daily expense limit exceeded. Branch limit is ${limit} ETB, ${spent.toFixed(2)} ETB already recorded today (${b.amountEtb} ETB would exceed it).`,
+          });
+        }
+      }
+    }
+
     await pool.query(
       `INSERT INTO expenses (id, company_id, branch_id, business_unit_id, category, amount_etb, description, payment_method, recorded_by, date, is_recurring, recurrence_frequency, next_due_date, auto_process_trigger)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,

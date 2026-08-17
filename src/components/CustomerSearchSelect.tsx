@@ -43,15 +43,15 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
   return (
     <div className="space-y-3" ref={dropdownRef}>
       <div className="flex items-center justify-between">
-        <label className="text-xs font-bold text-foreground flex items-center space-x-1.5 uppercase tracking-wider">
-          <UserCheck className="w-4 h-4 text-foreground" />
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center space-x-1.5">
+          <UserCheck className="w-3.5 h-3.5 text-muted-foreground" />
           <span>{label}</span>
         </label>
 
         <button
           type="button"
           onClick={onOpenNewCustomerModal}
-          className="text-xs text-foreground hover:text-[#111114] font-bold flex items-center space-x-1 cursor-pointer transition-colors"
+          className="text-sm text-foreground hover:text-muted-foreground font-medium flex items-center space-x-1 cursor-pointer transition-colors"
         >
           <UserPlus className="w-3.5 h-3.5" />
           <span>+ Register New Client</span>
@@ -61,7 +61,7 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
       {/* Dual Search Input Box */}
       <div className="relative">
         <div className="relative flex items-center">
-          <Search className="w-4 h-4 text-foreground absolute left-3.5 pointer-events-none" />
+          <Search className="w-4 h-4 text-muted-foreground absolute left-2.5 pointer-events-none" />
           <input
             type="text"
             placeholder="Type Mobile Number (+251 / 09...) or Full Name to search registered clients..."
@@ -71,7 +71,7 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
               setSearchQuery(e.target.value);
               setIsOpen(true);
             }}
-            className="w-full bg-muted border border-border text-foreground rounded-xl pl-10 pr-9 py-2.5 text-xs font-medium outline-none focus:border-primary focus:bg-card placeholder-[#71717a]/70 transition-all shadow-inner"
+            className="w-full h-8 bg-background border border-input text-foreground rounded-md pl-8 pr-9 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
           />
           {searchQuery && (
             <button
@@ -86,17 +86,17 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
 
         {/* Dropdown Results List */}
         {isOpen && (
-          <div className="absolute z-30 left-0 right-0 mt-1 bg-card border border-border rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-[#efe8d9]/60">
+          <div className="absolute z-30 left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-sm max-h-64 overflow-y-auto divide-y divide-border">
             {filteredCustomers.length === 0 ? (
-              <div className="p-4 text-center text-xs text-muted-foreground">
-                No registered client found matching "<span className="font-bold text-foreground">{searchQuery}</span>".
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No registered client found matching "<span className="font-medium text-foreground">{searchQuery}</span>".
                 <button
                   type="button"
                   onClick={() => {
                     setIsOpen(false);
                     onOpenNewCustomerModal();
                   }}
-                  className="block mx-auto mt-2 text-xs text-foreground font-bold hover:underline cursor-pointer"
+                  className="block mx-auto mt-2 text-sm text-foreground font-medium hover:underline cursor-pointer"
                 >
                   + Click to register new client now
                 </button>
@@ -113,32 +113,32 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
                       onSelectCustomer(c);
                       setIsOpen(false);
                     }}
-                    className={`w-full text-left p-3 flex items-center justify-between hover:bg-muted/80 transition cursor-pointer text-xs ${
-                      isSelected ? 'bg-muted font-bold' : ''
+                    className={`w-full text-left p-3 flex items-center justify-between hover:bg-muted transition cursor-pointer text-sm ${
+                      isSelected ? 'bg-primary/5 font-medium' : ''
                     }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-foreground font-bold">
+                      <div className="w-8 h-8 rounded-md bg-muted border border-border flex items-center justify-center text-foreground font-semibold">
                         {c.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-bold text-foreground">{c.name}</span>
+                          <span className="font-medium text-foreground">{c.name}</span>
                           {c.isVip && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-muted text-foreground border border-border">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-foreground border border-border">
                               VIP
                             </span>
                           )}
                         </div>
                         <div className="text-[11px] text-muted-foreground flex items-center space-x-1 mt-0.5">
-                          <Phone className="w-3 h-3 text-foreground" />
+                          <Phone className="w-3 h-3 text-muted-foreground" />
                           <span className="font-mono">{c.phone}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-lg border border-border">
+                      <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border font-medium">
                         {c.loyaltyPoints || 0} Points
                       </span>
                       {isSelected && <Check className="w-4 h-4 text-foreground" />}
@@ -153,22 +153,22 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
 
       {/* Selected Customer Profile Card */}
       {selectedCustomer && (
-        <div className="flex items-center justify-between bg-muted border border-border rounded-2xl p-3.5 text-xs shadow-sm">
+        <div className="flex items-center justify-between bg-card border border-border rounded-md p-3 text-sm">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm">
+            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
               {selectedCustomer.name.charAt(0).toUpperCase()}
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-bold text-foreground text-sm">{selectedCustomer.name}</span>
+                <span className="font-medium text-foreground text-sm">{selectedCustomer.name}</span>
                 {selectedCustomer.isVip && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-muted text-foreground border border-border">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-foreground border border-border">
                     ★ VIP Client
                   </span>
                 )}
               </div>
               <div className="text-[11px] text-muted-foreground font-mono mt-0.5 flex items-center space-x-1">
-                <Phone className="w-3 h-3 text-foreground" />
+                <Phone className="w-3 h-3 text-muted-foreground" />
                 <span>{selectedCustomer.phone}</span>
               </div>
             </div>
@@ -176,11 +176,11 @@ export const CustomerSearchSelect: React.FC<CustomerSearchSelectProps> = ({
 
           <div className="flex items-center space-x-3">
             <div className="text-right hidden sm:block">
-              <div className="text-[10px] text-muted-foreground font-bold uppercase">Total Visits</div>
-              <div className="font-bold text-foreground">{selectedCustomer.totalVisits || 1}</div>
+              <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Total Visits</div>
+              <div className="font-semibold text-foreground">{selectedCustomer.totalVisits || 1}</div>
             </div>
 
-            <div className="flex items-center space-x-1 bg-muted text-foreground px-3 py-1.5 rounded-full border border-border font-bold text-xs shadow-sm">
+            <div className="flex items-center space-x-1 bg-muted text-foreground px-3 py-1.5 rounded-full border border-border font-semibold text-sm">
               <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
               <span>{selectedCustomer.loyaltyPoints || 0} Loyalty Pts</span>
             </div>

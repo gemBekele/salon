@@ -3,16 +3,10 @@ import {
   BarChart3,
   TrendingUp,
   DollarSign,
-  Users,
   Award,
-  Calendar,
   Filter,
   Download,
-  Printer,
-  PieChart as PieIcon,
   CheckCircle,
-  Scissors,
-  ArrowUpRight,
   Receipt,
 } from 'lucide-react';
 import {
@@ -26,9 +20,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
-  AreaChart,
-  Area,
 } from 'recharts';
 import {
   Company,
@@ -41,11 +32,26 @@ import {
   ExpenseRecord,
 } from '../types';
 import { apiFetch } from '../lib/api';
+import { Button } from './ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
 
 interface ReportsDashboardProps {
   company: Company;
   branches: Branch[];
-  businessUnits: BusinessUnit[];
   staffList: Staff[];
   services: Service[];
   visitSessions: VisitSession[];
@@ -53,12 +59,11 @@ interface ReportsDashboardProps {
   expenses: ExpenseRecord[];
 }
 
-const COLORS = ['#18181b', '#c29a52', '#3a3a41', '#8b8b95', '#71717a', '#b3a382'];
+const COLORS = ['#0d9488', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6'];
 
 export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
   company,
   branches,
-  businessUnits,
   staffList,
   services,
   visitSessions,
@@ -325,15 +330,15 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
   return (
     <div id="reports-dashboard-root" className="space-y-6">
       {/* Top Header & Filter Controls */}
-      <div className="bg-card rounded-3xl p-6 border border-border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="bg-card rounded-md p-6 border border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center space-x-2">
             <BarChart3 className="w-6 h-6 text-foreground" />
-            <h2 className="text-xl font-serif font-bold text-foreground">
+            <h2 className="page-title">
               Reports & Executive Analytics Dashboard
             </h2>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-meta mt-1">
             Real-time daily sales, staff commissions, service popularity, and branch revenue summaries for{' '}
             <strong className="text-foreground">{company.name}</strong>.
           </p>
@@ -341,55 +346,58 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Branch Select */}
-          <div className="flex items-center space-x-1.5 bg-muted border border-border rounded-2xl px-3 py-2 text-xs">
+          <div className="flex items-center space-x-1.5 bg-muted border border-border rounded-md px-3 py-2 text-sm">
             <Filter className="w-4 h-4 text-muted-foreground" />
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="bg-transparent font-medium text-foreground focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Branches</option>
-              {branches
-                .filter((b) => b.companyId === company.id)
-                .map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.city})
-                  </option>
-                ))}
-            </select>
+            <Select value={selectedBranchId} onValueChange={(v) => setSelectedBranchId(v)}>
+              <SelectTrigger className="h-8 gap-1 border-0 bg-transparent p-0 text-sm font-medium text-foreground focus:ring-0 focus-visible:ring-0 [&>svg]:hidden">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Branches</SelectItem>
+                {branches
+                  .filter((b) => b.companyId === company.id)
+                  .map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name} ({b.city})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Time Range Switch */}
-          <div className="flex items-center bg-muted border border-border rounded-2xl p-1 text-xs">
+          <div className="flex items-center bg-muted border border-border rounded-md p-1 text-sm">
             {(['today', 'week', 'month', 'all'] as const).map((range) => (
-              <button
+              <Button
                 key={range}
+                type="button"
+                size="sm"
                 onClick={() => setTimeRange(range)}
-                className={`px-3 py-1.5 rounded-xl font-medium transition cursor-pointer capitalize ${
+                className={`px-3 rounded-md text-sm font-medium transition cursor-pointer capitalize border-0 ${
                   timeRange === range
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-transparent'
                 }`}
               >
                 {range}
-              </button>
+              </Button>
             ))}
           </div>
 
           {/* Export Actions */}
-          <button
+          <Button
             onClick={handleExportCsv}
-            className="flex items-center space-x-1.5 bg-primary hover:bg-[#1d1d21] text-primary-foreground font-bold px-4 py-2 rounded-2xl text-xs transition shadow-sm cursor-pointer"
+            className="gap-1.5 text-sm font-semibold"
           >
             <Download className="w-4 h-4" />
             <span>Export CSV</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
       {loadingReports && (
-        <div className="bg-card rounded-3xl p-4 border border-border shadow-sm text-center text-xs text-muted-foreground">
+        <div className="bg-card rounded-md p-4 border border-border text-center text-sm text-muted-foreground">
           <span className="inline-flex items-center space-x-2">
             <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <span>Refreshing report figures...</span>
@@ -398,75 +406,75 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Gross Revenue */}
-        <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-2">
+        <div className="bg-card rounded-md p-5 border border-border space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Gross Sales Revenue</span>
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-foreground">
+            <span className="kpi-label">Gross Sales Revenue</span>
+            <div className="w-8 h-8 rounded-md bg-primary/10 text-primary flex items-center justify-center">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground">
-            {totalGrossRevenue.toLocaleString()} <span className="text-xs font-sans text-muted-foreground">ETB</span>
+          <div className="kpi-value">
+            {totalGrossRevenue.toLocaleString()} <span className="text-sm font-sans text-muted-foreground font-medium">ETB</span>
           </div>
-          <div className="flex items-center text-[11px] text-foreground space-x-1 font-medium">
+          <div className="flex items-center text-[11px] text-muted-foreground space-x-1 font-medium">
             <TrendingUp className="w-3.5 h-3.5" />
             <span>{completedVisits.length} visits completed</span>
           </div>
         </div>
 
         {/* Avg Ticket Value */}
-        <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-2">
+        <div className="bg-card rounded-md p-5 border border-border space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Avg Invoice Value</span>
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-foreground">
+            <span className="kpi-label">Avg Invoice Value</span>
+            <div className="w-8 h-8 rounded-md bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900">
               <Receipt className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground">
-            {avgTicketValue.toLocaleString()} <span className="text-xs font-sans text-muted-foreground">ETB</span>
+          <div className="kpi-value">
+            {avgTicketValue.toLocaleString()} <span className="text-sm font-sans text-muted-foreground font-medium">ETB</span>
           </div>
           <div className="text-[11px] text-muted-foreground">Per visit transaction average</div>
         </div>
 
         {/* Staff Commissions */}
-        <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-2">
+        <div className="bg-card rounded-md p-5 border border-border space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Staff Commissions</span>
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-foreground">
+            <span className="kpi-label">Staff Commissions</span>
+            <div className="w-8 h-8 rounded-md bg-violet-50 text-violet-600 border border-violet-100 flex items-center justify-center dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900">
               <Award className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground">
-            {totalCommissionsEarned.toLocaleString()} <span className="text-xs font-sans text-muted-foreground">ETB</span>
+          <div className="kpi-value">
+            {totalCommissionsEarned.toLocaleString()} <span className="text-sm font-sans text-muted-foreground font-medium">ETB</span>
           </div>
           <div className="text-[11px] text-muted-foreground">Accrued provider payouts</div>
         </div>
 
         {/* Net Profit */}
-        <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-2">
+        <div className="bg-card rounded-md p-5 border border-border space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Net Operating Surplus</span>
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-foreground">
+            <span className="kpi-label">Net Operating Surplus</span>
+            <div className="w-8 h-8 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900">
               <CheckCircle className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground">
-            {netProfit.toLocaleString()} <span className="text-xs font-sans text-muted-foreground">ETB</span>
+          <div className="kpi-value">
+            {netProfit.toLocaleString()} <span className="text-sm font-sans text-muted-foreground font-medium">ETB</span>
           </div>
-          <div className="text-[11px] text-foreground font-semibold">After commissions & expenses</div>
+          <div className="text-[11px] text-muted-foreground font-medium">After commissions & expenses</div>
         </div>
       </div>
 
       {/* Charts Grid Section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Daily Revenue Trend Chart (8 Cols) */}
-        <div className="lg:col-span-8 bg-card rounded-3xl p-6 border border-border shadow-sm space-y-4">
+        <div className="lg:col-span-8 bg-card rounded-md p-6 border border-border space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-base font-serif font-bold text-foreground">Daily Revenue & Visit Trend</h3>
-              <p className="text-xs text-muted-foreground">Gross revenue collected per day in Ethiopian Birr (ETB)</p>
+              <h3 className="section-title">Daily Revenue & Visit Trend</h3>
+              <p className="text-meta mt-0.5">Gross revenue collected per day in Ethiopian Birr (ETB)</p>
             </div>
-            <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-foreground font-bold border border-border">
+            <span className="text-sm px-2.5 py-1 rounded-full bg-muted text-foreground font-semibold border border-border">
               Daily Breakdown
             </span>
           </div>
@@ -474,29 +482,29 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
           <div className="h-64 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dailySalesData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#efe8d9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
                 <XAxis dataKey="date" stroke="#71717a" fontSize={11} tickLine={false} />
                 <YAxis stroke="#71717a" fontSize={11} tickLine={false} />
                 <Tooltip
                   formatter={(value: any) => [`${Number(value).toLocaleString()} ETB`, 'Revenue']}
                   contentStyle={{
                     backgroundColor: '#18181b',
-                    color: '#f6f3ec',
-                    borderRadius: '12px',
+                    color: '#fafafa',
+                    borderRadius: '2px',
                     fontSize: '12px',
                   }}
                 />
-                <Bar dataKey="revenue" fill="#18181b" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="revenue" fill="#0d9488" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Service Popularity Pie Chart (4 Cols) */}
-        <div className="lg:col-span-4 bg-card rounded-3xl p-6 border border-border shadow-sm flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-4 bg-card rounded-md p-6 border border-border flex flex-col justify-between space-y-4">
           <div>
-            <h3 className="text-base font-serif font-bold text-foreground">Service Category Revenue</h3>
-            <p className="text-xs text-muted-foreground">Distribution across service categories</p>
+            <h3 className="section-title">Service Category Revenue</h3>
+            <p className="text-meta mt-0.5">Distribution across service categories</p>
           </div>
 
           <div className="h-52 w-full">
@@ -520,8 +528,8 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
                   formatter={(val: any) => [`${Number(val).toLocaleString()} ETB`, 'Sales']}
                   contentStyle={{
                     backgroundColor: '#18181b',
-                    color: '#f6f3ec',
-                    borderRadius: '12px',
+                    color: '#fafafa',
+                    borderRadius: '2px',
                     fontSize: '11px',
                   }}
                 />
@@ -532,7 +540,7 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
           {/* Legend */}
           <div className="space-y-1.5 pt-2 border-t border-border">
             {categoryData.slice(0, 4).map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center text-xs">
+              <div key={idx} className="flex justify-between items-center text-sm">
                 <div className="flex items-center space-x-2">
                   <span
                     className="w-2.5 h-2.5 rounded-full"
@@ -540,7 +548,7 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
                   />
                   <span className="text-foreground font-medium">{item.name}</span>
                 </div>
-                <span className="font-mono font-bold text-foreground">{item.value.toLocaleString()} ETB</span>
+                <span className="font-mono font-semibold text-foreground num">{item.value.toLocaleString()} ETB</span>
               </div>
             ))}
           </div>
@@ -548,83 +556,83 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
       </div>
 
       {/* Staff Performance KPIs Table */}
-      <div className="bg-card rounded-3xl p-6 border border-border shadow-sm space-y-4">
+      <div className="bg-card rounded-md p-6 border border-border space-y-4">
         <div className="flex justify-between items-center">
           <div>
-            <h3 className="text-base font-serif font-bold text-foreground">Staff Performance & Commission Leaderboard</h3>
-            <p className="text-xs text-muted-foreground">Completed services, total sales contribution, and commission earned per provider</p>
+            <h3 className="section-title">Staff Performance & Commission Leaderboard</h3>
+            <p className="text-meta mt-0.5">Completed services, total sales contribution, and commission earned per provider</p>
           </div>
-          <span className="text-xs text-muted-foreground font-mono">
+          <span className="text-sm text-muted-foreground font-mono num">
             {staffPerformance.length} Providers Tracked
           </span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground font-bold uppercase tracking-wider">
-                <th className="py-3 px-3">Staff Member</th>
-                <th className="py-3 px-3">Role</th>
-                <th className="py-3 px-3 text-center">Services Done</th>
-                <th className="py-3 px-3 text-right">Revenue Generated</th>
-                <th className="py-3 px-3 text-right">Commission Earned</th>
-                <th className="py-3 px-3 text-right">Avg / Service</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#efe8d9]/60 text-foreground">
+          <Table className="w-full text-left text-sm border-collapse">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Staff Member</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="text-center">Services Done</TableHead>
+                <TableHead className="text-right num">Revenue Generated</TableHead>
+                <TableHead className="text-right num">Commission Earned</TableHead>
+                <TableHead className="text-right num">Avg / Service</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {staffPerformance.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     No completed service data recorded yet for this selection.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 staffPerformance.map((stf, index) => {
                   const avgPerSrv = stf.servicesCompleted > 0 ? Math.round(stf.revenueGenerated / stf.servicesCompleted) : 0;
                   return (
-                    <tr key={stf.staffId} className="hover:bg-muted/60 transition">
-                      <td className="py-3 px-3 font-bold flex items-center space-x-2">
+                    <TableRow key={stf.staffId} className="hover:bg-muted/40">
+                      <TableCell className="font-semibold flex items-center space-x-2">
                         {index === 0 && <Award className="w-4 h-4 text-muted-foreground shrink-0" />}
                         <span>{stf.staffName}</span>
-                      </td>
-                      <td className="py-3 px-3 capitalize text-muted-foreground">{stf.role}</td>
-                      <td className="py-3 px-3 text-center font-mono font-bold">{stf.servicesCompleted}</td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
+                      </TableCell>
+                      <TableCell className="capitalize text-muted-foreground">{stf.role}</TableCell>
+                      <TableCell className="text-center font-mono font-semibold num">{stf.servicesCompleted}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold num text-foreground">
                         {stf.revenueGenerated.toLocaleString()} ETB
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold num text-foreground">
                         {stf.commissionEarned.toLocaleString()} ETB
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="text-right font-mono num text-muted-foreground">
                         {avgPerSrv.toLocaleString()} ETB
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
       {/* Top Performing Services List */}
-      <div className="bg-card rounded-3xl p-6 border border-border shadow-sm space-y-4">
-        <h3 className="text-base font-serif font-bold text-foreground">Most Popular & High-Margin Services</h3>
+      <div className="bg-card rounded-md p-6 border border-border space-y-4">
+        <h3 className="section-title">Most Popular & High-Margin Services</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {servicePopularity.slice(0, 6).map((srv, idx) => (
-            <div key={idx} className="p-4 bg-muted rounded-2xl border border-border space-y-2">
+            <div key={idx} className="p-4 bg-muted rounded-md border border-border space-y-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="font-bold text-sm text-foreground">{srv.serviceName}</div>
+                  <div className="font-semibold text-sm text-foreground">{srv.serviceName}</div>
                   <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{srv.category}</span>
                 </div>
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-card border border-border text-foreground">
+                <span className="text-sm font-mono font-semibold px-2 py-0.5 rounded-full bg-card border border-border text-foreground">
                   #{idx + 1}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-xs pt-1 border-t border-border/70">
+              <div className="flex justify-between items-center text-sm pt-1 border-t border-border">
                 <span className="text-muted-foreground">{srv.count} Times Sold</span>
-                <span className="font-mono font-bold text-foreground">{srv.totalRevenue.toLocaleString()} ETB</span>
+                <span className="font-mono font-semibold num text-foreground">{srv.totalRevenue.toLocaleString()} ETB</span>
               </div>
             </div>
           ))}

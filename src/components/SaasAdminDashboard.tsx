@@ -5,14 +5,30 @@ import {
   Layers,
   CheckCircle,
   Plus,
-  ShieldAlert,
   Send,
-  Sparkles,
   Search,
   Check,
   TrendingUp,
 } from 'lucide-react';
 import { Company, SubscriptionPlan, SmsLog } from '../types';
+import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
 
 interface SaasAdminDashboardProps {
   companies: Company[];
@@ -71,107 +87,115 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   return (
     <div className="space-y-6">
       {/* SaaS Admin Banner */}
-      <div className="bg-primary text-primary-foreground rounded-3xl p-6 shadow-sm border border-primary/80">
+      <div className="bg-primary text-primary-foreground rounded-md p-6 border border-primary/80">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-muted/15 text-primary-foreground border border-primary-foreground/30 uppercase tracking-widest">
+              <span className="px-3 py-1 rounded-full text-sm font-semibold bg-muted/15 text-primary-foreground border border-primary-foreground/30 uppercase tracking-widest">
                 SaaS Super Admin Control Center
               </span>
-              <span className="text-primary-foreground/80 text-xs">cPanel Multi-Tenant Core</span>
+              <span className="text-primary-foreground/80 text-sm">cPanel Multi-Tenant Core</span>
             </div>
-            <h2 className="text-2xl font-serif font-light mt-2 text-primary-foreground">
+            <h2 className="text-lg font-semibold tracking-tight text-primary-foreground mt-1.5">
               Platform Overview & Subscription Management
             </h2>
-            <p className="text-primary-foreground/80 text-xs mt-1 max-w-2xl font-sans">
+            <p className="text-primary-foreground/80 text-sm mt-1 max-w-2xl font-sans">
               Monitor active tenant companies, monthly subscription revenue (MRR in ETB), multi-branch limits, and automated SMS dispatch gateways across Ethiopia.
             </p>
           </div>
 
-          <button
+          <Button
             id="provision-tenant-btn"
             onClick={() => setShowNewCompanyModal(true)}
-            className="flex items-center space-x-2 px-5 py-2.5 bg-muted hover:bg-card text-foreground font-bold rounded-full shadow-sm transition-all text-xs self-start md:self-auto cursor-pointer"
+            className="flex items-center space-x-1.5 bg-muted hover:bg-muted text-foreground font-semibold text-sm rounded-md border border-border cursor-pointer self-start md:self-auto"
           >
             <Plus className="w-4 h-4 text-foreground" />
             <span>Provision Tenant Salon</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-            <span>Monthly Revenue (MRR)</span>
-            <DollarSign className="w-4 h-4 text-foreground" />
+        <div className="bg-card border border-border rounded-md p-5">
+          <div className="flex items-center justify-between">
+            <span className="kpi-label">Monthly Revenue (MRR)</span>
+            <div className="w-8 h-8 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+              <DollarSign className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground mt-2">
-            {totalMrrEtb.toLocaleString()} <span className="text-xs text-foreground font-sans font-normal">ETB / mo</span>
+          <div className="kpi-value mt-2">
+            {totalMrrEtb.toLocaleString()} <span className="text-sm text-muted-foreground font-sans font-medium">ETB / mo</span>
           </div>
-          <div className="flex items-center space-x-1 text-xs text-foreground mt-2 font-medium">
+          <div className="flex items-center space-x-1 text-sm text-muted-foreground mt-2 font-medium">
             <TrendingUp className="w-3.5 h-3.5" />
             <span>100% active collection</span>
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-            <span>Active Tenant Companies</span>
-            <Building2 className="w-4 h-4 text-foreground" />
+        <div className="bg-card border border-border rounded-md p-5">
+          <div className="flex items-center justify-between">
+            <span className="kpi-label">Active Tenant Companies</span>
+            <div className="w-8 h-8 rounded-md bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900">
+              <Building2 className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground mt-2">
-            {companies.length} <span className="text-xs text-muted-foreground font-sans font-normal">Tenants</span>
+          <div className="kpi-value mt-2">
+            {companies.length} <span className="text-sm text-muted-foreground font-sans font-medium">Tenants</span>
           </div>
-          <div className="text-xs text-muted-foreground mt-2 font-sans">Isolated single-db schemas</div>
+          <div className="text-sm text-muted-foreground mt-2 font-sans">Isolated single-db schemas</div>
         </div>
 
-        <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-            <span>Subscription Tiers</span>
-            <Layers className="w-4 h-4 text-foreground" />
+        <div className="bg-card border border-border rounded-md p-5">
+          <div className="flex items-center justify-between">
+            <span className="kpi-label">Subscription Tiers</span>
+            <div className="w-8 h-8 rounded-md bg-violet-50 text-violet-600 border border-violet-100 flex items-center justify-center dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900">
+              <Layers className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground mt-2">
-            {subscriptionPlans.length} <span className="text-xs text-muted-foreground font-sans font-normal">Tiers</span>
+          <div className="kpi-value mt-2">
+            {subscriptionPlans.length} <span className="text-sm text-muted-foreground font-sans font-medium">Tiers</span>
           </div>
-          <div className="text-xs text-foreground mt-2 font-medium">Starter, Growth, Enterprise</div>
+          <div className="text-sm text-muted-foreground mt-2 font-sans">Starter, Growth, Enterprise</div>
         </div>
 
-        <div className="bg-card border border-border rounded-3xl p-5 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-            <span>Ethio Telecom SMS</span>
-            <Send className="w-4 h-4 text-foreground" />
+        <div className="bg-card border border-border rounded-md p-5">
+          <div className="flex items-center justify-between">
+            <span className="kpi-label">Ethio Telecom SMS</span>
+            <div className="w-8 h-8 rounded-md bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900">
+              <Send className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-serif font-bold text-foreground mt-2">
-            {smsLogs.length} <span className="text-xs text-muted-foreground font-sans font-normal">Logs</span>
+          <div className="kpi-value mt-2">
+            {smsLogs.length} <span className="text-sm text-muted-foreground font-sans font-medium">Logs</span>
           </div>
-          <div className="text-xs text-foreground mt-2 font-medium">cPanel Cron queue active</div>
+          <div className="text-sm text-muted-foreground mt-2 font-sans">cPanel Cron queue active</div>
         </div>
       </div>
 
       {/* Subscription Tier Cards */}
       <div>
-        <h3 className="text-lg font-serif font-bold text-foreground mb-3">SaaS Subscription Plans (ETB)</h3>
+        <h3 className="section-title mb-3">SaaS Subscription Plans (ETB)</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {subscriptionPlans.map((plan) => (
             <div
               key={plan.id}
-              className="bg-card border border-border rounded-3xl p-5 hover:border-primary transition-all flex flex-col justify-between shadow-sm"
+              className="bg-card border border-border rounded-md p-5 hover:border-primary transition-colors flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-base font-serif font-bold text-foreground">{plan.name}</span>
-                  <span className="text-xs px-3 py-1 rounded-full bg-muted text-foreground font-bold border border-border">
+                  <span className="text-base font-semibold text-foreground">{plan.name}</span>
+                  <span className="text-sm px-3 py-1 rounded-full bg-muted text-foreground font-semibold border border-border">
                     {plan.monthlyFeeEtb.toLocaleString()} ETB/mo
                   </span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-3 space-y-1 font-sans">
+                <div className="text-sm text-muted-foreground mt-3 space-y-1 font-sans">
                   <div>Max Branches: <strong className="text-foreground">{plan.maxBranches}</strong></div>
                   <div>Max Business Units: <strong className="text-foreground">{plan.maxBusinessUnits}</strong></div>
                   <div>Max Staff Capacity: <strong className="text-foreground">{plan.maxStaff}</strong></div>
                 </div>
 
-                <ul className="mt-4 space-y-2 border-t border-border pt-3 text-xs text-foreground font-sans">
+                <ul className="mt-4 space-y-2 border-t border-border pt-3 text-sm text-foreground font-sans">
                   {plan.features.map((ft, idx) => (
                     <li key={idx} className="flex items-center space-x-2">
                       <Check className="w-3.5 h-3.5 text-foreground shrink-0" />
@@ -186,151 +210,153 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       </div>
 
       {/* Tenant Companies Table */}
-      <div className="bg-card border border-border rounded-3xl p-6 shadow-sm">
+      <div className="bg-card border border-border rounded-md p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-lg font-serif font-bold text-foreground">Registered Tenant Companies</h3>
-            <p className="text-xs text-muted-foreground">Strict company_id isolation enforced across database models</p>
+            <h3 className="section-title">Registered Tenant Companies</h3>
+            <p className="text-meta mt-0.5">Strict company_id isolation enforced across database models</p>
           </div>
 
           <div className="relative">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
-            <input
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
               type="text"
               placeholder="Search company name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-muted border border-border text-foreground text-xs rounded-xl pl-9 pr-3 py-2 outline-none focus:border-primary w-full sm:w-64 font-sans"
+              className="pl-9 w-full sm:w-64"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-foreground font-sans">
-            <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
-              <tr>
-                <th className="px-4 py-3 rounded-l-xl">Company Name</th>
-                <th className="px-4 py-3">Subscription Tier</th>
-                <th className="px-4 py-3">Contact Email</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 rounded-r-xl">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#efe8d9]">
+          <Table className="w-full text-left text-sm text-foreground font-sans">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Company Name</TableHead>
+                <TableHead>Subscription Tier</TableHead>
+                <TableHead>Contact Email</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filteredCompanies.map((cmp) => {
                 const plan = subscriptionPlans.find((p) => p.id === cmp.subscriptionPlanId);
                 return (
-                  <tr key={cmp.id} className="hover:bg-muted/60">
-                    <td className="px-4 py-3 font-semibold text-foreground flex items-center space-x-2">
+                  <TableRow key={cmp.id} className="hover:bg-muted/40">
+                    <TableCell className="font-semibold text-foreground flex items-center space-x-2">
                       <Building2 className="w-4 h-4 text-foreground" />
                       <span>{cmp.name}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2.5 py-0.5 rounded-full bg-muted text-foreground border border-border font-semibold text-[11px]">
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="neutral" className="font-semibold">
                         {plan?.name || cmp.subscriptionPlanId}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{cmp.email}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{cmp.phone}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-muted text-foreground border border-border text-[11px] font-bold">
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{cmp.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{cmp.phone}</TableCell>
+                    <TableCell>
+                      <Badge variant="success" className="font-semibold">
                         <CheckCircle className="w-3 h-3" />
                         <span>Active</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{cmp.createdAt}</td>
-                  </tr>
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{cmp.createdAt}</TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
       {/* Provision Tenant Modal */}
       {showNewCompanyModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md max-w-lg w-full p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-lg font-serif font-bold text-foreground flex items-center space-x-2">
+              <h3 className="section-title flex items-center space-x-2">
                 <Building2 className="w-5 h-5 text-foreground" />
                 <span>Provision New Tenant Company</span>
               </h3>
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setShowNewCompanyModal(false)}
-                className="text-muted-foreground hover:text-foreground text-lg font-bold"
+                className="text-muted-foreground hover:text-foreground text-lg font-semibold"
               >
                 ✕
-              </button>
+              </Button>
             </div>
 
             <form onSubmit={handleCreateCompany} className="space-y-4 font-sans">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Company / Salon Name</label>
-                <input
+                <label className="block kpi-label mb-1.5">Company / Salon Name</label>
+                <Input
                   type="text"
                   required
                   placeholder="e.g. Addis Luxury Wellness Group"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Phone Number</label>
-                  <input
+                  <label className="block kpi-label mb-1.5">Phone Number</label>
+                  <Input
                     type="text"
                     placeholder="+251 91 123 4567"
                     value={companyPhone}
                     onChange={(e) => setCompanyPhone(e.target.value)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">Admin Email</label>
-                  <input
+                  <label className="block kpi-label mb-1.5">Admin Email</label>
+                  <Input
                     type="email"
                     placeholder="admin@salon.et"
                     value={companyEmail}
                     onChange={(e) => setCompanyEmail(e.target.value)}
-                    className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Subscription Plan Tier</label>
-                <select
-                  value={planId}
-                  onChange={(e) => setPlanId(e.target.value)}
-                  className="w-full bg-muted border border-border text-foreground rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-primary"
-                >
-                  {subscriptionPlans.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.monthlyFeeEtb.toLocaleString()} ETB/mo)
-                    </option>
-                  ))}
-                </select>
+                <label className="block kpi-label mb-1.5">Subscription Plan Tier</label>
+                <Select value={planId} onValueChange={(v) => setPlanId(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subscriptionPlans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} ({p.monthlyFeeEtb.toLocaleString()} ETB/mo)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="pt-3 flex items-center justify-end space-x-2 border-t border-border">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setShowNewCompanyModal(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground font-semibold rounded-full text-xs"
+                  className="text-sm font-semibold"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-full text-xs shadow-md"
+                  className="text-sm font-semibold"
                 >
                   Create Tenant & Provision Database Scope
-                </button>
+                </Button>
               </div>
             </form>
           </div>

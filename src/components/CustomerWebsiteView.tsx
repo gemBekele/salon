@@ -78,7 +78,7 @@ export function CustomerWebsiteView({
   }, []);
 
   // Theme style mappings (ink charcoal + pure white + brass)
-  const pageBg = isDark ? 'bg-[#0a0a0c] text-[#f1eee4]' : 'bg-white text-zinc-900';
+  const pageBg = isDark ? 'bg-[#09090b] text-[#f1eee4]' : 'bg-white text-zinc-900';
   const textMuted = isDark ? 'text-[#9a9aa5]' : 'text-zinc-600';
   const divider = isDark ? 'border-[#26262b]' : 'border-zinc-200';
   const accentText = isDark ? 'text-brass-400' : 'text-brass-600';
@@ -119,19 +119,19 @@ export function CustomerWebsiteView({
     <div className={`min-h-screen font-sans antialiased selection:bg-ink-800 selection:text-cream-100 transition-colors duration-300 ${pageBg}`} style={amFontStyle}>
 
       {/* TOP HEADER & NAVBAR — glassmorphism header with translucent blur on hero, adaptive on scroll */}
-      <header className={`sticky top-0 z-50 transition-all duration-300 backdrop-blur-md ${
+      <header className={`sticky top-0 z-50 transition-all duration-300 ${
         !scrolled
-          ? 'bg-[#0a0a0c]/70 text-white border-b border-white/10'
+          ? 'bg-[#09090b]/70 text-white border-b border-white/10'
           : isDark
-            ? 'bg-[#0a0a0c]/95 text-cream-100 border-b border-[#1c1c20] shadow-lg'
-            : 'bg-white/95 text-zinc-900 border-b border-zinc-200 shadow-sm'
+            ? 'bg-[#09090b]/95 text-cream-100 border-b border-[#18181b]'
+            : 'bg-white/95 text-zinc-900 border-b border-zinc-200'
       }`}>
         <div className="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-10">
           <div className="flex items-center justify-between h-16 lg:h-20">
             
             {/* Left: Brand Emblem & Title */}
             <a href="#home" className="flex items-center gap-3 group shrink-0">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br from-[#d6b36c] via-[#c19a4a] to-[#a8853a] flex items-center justify-center text-[#0a0a0c] font-display font-bold text-sm sm:text-base shadow-md group-hover:scale-105 transition-transform">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-md bg-brass-500 flex items-center justify-center text-[#09090b] font-display font-bold text-sm sm:text-base">
                 G
               </div>
               <div className="flex flex-col text-left">
@@ -191,7 +191,7 @@ export function CustomerWebsiteView({
 
               <button
                 onClick={() => onOpenBooking()}
-                className="bg-brass-500 hover:bg-brass-400 text-ink-950 font-sans font-bold text-[11px] tracking-[0.16em] uppercase px-5 py-2 rounded-full transition-all shadow-sm hover:shadow-md hover:scale-105 active:scale-95"
+                className="bg-brass-500 hover:bg-brass-400 text-ink-950 font-sans font-bold text-[11px] tracking-[0.16em] uppercase px-5 py-2 rounded-full transition-colors"
               >
                 {tr('bookOnline')}
               </button>
@@ -229,7 +229,7 @@ export function CustomerWebsiteView({
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
           <div className={`lg:hidden border-t px-6 py-6 space-y-4 font-sans text-xs tracking-[0.18em] uppercase ${
-            isDark ? 'border-[#1c1c20] bg-[#0a0a0c]/98 text-cream-100' : 'border-zinc-200 bg-white/98 text-zinc-900 shadow-xl'
+            isDark ? 'border-[#18181b] bg-[#09090b]/98 text-cream-100' : 'border-zinc-200 bg-white/98 text-zinc-900'
           }`}>
             {navLinks.map((l, i) => (
               <a
@@ -241,10 +241,10 @@ export function CustomerWebsiteView({
                 {l.label}
               </a>
             ))}
-            <div className={`pt-4 border-t space-y-3.5 ${isDark ? 'border-[#1c1c20]' : 'border-zinc-200'}`}>
+            <div className={`pt-4 border-t space-y-3.5 ${isDark ? 'border-[#18181b]' : 'border-zinc-200'}`}>
               <button
                 onClick={() => { setMobileMenuOpen(false); onOpenBooking(); }}
-                className="w-full text-center py-3 bg-brass-500 text-ink-950 font-bold rounded-xl tracking-wider shadow-md"
+                className="w-full text-center py-3 bg-brass-500 text-ink-950 font-bold rounded-md tracking-wider"
               >
                 {tr('bookOnline')} →
               </button>
@@ -273,8 +273,8 @@ export function CustomerWebsiteView({
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
         {/* Dark dramatic overlay over hero photo (no white shade fog) */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c]/60 to-[#0a0a0c]/30" />
-        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#0a0a0c]/70 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/60 to-[#09090b]/30" />
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#09090b]/70 to-transparent" />
         <img
           src="/hawassa-map-transparent.png"
           alt="Map of Hawassa showing the shop location"
@@ -345,17 +345,17 @@ export function CustomerWebsiteView({
               <button
                 key={srv.id}
                 onClick={() => onOpenBooking(srv.id)}
-                className={`group relative text-left overflow-hidden shrink-0 w-[82vw] max-w-[310px] sm:w-auto snap-center rounded-2xl transition-all duration-300 hover:-translate-y-1 ${
-                  isDark ? 'bg-ink-900 border border-[#26262b] shadow-xl' : 'bg-zinc-900 border border-zinc-200/80 shadow-lg shadow-black/10'
+                className={`group relative text-left overflow-hidden shrink-0 w-[82vw] max-w-[310px] sm:w-auto snap-center rounded-md transition-all duration-300 hover:-translate-y-1 ${
+                  isDark ? 'bg-ink-900 border border-[#26262b]' : 'bg-zinc-900 border border-zinc-200/80'
                 }`}
               >
-                <div className="aspect-[3/4] overflow-hidden rounded-2xl">
+                <div className="aspect-[3/4] overflow-hidden rounded-md">
                   <img
                     src={serviceImgs[i % serviceImgs.length]}
                     alt={srv.name}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    className="w-full h-full object-cover transition-transform duration-700"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c]/95 via-[#0a0a0c]/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#09090b]/95 via-[#09090b]/40 to-transparent" />
                 </div>
                 <div className="absolute inset-x-0 bottom-0 p-6">
                   <span className="inline-block text-[10px] font-mono text-brass-300 bg-brass-500/20 border border-brass-500/30 px-2 py-0.5 rounded-full">0{i + 1}</span>
@@ -393,14 +393,14 @@ export function CustomerWebsiteView({
 
           <div className="columns-2 md:columns-3 gap-4 [&>*]:mb-4">
             {gallery.map((g, i) => (
-              <figure key={i} className="group relative overflow-hidden rounded-xl break-inside-avoid cursor-pointer shadow-md">
+              <figure key={i} className="group relative overflow-hidden rounded-md break-inside-avoid cursor-pointer">
                 <img
                   src={g.src}
                   alt={tr(g.titleKey)}
-                  className="w-full object-cover transition-transform duration-700 group-hover:scale-105 rounded-xl"
+                  className="w-full object-cover transition-transform duration-700 rounded-md"
                   style={{ aspectRatio: g.ratio }}
                 />
-                <figcaption className="absolute inset-0 flex items-end p-5 bg-gradient-to-t from-[#0a0a0c]/80 via-[#0a0a0c]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl">
+                <figcaption className="absolute inset-0 flex items-end p-5 bg-gradient-to-t from-[#09090b]/80 via-[#09090b]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-md">
                   <span className="text-[10px] font-sans uppercase tracking-[0.25em] text-cream-100">{tr(g.titleKey)}</span>
                 </figcaption>
               </figure>
@@ -413,7 +413,7 @@ export function CustomerWebsiteView({
       <section id="contact" className={`py-10 lg:py-14 px-4 sm:px-8 lg:px-10 border-t ${divider}`}>
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20">
           <div className={`relative min-h-[380px] lg:min-h-[520px] border overflow-hidden ${
-            isDark ? 'border-brass-500/25 bg-[#111114]' : 'border-zinc-300 bg-zinc-100'
+            isDark ? 'border-brass-500/25 bg-[#111113]' : 'border-zinc-300 bg-zinc-100'
           }`}>
             <img
               src="/hawassa-map-transparent.png"
@@ -422,7 +422,7 @@ export function CustomerWebsiteView({
             />
             <div className={`absolute inset-4 border pointer-events-none ${isDark ? 'border-brass-500/20' : 'border-zinc-300'}`} />
             <div className={`absolute left-6 bottom-6 px-5 py-3 border ${
-              isDark ? 'bg-[#0a0a0c]/90 border-brass-500/30' : 'bg-white/95 border-zinc-300 shadow-sm'
+              isDark ? 'bg-[#09090b]/90 border-brass-500/30' : 'bg-white/95 border-zinc-300'
             }`}>
               <div className="text-[10px] font-sans uppercase tracking-[0.25em] text-brass-600 font-semibold">Gech Barbershop</div>
               <div className={`text-xs mt-1 ${isDark ? 'text-cream-100/70' : 'text-zinc-700'}`}>Piassa · Hawassa, Ethiopia</div>
@@ -471,7 +471,7 @@ export function CustomerWebsiteView({
 
       {/* FOOTER — adapts cleanly to light and dark theme */}
       <footer className={`pt-16 pb-10 px-4 sm:px-8 lg:px-10 border-t transition-colors ${
-        isDark ? 'bg-[#0a0a0c] text-cream-100 border-[#1c1c20]' : 'bg-white text-zinc-900 border-zinc-200'
+        isDark ? 'bg-[#09090b] text-cream-100 border-[#18181b]' : 'bg-white text-zinc-900 border-zinc-200'
       }`}>
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-10">
@@ -507,7 +507,7 @@ export function CustomerWebsiteView({
           </div>
 
           <div className={`mt-12 pt-6 border-t flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-sans ${
-            isDark ? 'border-[#1c1c20] text-cream-100/40' : 'border-zinc-200 text-zinc-500'
+            isDark ? 'border-[#18181b] text-cream-100/40' : 'border-zinc-200 text-zinc-500'
           }`}>
             <span>{tr('rights', { name: company?.name || 'Gech Barbershop' })}</span>
             <div className="flex items-center gap-6">

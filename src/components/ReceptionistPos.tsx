@@ -1,916 +1,1884 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Scissors,
+  Search,
   UserPlus,
   Clock,
-  CheckCircle,
-  Trash2,
-  QrCode,
-  Send,
-  Search,
-  UserCheck,
+  Scissors,
   Receipt,
-  PlayCircle,
-  User,
-  ArrowRight,
+  Users,
+  ShoppingCart,
+  X,
+  Printer,
+  DollarSign,
+  LayoutDashboard,
+  Star,
+  Trash2,
+  BarChart3,
+  CheckCircle2,
+  AlertCircle,
+  Plus,
+  Sparkles,
+  Phone,
+  Mail,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Package,
+  ReceiptText,
+  Wallet,
+  Pencil,
+  Minus,
+  LogOut,
 } from 'lucide-react';
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import {
+  Customer,
+  Service,
+  Staff,
+  VisitSession,
   Company,
   Branch,
-  BusinessUnit,
-  Staff,
-  Service,
-  Customer,
-  VisitSession,
+  CommissionLog,
+  InventoryItem,
+  ExpenseRecord,
   SessionServiceItem,
   PaymentMethod,
+  BusinessUnit,
 } from '../types';
-import { PrintableInvoice } from './PrintableInvoice';
-import { CustomerSearchSelect } from './CustomerSearchSelect';
 import { usePolling } from '../lib/usePolling';
+import { PrintableInvoice } from './PrintableInvoice';
+import { getStaffQueue, suggestStaff } from '../lib/queue';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 
 interface ReceptionistPosProps {
-  company: Company;
-  branch: Branch;
-  businessUnit: BusinessUnit | null;
+  company?: Company;
+  branch?: Branch;
   staffList: Staff[];
   services: Service[];
   customers: Customer[];
+  inventoryItems?: InventoryItem[];
+  expenses?: ExpenseRecord[];
   visitSessions: VisitSession[];
-  onCreateVisitSession: (session: VisitSession) => void;
-  onCheckoutSession: (sessionId: string, paymentMethod: PaymentMethod, reference: string) => void;
-  onAddCustomer: (customer: Customer) => void;
-  onUpdateSessionStatus?: (sessionId: string, newStatus: any) => void;
+  commissionLogs?: CommissionLog[];
+  onCreateVisitSession: (session: VisitSession) => Promise<void> | void;
+  onUpdateSessionStatus?: (sessionId: string, newStatus: 'queued' | 'in_progress' | 'completed' | 'cancelled') => Promise<void> | void;
+  onAddCustomer: (customer: Customer) => Promise<void> | void;
+  onUpdateSessionServices?: (sessionId: string, service: SessionServiceItem) => Promise<void> | void;
+  onCheckoutSession: (sessionId: string, paymentMethod: PaymentMethod, reference: string) => Promise<void> | void;
+  onCancelSession: (sessionId: string, reason?: string) => Promise<void> | void;
+  onRemoveSessionService?: (sessionId: string, serviceId: string) => Promise<void> | void;
   onRefresh?: () => void | Promise<void>;
+  onAddInventoryItem?: (item: InventoryItem) => Promise<void> | void;
+  onUpdateInventoryItem?: (item: InventoryItem) => Promise<void> | void;
+  onDeleteInventoryItem?: (id: string) => Promise<void> | void;
+  onUpdateInventoryStock?: (id: string, addedQty: number) => Promise<void> | void;
+  onAddExpense?: (expense: ExpenseRecord) => Promise<void> | void;
+  currentUser?: { name?: string; role: string; companyId: string | null };
+  onLogout?: () => void;
 }
+
+const PIE_COLORS = ['#18181b', '#0d9488', '#3a3a41', '#115e59', '#6b6b75'];
+
+const isToday = (dateStr?: string) => {
+  if (!dateStr) return true;
+  const normalized = dateStr.includes(' ') && !dateStr.includes('T') ? dateStr.replace(' ', 'T') : dateStr;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return true;
+  const today = new Date();
+  return (
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear()
+  );
+};
 
 export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   company,
   branch,
-  businessUnit,
   staffList,
   services,
   customers,
   visitSessions,
   onCreateVisitSession,
-  onCheckoutSession,
   onAddCustomer,
-  onUpdateSessionStatus,
+  onCheckoutSession,
+  onCancelSession,
   onRefresh,
+  inventoryItems = [],
+  expenses = [],
+  onAddInventoryItem,
+  onUpdateInventoryItem,
+  onDeleteInventoryItem,
+  onUpdateInventoryStock,
+  onAddExpense,
+  currentUser,
+  onLogout,
+  businessUnit,
 }) => {
-  const [subTab, setSubTab] = useState<'new_session' | 'queue' | 'clients'>('new_session');
-  const [customerDirSearch, setCustomerDirSearch] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(customers[0] || null);
-  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  // ---- State ----
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedServices, setSelectedServices] = useState<SessionServiceItem[]>([]);
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [pickerMode, setPickerMode] = useState<'list' | 'new'>('list');
   const [custName, setCustName] = useState('');
   const [custPhone, setCustPhone] = useState('');
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [custEmail, setCustEmail] = useState('');
+  const [custNotes, setCustNotes] = useState('');
+  const [custIsVip, setCustIsVip] = useState(false);
 
-  usePolling(() => {
-    setLastUpdatedAt(new Date());
-    return onRefresh?.();
-  }, 10_000);
-
-  const [selectedServiceItems, setSelectedServiceItems] = useState<
-    { service: Service; assignedStaff: Staff }[]
-  >([]);
-
-  const [checkoutSession, setCheckoutSession] = useState<VisitSession | null>(null);
+  const [serviceCategory, setServiceCategory] = useState<string>('all');
   const [invoiceToPrint, setInvoiceToPrint] = useState<VisitSession | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('telebirr');
-  const [paymentReference, setPaymentReference] = useState('');
-  const [discountAmount, setDiscountAmount] = useState(0);
-
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [queueSearchQuery, setQueueSearchQuery] = useState('');
-  const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'in_progress' | 'completed'>('all');
-  const [queueStaffFilter, setQueueStaffFilter] = useState<string>('all');
+  const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paidIds, setPaidIds] = useState<string[]>([]);
+  const [viewTab, setViewTab] = useState<'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses'>('sessions');
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [showAllDates, setShowAllDates] = useState(false);
 
-  const availableStaff = staffList.filter((s) => s.branchId === branch.id);
-  const availableServices = services.filter((s) =>
-    businessUnit ? s.businessUnitId === businessUnit.id : true
+  // Inventory state
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
+  const [adjustQty, setAdjustQty] = useState(0);
+  const [adjustMode, setAdjustMode] = useState<'restock' | 'use'>('restock');
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [invEditing, setInvEditing] = useState<InventoryItem | null>(null);
+  const [invName, setInvName] = useState('');
+  const [invSku, setInvSku] = useState('');
+  const [invUnit, setInvUnit] = useState('unit');
+  const [invStock, setInvStock] = useState(0);
+  const [invReorder, setInvReorder] = useState(5);
+  const [invCost, setInvCost] = useState(0);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<InventoryItem | null>(null);
+
+  // Expense state
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expCategory, setExpCategory] = useState<ExpenseRecord['category']>('other');
+  const [expAmount, setExpAmount] = useState('');
+  const [expDescription, setExpDescription] = useState('');
+  const [expMethod, setExpMethod] = useState<PaymentMethod>('cash');
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [expenseSuccess, setExpenseSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (paidIds.length > 0 && visitSessions.some((s) => s.isPaid && paidIds.includes(s.id))) {
+      setPaidIds([]);
+    }
+  }, [visitSessions]);
+
+  usePolling(() => { setLastUpdatedAt(new Date()); return onRefresh?.(); }, 15_000);
+
+  const branchId = branch?.id;
+  const activeCompanyId = company?.id || 'cmp_gech_01';
+  const fallbackBranchId = branch?.id || (staffList.length > 0 ? staffList[0].branchId : 'br_female_01');
+
+  // ---- Daily Filtered Data ----
+  const branchStaff = useMemo(
+    () => staffList.filter((s) => (branchId ? s.branchId === branchId : true) && s.role !== 'receptionist'),
+    [staffList, branchId]
   );
 
-  const branchSessions = visitSessions.filter((s) => s.branchId === branch.id);
-  const queuedSessions = branchSessions.filter((s) => s.status === 'queued');
-  const inProgressSessions = branchSessions.filter((s) => s.status === 'in_progress');
-  const completedSessions = branchSessions.filter((s) => s.status === 'completed');
+  const availableServices = useMemo(
+    () => services.filter((s) => !company || s.companyId === company.id),
+    [services, company]
+  );
 
-  const filteredSessions = branchSessions.filter((session) => {
-    if (queueStatusFilter !== 'all' && session.status !== queueStatusFilter) return false;
-    if (queueStaffFilter !== 'all') {
-      const hasStaff = session.services.some((s) => s.staffId === queueStaffFilter);
-      if (!hasStaff) return false;
+  const categories = useMemo(() => [...new Set(availableServices.map((s) => s.category))], [availableServices]);
+  const filteredServices = serviceCategory === 'all' ? availableServices : availableServices.filter((s) => s.category === serviceCategory);
+
+  // Filter visit sessions for the front desk
+  const todayBranchSessions = useMemo(() => {
+    return visitSessions.filter((s) => {
+      const matchesCompany = !company || !s.companyId || s.companyId === activeCompanyId;
+      const matchesBranch = !branchId || !s.branchId || s.branchId === branchId;
+      if (!matchesCompany || !matchesBranch) return false;
+
+      // Always show queued or in-progress clients in the active queue
+      if (s.status === 'queued' || s.status === 'in_progress') return true;
+
+      // Show completed or cancelled sessions if they match today or user toggled showAllDates
+      return showAllDates || isToday(s.completedAt || s.startedAt || s.createdAt);
+    });
+  }, [visitSessions, company, activeCompanyId, branchId, showAllDates]);
+
+  const filteredSessions = useMemo(() => {
+    let list = todayBranchSessions;
+    if (queueStatusFilter === 'pending') {
+      list = list.filter((s) => s.status === 'completed' && !s.isPaid && !paidIds.includes(s.id));
+    } else if (queueStatusFilter !== 'all') {
+      list = list.filter((s) => s.status === queueStatusFilter);
     }
-    if (queueSearchQuery.trim() !== '') {
-      const q = queueSearchQuery.toLowerCase().trim();
-      return (
-        session.queueNumber.toLowerCase().includes(q) ||
-        session.customerName.toLowerCase().includes(q) ||
-        session.customerPhone.toLowerCase().includes(q) ||
-        session.services.some((srv) => srv.serviceName.toLowerCase().includes(q) ||
-          srv.staffName.toLowerCase().includes(q))
+    if (queueSearchQuery.trim()) {
+      const q = queueSearchQuery.toLowerCase();
+      list = list.filter((s) =>
+        s.customerName.toLowerCase().includes(q) ||
+        s.customerPhone.includes(q) ||
+        s.queueNumber.toLowerCase().includes(q) ||
+        s.services.some((svc) => svc.serviceName.toLowerCase().includes(q) || svc.staffName.toLowerCase().includes(q))
       );
     }
-    return true;
-  });
+    return list;
+  }, [todayBranchSessions, queueStatusFilter, queueSearchQuery, paidIds]);
 
-  // Staff earnings summary
-  const staffEarnings = useMemo(() => {
-    const earningsMap = new Map<string, { name: string; sessions: number; revenue: number; commissions: number }>();
-    const today = new Date().toISOString().split('T')[0];
+  const filteredPickerCustomers = useMemo(() => {
+    const q = clientSearchQuery.trim().toLowerCase().replace(/\s+/g, '');
+    if (!q) return [...customers].sort((a, b) => (b.isVip ? 1 : 0) - (a.isVip ? 1 : 0));
+    const list = customers.filter((c) => {
+      const nameMatch = c.name.toLowerCase().includes(q);
+      const phoneMatch = c.phone.replace(/\s+/g, '').includes(q);
+      return nameMatch || phoneMatch;
+    });
+    return list;
+  }, [customers, clientSearchQuery]);
 
-    branchSessions.forEach((session) => {
-      const sessionDate = session.startedAt?.split('T')[0];
-      if (sessionDate !== today) return;
-      if (session.status !== 'completed' && session.status !== 'in_progress') return;
+  // Today's Key Metrics
+  const queuedCount = todayBranchSessions.filter((s) => s.status === 'queued').length;
+  const inProgressCount = todayBranchSessions.filter((s) => s.status === 'in_progress').length;
+  const completedToday = todayBranchSessions.filter((s) => s.status === 'completed').length;
+  const pendingPaymentSessions = todayBranchSessions.filter((s) => s.status === 'completed' && !s.isPaid && !paidIds.includes(s.id));
+  const pendingCount = pendingPaymentSessions.length;
+  const pendingUnpaidAmount = pendingPaymentSessions.reduce((acc, s) => acc + s.netTotalEtb, 0);
 
-      session.services.forEach((svc) => {
-        const existing = earningsMap.get(svc.staffId) || { name: svc.staffName, sessions: 0, revenue: 0, commissions: 0 };
-        existing.sessions += 1;
-        existing.revenue += svc.priceEtb;
-        existing.commissions += svc.commissionEarnedEtb;
-        earningsMap.set(svc.staffId, existing);
+  const todayRevenue = useMemo(() => {
+    return todayBranchSessions
+      .filter((s) => s.isPaid || paidIds.includes(s.id))
+      .reduce((acc, s) => acc + s.netTotalEtb, 0);
+  }, [todayBranchSessions, paidIds]);
+
+  // ---- Inventory Data ----
+  const branchInventory = useMemo(() => {
+    return inventoryItems.filter((i) => {
+      const matchesCompany = !company || !i.companyId || i.companyId === activeCompanyId;
+      const matchesBranch = !branchId || !i.branchId || i.branchId === branchId;
+      return matchesCompany && matchesBranch;
+    });
+  }, [inventoryItems, company, activeCompanyId, branchId]);
+
+  const filteredInventory = useMemo(() => {
+    const q = inventorySearch.trim().toLowerCase();
+    if (!q) return branchInventory;
+    return branchInventory.filter((i) =>
+      i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q)
+    );
+  }, [branchInventory, inventorySearch]);
+
+  const lowStockCount = branchInventory.filter((i) => i.currentStock <= i.reorderLevel).length;
+
+  // ---- Expense Data ----
+  const todayExpenses = useMemo(() => {
+    return expenses
+      .filter((e) => {
+        const matchesCompany = !company || !e.companyId || e.companyId === activeCompanyId;
+        const matchesBranch = !branchId || !e.branchId || e.branchId === branchId;
+        return matchesCompany && matchesBranch && isToday(e.date);
+      })
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [expenses, company, activeCompanyId, branchId]);
+
+  const todayExpenseTotal = todayExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
+  const expenseLimit = Number(branch?.dailyExpenseLimitEtb || 0);
+  const expenseRemaining = expenseLimit > 0 ? Math.max(0, expenseLimit - todayExpenseTotal) : null;
+  const expensePct = expenseLimit > 0 ? Math.min(100, Math.round((todayExpenseTotal / expenseLimit) * 100)) : 0;
+  const expenseAtLimit = expenseLimit > 0 && todayExpenseTotal >= expenseLimit;
+
+  const handleAddInventorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invName) return;
+    const item: InventoryItem = {
+      id: `inv_${Date.now()}`,
+      companyId: activeCompanyId,
+      branchId: branchId || fallbackBranchId,
+      businessUnitId: businessUnit?.id || null,
+      name: invName,
+      sku: invSku || `SKU-${Date.now().toString().slice(-6)}`,
+      unit: invUnit,
+      currentStock: invStock,
+      reorderLevel: invReorder,
+      unitCostEtb: invCost,
+      lastRestockedAt: new Date().toISOString().slice(0, 10),
+    };
+    try {
+      await onAddInventoryItem?.(item);
+      onRefresh?.();
+      setShowInventoryModal(false);
+      setInvEditing(null);
+      setInvName(''); setInvSku(''); setInvUnit('unit'); setInvStock(0); setInvReorder(5); setInvCost(0);
+    } catch {
+      // handled by parent
+    }
+  };
+
+  const handleUpdateInventorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invEditing) return;
+    try {
+      await onUpdateInventoryItem?.({
+        ...invEditing,
+        name: invName,
+        sku: invSku,
+        unit: invUnit,
+        currentStock: invStock,
+        reorderLevel: invReorder,
+        unitCostEtb: invCost,
       });
-    });
-
-    return Array.from(earningsMap.entries()).map(([id, data]) => ({ id, ...data }));
-  }, [branchSessions]);
-
-  const todayStats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const todaySessions = branchSessions.filter((s) => s.startedAt?.split('T')[0] === today);
-    const totalRevenue = todaySessions.reduce((sum, s) => sum + (s.status === 'completed' ? s.netTotalEtb : 0), 0);
-    const totalCommissions = todaySessions.reduce((sum, s) =>
-      sum + s.services.reduce((ss, svc) => ss + svc.commissionEarnedEtb, 0), 0);
-    const pendingPayments = todaySessions.filter((s) => s.status === 'completed' && !s.isPaid);
-    const activeStaff = new Set(todaySessions.flatMap((s) => s.services.map((svc) => svc.staffId))).size;
-
-    return {
-      totalSessions: todaySessions.length,
-      totalRevenue,
-      totalCommissions,
-      pendingPayments: pendingPayments.length,
-      pendingAmount: pendingPayments.reduce((sum, s) => sum + s.netTotalEtb, 0),
-      activeStaff,
-      completedSessions: todaySessions.filter((s) => s.status === 'completed').length,
-    };
-  }, [branchSessions]);
-
-  const rawSubtotalEtb = selectedServiceItems.reduce((acc, item) => acc + item.service.priceEtb, 0);
-  const totalDurationMins = selectedServiceItems.reduce((acc, item) => acc + item.service.durationMinutes, 0);
-
-  const handleAddServiceToBuilder = (service: Service) => {
-    const matchingStaff = availableStaff.find(
-      (s) => s.role === 'barber' || s.role === 'hairstylist' || s.role === 'masseuse' || s.role === 'esthetician'
-    ) || availableStaff[0];
-    if (!matchingStaff) return;
-    setSelectedServiceItems((prev) => [...prev, { service, assignedStaff: matchingStaff }]);
+      onRefresh?.();
+      setShowInventoryModal(false);
+      setInvEditing(null);
+    } catch {
+      // handled by parent
+    }
   };
 
-  const handleStaffChangeInBuilder = (index: number, staffId: string) => {
-    const staff = availableStaff.find((s) => s.id === staffId);
+  const openAddInventory = () => {
+    setInvEditing(null);
+    setInvName(''); setInvSku(''); setInvUnit('unit'); setInvStock(0); setInvReorder(5); setInvCost(0);
+    setShowInventoryModal(true);
+  };
+
+  const openEditInventory = (item: InventoryItem) => {
+    setInvEditing(item);
+    setInvName(item.name); setInvSku(item.sku); setInvUnit(item.unit);
+    setInvStock(item.currentStock); setInvReorder(item.reorderLevel); setInvCost(item.unitCostEtb);
+    setShowInventoryModal(true);
+  };
+
+  const handleAdjustStock = async () => {
+    if (!adjustItem || adjustQty === 0) return;
+    try {
+      await onUpdateInventoryStock?.(adjustItem.id, adjustMode === 'use' ? -adjustQty : adjustQty);
+      onRefresh?.();
+      setAdjustItem(null);
+      setAdjustQty(0);
+      setAdjustMode('restock');
+    } catch {
+      // handled by parent
+    }
+  };
+
+  const handleRecordExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExpenseError(null);
+    setExpenseSuccess(null);
+    const amount = Number(expAmount);
+    if (!expDescription || !amount || amount <= 0) {
+      setExpenseError('Please enter a valid amount and description.');
+      return;
+    }
+    if (expenseLimit > 0 && amount > expenseRemaining!) {
+      setExpenseError(`Amount exceeds the daily expense limit. Only ${expenseRemaining} ETB remaining today (limit ${expenseLimit} ETB).`);
+      return;
+    }
+    const record: ExpenseRecord = {
+      id: `exp_${Date.now()}`,
+      companyId: activeCompanyId,
+      branchId: branchId || fallbackBranchId,
+      businessUnitId: businessUnit?.id || null,
+      category: expCategory,
+      amountEtb: amount,
+      description: expDescription,
+      paymentMethod: expMethod,
+      recordedBy: currentUser?.name || 'Reception Desk',
+      date: new Date().toISOString().slice(0, 10),
+    };
+    try {
+      await onAddExpense?.(record);
+      onRefresh?.();
+      setShowExpenseModal(false);
+      setExpAmount(''); setExpDescription('');
+      setExpenseSuccess('Expense recorded successfully.');
+      setTimeout(() => setExpenseSuccess(null), 4000);
+    } catch (err: any) {
+      setExpenseError(err?.message || 'Failed to record expense. The daily limit may be exceeded.');
+    }
+  };
+
+  // ---- Handlers ----
+  const addServiceToBuilder = (service: Service) => {
+    setCreationError(null);
+    const suggestion = suggestStaff(branchStaff, service.businessUnitId, todayBranchSessions, customers);
+    const staff = suggestion
+      ? branchStaff.find((s) => s.id === suggestion.id)
+      : branchStaff.find((s) => s.businessUnitId === service.businessUnitId);
+    const commission = Math.round((service.priceEtb * (staff?.defaultCommissionPercentage || 30)) / 100);
+    const item: SessionServiceItem = {
+      id: `vss_${Date.now()}`, serviceId: service.id, serviceName: service.name,
+      staffId: staff?.id || '', staffName: staff?.name || 'Unassigned', priceEtb: service.priceEtb,
+      durationMinutes: service.durationMinutes, commissionEarnedEtb: commission, status: 'pending',
+    };
+    setSelectedServices((prev) => [...prev, item]);
+  };
+
+  const removeServiceFromBuilder = (index: number) => setSelectedServices((prev) => prev.filter((_, i) => i !== index));
+
+  const assignStaffToBuilder = (index: number, staffId: string) => {
+    const staff = staffList.find((s) => s.id === staffId);
     if (!staff) return;
-    setSelectedServiceItems((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], assignedStaff: staff };
-      return next;
-    });
+    setSelectedServices((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              staffId: staff.id,
+              staffName: staff.name,
+              commissionEarnedEtb: Math.round((item.priceEtb * staff.defaultCommissionPercentage) / 100),
+            }
+          : item
+      )
+    );
   };
 
-  const handleRemoveServiceFromBuilder = (index: number) => {
-    setSelectedServiceItems((prev) => prev.filter((_, i) => i !== index));
+  const createSession = async () => {
+    setCreationError(null);
+    if (!selectedCustomer) {
+      setCreationError('Please select or register a client first.');
+      return;
+    }
+    if (selectedServices.length === 0) {
+      setCreationError('Please add at least one service to the session.');
+      return;
+    }
+    if (selectedServices.some((s) => !s.staffId)) {
+      setCreationError('Assign a staff member to every service before confirming the queue.');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const queueNumber = `Q-${100 + (todayBranchSessions.length + 1)}`;
+      const subtotal = selectedServices.reduce((acc, s) => acc + s.priceEtb, 0);
+      const firstService = availableServices.find((s) => s.id === selectedServices[0]?.serviceId);
+      const newSession: VisitSession = {
+        id: `vst_${Date.now()}`,
+        companyId: company?.id || selectedCustomer.companyId || activeCompanyId,
+        branchId: fallbackBranchId,
+        businessUnitId: firstService?.businessUnitId || 'bu_mens_hair',
+        queueNumber,
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
+        services: selectedServices,
+        status: 'queued',
+        subtotalEtb: subtotal,
+        discountEtb: 0,
+        taxEtb: 0,
+        netTotalEtb: subtotal,
+        isPaid: false,
+        startedAt: new Date().toISOString(),
+      };
+      await onCreateVisitSession(newSession);
+      setSelectedServices([]);
+      setSelectedCustomer(null);
+      setIsBuilderOpen(false);
+      onRefresh?.();
+    } catch (err: any) {
+      setCreationError(err?.message || 'Failed to create session. Please try again.');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  const nextQueueNumber = useMemo(() => {
-    let max = 100;
-    branchSessions.forEach((s) => {
-      const m = s.queueNumber.match(/^Q-(\d+)$/);
-      if (m) max = Math.max(max, parseInt(m[1], 10));
-    });
-    return `Q-${max + 1}`;
-  }, [branchSessions]);
+  const cartTotal = selectedServices.reduce((acc, s) => acc + s.priceEtb, 0);
 
-  const handleRegisterSession = () => {
-    if (!selectedCustomer || selectedServiceItems.length === 0) return;
-    const queueNum = nextQueueNumber;
-    const sessionServices: SessionServiceItem[] = selectedServiceItems.map((item, idx) => ({
-      id: `vss_${Date.now()}_${idx}`,
-      serviceId: item.service.id,
-      serviceName: item.service.name,
-      staffId: item.assignedStaff.id,
-      staffName: item.assignedStaff.name,
-      priceEtb: item.service.priceEtb,
-      durationMinutes: item.service.durationMinutes,
-      commissionEarnedEtb: Math.round((item.service.priceEtb * item.assignedStaff.defaultCommissionPercentage) / 100),
-      status: 'pending',
-    }));
-
-    const newSession: VisitSession = {
-      id: `vst_${Date.now()}`,
-      companyId: company.id,
-      branchId: branch.id,
-      businessUnitId: businessUnit?.id || availableServices[0]?.businessUnitId || '',
-      queueNumber: queueNum,
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name,
-      customerPhone: selectedCustomer.phone,
-      services: sessionServices,
-      status: 'queued',
-      subtotalEtb: rawSubtotalEtb,
-      discountEtb: discountAmount,
-      taxEtb: 0,
-      netTotalEtb: Math.max(0, rawSubtotalEtb - discountAmount),
-      isPaid: false,
-      startedAt: new Date().toISOString(),
-    };
-
-    onCreateVisitSession(newSession);
-    setSelectedServiceItems([]);
-    setDiscountAmount(0);
-    setSubTab('queue');
-  };
-
-  const handleCreateNewCustomer = (e: React.FormEvent) => {
+  const handleCreateNewCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!custName || !custPhone) return;
     const newCust: Customer = {
       id: `cust_${Date.now()}`,
-      companyId: company.id,
+      companyId: activeCompanyId,
       name: custName,
       phone: custPhone,
-      totalVisits: 0,
+      email: custEmail || undefined,
+      totalVisits: 1,
       totalSpentEtb: 0,
-      loyaltyPoints: 0,
-      isVip: false,
+      loyaltyPoints: 10,
+      isVip: custIsVip,
+      notes: custNotes || undefined,
       createdAt: new Date().toISOString().split('T')[0],
     };
-    onAddCustomer(newCust);
-    setSelectedCustomer(newCust);
-    setShowNewCustomerModal(false);
-    setCustName('');
-    setCustPhone('');
+    try {
+      await onAddCustomer(newCust);
+      setSelectedCustomer(newCust);
+      setShowClientPicker(false);
+      setPickerMode('list');
+      setClientSearchQuery('');
+      setCustName(''); setCustPhone(''); setCustEmail(''); setCustNotes(''); setCustIsVip(false);
+      setIsBuilderOpen(true);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to create customer');
+    }
   };
 
-  const handleExecuteCheckout = () => {
-    if (!checkoutSession) return;
-    const ref = paymentReference || `${paymentMethod.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
-    onCheckoutSession(checkoutSession.id, paymentMethod, ref);
-    setInvoiceToPrint({
-      ...checkoutSession,
-      isPaid: true,
-      paymentMethod,
-      paymentReference: ref,
-      completedAt: new Date().toISOString(),
-    });
-    setCheckoutSession(null);
-    setPaymentReference('');
+  const handleCheckout = async (sessionId: string) => {
+    setPaidIds((prev) => [...prev, sessionId]);
+    setExpandedPaymentId(null);
+    try {
+      await onCheckoutSession(sessionId, paymentMethod, paymentReference);
+      onRefresh?.();
+    } catch {
+      // handled by parent
+    } finally {
+      setPaymentReference('');
+    }
   };
+
+  const staffForService = (service: Service) => {
+    return branchStaff.filter((s) => s.businessUnitId === service.businessUnitId);
+  };
+
+  // ---- Daily Analytics Computations ----
+  const paymentMethodPieData = useMemo(() => {
+    const map: Record<string, number> = { cash: 0, telebirr: 0, cbe_birr: 0, card: 0 };
+    todayBranchSessions.forEach((s) => {
+      if (s.isPaid || paidIds.includes(s.id)) {
+        const pm = s.paymentMethod || 'cash';
+        map[pm] = (map[pm] || 0) + s.netTotalEtb;
+      }
+    });
+    return [
+      { name: 'Cash', value: map.cash },
+      { name: 'Telebirr', value: map.telebirr },
+      { name: 'CBE Birr', value: map.cbe_birr },
+      { name: 'Card / POS', value: map.card },
+    ].filter((item) => item.value > 0);
+  }, [todayBranchSessions, paidIds]);
+
+  const hourlyRevenueData = useMemo(() => {
+    const hoursMap: Record<string, number> = {};
+    for (let h = 8; h <= 20; h++) {
+      const key = `${h.toString().padStart(2, '0')}:00`;
+      hoursMap[key] = 0;
+    }
+    todayBranchSessions.forEach((s) => {
+      if (s.isPaid || paidIds.includes(s.id)) {
+        const date = new Date(s.completedAt || s.startedAt || Date.now());
+        const hour = date.getHours();
+        const key = `${hour.toString().padStart(2, '0')}:00`;
+        if (hoursMap[key] !== undefined) {
+          hoursMap[key] += s.netTotalEtb;
+        } else {
+          hoursMap[key] = s.netTotalEtb;
+        }
+      }
+    });
+    return Object.keys(hoursMap).map((h) => ({ hour: h, revenue: hoursMap[h] }));
+  }, [todayBranchSessions, paidIds]);
+
+  const todayStaffPerformance = useMemo(() => {
+    const map: Record<string, { name: string; role: string; count: number; revenue: number; commission: number }> = {};
+    todayBranchSessions.forEach((s) => {
+      s.services.forEach((srv) => {
+        if (!map[srv.staffId]) {
+          const stf = staffList.find((st) => st.id === srv.staffId);
+          map[srv.staffId] = {
+            name: srv.staffName || stf?.name || 'Staff',
+            role: stf?.role || 'Provider',
+            count: 0,
+            revenue: 0,
+            commission: 0,
+          };
+        }
+        if (srv.status === 'completed' || s.status === 'completed') {
+          map[srv.staffId].count += 1;
+          map[srv.staffId].revenue += srv.priceEtb;
+          map[srv.staffId].commission += srv.commissionEarnedEtb;
+        }
+      });
+    });
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue);
+  }, [todayBranchSessions, staffList]);
 
   return (
     <div className="space-y-4">
-      {/* Header Bar */}
-      <div className="bg-primary border border-primary/80 rounded-2xl px-4 py-3 text-primary-foreground shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-serif font-light text-primary-foreground">{branch.name}</h2>
-          <span className="text-primary-foreground/60 text-xs">·</span>
-          <span className="text-primary-foreground/80 text-xs">{branch.city}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <div className="flex items-center gap-1.5 bg-muted/10 px-3 py-1.5 rounded-xl border border-primary-foreground/20" title="Live sync">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-primary-foreground/70 font-medium">Live</span>
-            <span className="font-mono text-primary-foreground/80">{lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+      {/* Header Banner */}
+      <Card className="border-border bg-card  overflow-hidden">
+        <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg">
+              <Scissors className="size-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">Receptionist Front Desk Kiosk</h1>
+                <Badge variant="outline" className="text-[10px] font-mono border-border text-muted-foreground">
+                  Today's View
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-2">
+                <span>{branch?.name || company?.name || 'Central Salon Branch'}</span>
+                <span>•</span>
+                <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              </p>
+            </div>
           </div>
-          <div className="bg-muted/10 px-3 py-1.5 rounded-xl border border-primary-foreground/20 text-center">
-            <span className="font-mono font-bold">{queuedSessions.length}</span>
-            <span className="text-primary-foreground/60 ml-1">Queued</span>
-          </div>
-          <div className="bg-muted/10 px-3 py-1.5 rounded-xl border border-primary-foreground/20 text-center">
-            <span className="font-mono font-bold">{inProgressSessions.length}</span>
-            <span className="text-primary-foreground/60 ml-1">Active</span>
-          </div>
-          <div className="bg-muted/10 px-3 py-1.5 rounded-xl border border-primary-foreground/20 text-center">
-            <span className="font-mono font-bold">{completedSessions.length}</span>
-            <span className="text-primary-foreground/60 ml-1">Done</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-1 bg-card p-1 rounded-xl border border-border shadow-sm overflow-x-auto">
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="xs"
+              variant={showAllDates ? 'secondary' : 'outline'}
+              onClick={() => setShowAllDates(!showAllDates)}
+              className="text-xs font-semibold"
+            >
+              {showAllDates ? 'Showing All Dates' : 'Showing Today Only'}
+            </Button>
+            <Badge variant="secondary" className="text-sm px-3 py-1 font-mono">
+              Live {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Syncing...'}
+            </Badge>
+            <Button
+              onClick={() => { setIsBuilderOpen(!isBuilderOpen); setCreationError(null); }}
+              className="gap-2  font-semibold text-sm"
+              variant={isBuilderOpen ? 'secondary' : 'default'}
+            >
+              {isBuilderOpen ? <ChevronUp className="size-4" /> : <Plus className="size-4" />}
+              {isBuilderOpen ? 'Hide Builder' : '+ New Client Session'}
+            </Button>
+            {onLogout && (
+              <Button
+                onClick={onLogout}
+                variant="outline"
+                className="gap-2 font-semibold text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+                title="Sign out of the reception desk"
+              >
+                <LogOut className="size-4" />
+                {currentUser?.name ? `Sign Out (${currentUser.name})` : 'Sign Out'}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Daily KPI Row — Clickable filters */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border border-border">
         {[
-          { id: 'new_session' as const, label: 'New Session', icon: Scissors },
-          { id: 'queue' as const, label: 'Queue Board', icon: Clock },
-          { id: 'clients' as const, label: 'Clients', icon: UserCheck },
-        ].map((tab) => (
+          { label: 'Queue Today', value: queuedCount, status: 'queued', dot: 'bg-sky-500' },
+          { label: 'In Progress', value: inProgressCount, status: 'in_progress', dot: 'bg-amber-500' },
+          { label: 'Done Today', value: completedToday, status: 'completed', dot: 'bg-emerald-500' },
+          { label: 'Unpaid Today', value: `${pendingCount} (${pendingUnpaidAmount} ETB)`, status: 'pending', dot: 'bg-rose-500' },
+          { label: 'Today Sales', value: `${todayRevenue.toLocaleString()} ETB`, status: 'all', dot: 'bg-primary' },
+        ].map(({ label, value, status, dot }) => (
           <button
-            key={tab.id}
-            onClick={() => setSubTab(tab.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-1 justify-center ${
-              subTab === tab.id
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            key={status}
+            type="button"
+            onClick={() => {
+              if (status !== 'all') {
+                setQueueStatusFilter(queueStatusFilter === status ? 'all' : status);
+                setViewTab('sessions');
+              }
+            }}
+            aria-pressed={queueStatusFilter === status}
+            className={`bg-card px-3.5 py-3 text-left transition-colors cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+              queueStatusFilter === status && status !== 'all' ? 'bg-muted ring-1 ring-inset ring-primary/30' : ''
             }`}
           >
-            <tab.icon className="w-3.5 h-3.5" />
-            <span>{tab.label}</span>
+            <p className="kpi-label mb-1.5 flex items-center gap-1.5">
+              <span className={`size-1.5 rounded-full ${dot}`} />
+              {label}
+            </p>
+            <p className="kpi-value text-xl">{value}</p>
           </button>
         ))}
       </div>
 
-      {/* ═══════════ NEW SESSION DASHBOARD ═══════════ */}
-      {subTab === 'new_session' && (
-        <div className="space-y-4">
-          {/* Customer Selection */}
-          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
-            <CustomerSearchSelect
-              customers={customers}
-              selectedCustomer={selectedCustomer}
-              onSelectCustomer={setSelectedCustomer}
-              onOpenNewCustomerModal={() => setShowNewCustomerModal(true)}
-              label="Select Customer"
-            />
-          </div>
-
-          {/* Service List */}
-          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Scissors className="w-4 h-4" />
-                <span>Services</span>
-              </h3>
-              <span className="text-[10px] text-muted-foreground">{availableServices.length} available</span>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
-                  <tr>
-                    <th className="p-2.5">Service Name</th>
-                    <th className="p-2.5">Category</th>
-                    <th className="p-2.5 text-center">Duration</th>
-                    <th className="p-2.5 text-right">Price</th>
-                    <th className="p-2.5 text-right w-16"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#efe8d9]">
-                  {availableServices.map((srv) => (
-                    <tr
-                      key={srv.id}
-                      onClick={() => handleAddServiceToBuilder(srv)}
-                      className="hover:bg-primary/5 cursor-pointer transition-colors"
-                    >
-                      <td className="p-2.5 font-semibold text-foreground">{srv.name}</td>
-                      <td className="p-2.5 text-muted-foreground">{srv.category}</td>
-                      <td className="p-2.5 text-center text-muted-foreground">{srv.durationMinutes}m</td>
-                      <td className="p-2.5 text-right font-bold text-foreground">{srv.priceEtb.toLocaleString()} ETB</td>
-                      <td className="p-2.5 text-right">
-                        <span className="px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-[10px] font-bold">+ Add</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Session Cart */}
-          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
-            {selectedServiceItems.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground text-xs">
-                Tap services above to add them here
+      {/* Top Collapsible Session Builder Panel */}
+      {isBuilderOpen && (
+        <Card className="border-primary/40 bg-card animate-in fade-in-50 duration-200">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="size-5 text-primary" />
+                <h2 className="text-base font-medium text-foreground">Create New Session</h2>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {selectedServiceItems.map((item, idx) => (
-                  <div key={idx} className="bg-muted border border-border p-3 rounded-xl flex items-center justify-between gap-2 text-xs">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-foreground truncate">{item.service.name}</div>
-                      <div className="text-muted-foreground text-[10px]">{item.service.priceEtb} ETB</div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <select
-                        value={item.assignedStaff.id}
-                        onChange={(e) => handleStaffChangeInBuilder(idx, e.target.value)}
-                        className="bg-card border border-border text-foreground rounded-lg px-2 py-1 text-[10px] outline-none max-w-[100px]"
-                      >
-                        {availableStaff.map((st) => (
-                          <option key={st.id} value={st.id}>{st.name}</option>
-                        ))}
-                      </select>
-                      <button onClick={() => handleRemoveServiceFromBuilder(idx)} className="text-muted-foreground hover:text-rose-600 p-0.5 cursor-pointer">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setPickerMode('new'); setClientSearchQuery(''); setShowClientPicker(true); }} className="gap-1.5 text-[13px] font-medium border-primary/40 hover:bg-primary/10">
+                  <UserPlus className="size-3.5 text-primary" />
+                  + Register New Client
+                </Button>
+                <Button variant="ghost" size="icon" className="size-8" onClick={() => setIsBuilderOpen(false)}>
+                  <X className="size-4" />
+                </Button>
+              </div>
+            </div>
 
-                {/* Discount & Total */}
-                <div className="border-t border-border pt-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Discount:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={discountAmount}
-                      onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value) || 0))}
-                      className="w-20 bg-muted border border-border text-foreground rounded-lg px-2 py-1 text-xs outline-none text-right"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-xs font-bold">Total</span>
-                    <span className="text-xl font-serif font-bold text-foreground">
-                      {Math.max(0, rawSubtotalEtb - discountAmount).toLocaleString()} ETB
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleRegisterSession}
-                  className="w-full py-3 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Issue Queue Ticket</span>
-                </button>
+            {creationError && (
+              <div className="flex items-center gap-2 text-sm font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{creationError}</span>
               </div>
             )}
-          </div>
-        </div>
-      )}
 
-      {/* ═══════════ QUEUE BOARD DASHBOARD ═══════════ */}
-      {subTab === 'queue' && (
-        <div className="space-y-4">
-          {/* Today's Summary Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
-              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Today's Revenue</div>
-              <div className="text-lg font-serif font-bold text-foreground mt-0.5">{todayStats.totalRevenue.toLocaleString()} <span className="text-xs font-sans">ETB</span></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
-              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Sessions</div>
-              <div className="text-lg font-serif font-bold text-foreground mt-0.5">{todayStats.completedSessions}<span className="text-xs text-muted-foreground font-sans"> / {todayStats.totalSessions}</span></div>
-              <div className="text-[10px] text-muted-foreground">completed / total</div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
-              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Active Staff</div>
-              <div className="text-lg font-serif font-bold text-foreground mt-0.5">{todayStats.activeStaff}</div>
-              <div className="text-[10px] text-muted-foreground">working today</div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
-              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Pending</div>
-              <div className="text-lg font-serif font-bold text-foreground mt-0.5">{todayStats.pendingPayments}</div>
-              <div className="text-[10px] text-muted-foreground">{todayStats.pendingAmount.toLocaleString()} ETB unpaid</div>
-            </div>
-          </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* Client Selection */}
+              <div className="lg:col-span-4 space-y-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">1. Select Client *</Label>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* Staff Earnings Sidebar */}
-            <div className="lg:col-span-3 space-y-3">
-              <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
-                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-foreground" />
-                  Staff Earnings Today
-                </h4>
-                {staffEarnings.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground text-center py-4">No sessions today</p>
+                {selectedCustomer ? (
+                  <div className="rounded-md border border-primary/30 bg-primary/10 p-3 flex items-center justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground truncate">{selectedCustomer.name}</span>
+                        {selectedCustomer.isVip && <Star className="size-3 text-amber-500 fill-amber-500 shrink-0" />}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">{selectedCustomer.phone}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant="secondary" className="text-[10px] font-medium">{selectedCustomer.loyaltyPoints || 0} Pts</Badge>
+                      <Button size="icon" variant="ghost" className="size-7" onClick={() => setSelectedCustomer(null)} title="Change client">
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium italic">
+                    ← No client selected yet.
+                  </p>
+                )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setPickerMode('list'); setClientSearchQuery(''); setShowClientPicker(true); }}
+                  className="w-full gap-2 text-[13px] font-medium border-primary/30 hover:bg-primary/10"
+                >
+                  <Users className="size-4 text-primary" />
+                  {selectedCustomer ? '⇄ Change Client' : 'Choose Client'}
+                </Button>
+              </div>
+
+              {/* Service Selection */}
+              <div className="lg:col-span-5 space-y-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">2. Pick Services *</Label>
+                <div className="flex gap-1 overflow-x-auto pb-1">
+                  <Button size="xs" variant={serviceCategory === 'all' ? 'default' : 'outline'} onClick={() => setServiceCategory('all')} className="text-xs">
+                    All
+                  </Button>
+                  {categories.map((cat) => (
+                    <Button key={cat} size="xs" variant={serviceCategory === cat ? 'default' : 'outline'} onClick={() => setServiceCategory(cat)} className="text-xs">
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 max-h-[180px] overflow-y-auto pr-1">
+                  {filteredServices.map((srv) => (
+                    <button
+                      key={srv.id}
+                      type="button"
+                      onClick={() => addServiceToBuilder(srv)}
+                      className="bg-background border border-border hover:border-primary hover:bg-primary/5 p-2 rounded-md text-left cursor-pointer transition-colors"
+                    >
+                      <div className="font-semibold text-sm text-foreground truncate">{srv.name}</div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-[10px] text-muted-foreground">{srv.durationMinutes}m</span>
+                        <span className="font-medium text-sm text-foreground">{srv.priceEtb} ETB</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Selected Cart & Staff Assignment */}
+              <div className="lg:col-span-3 space-y-2 border-t lg:border-t-0 lg:border-l lg:pl-4 pt-3 lg:pt-0">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">3. Session Summary</Label>
+                {selectedServices.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center italic">No services selected yet. Click services on the left.</p>
                 ) : (
                   <div className="space-y-2">
-                    {staffEarnings.map((staff) => (
-                      <div
-                        key={staff.id}
-                        onClick={() => setQueueStaffFilter(queueStaffFilter === staff.id ? 'all' : staff.id)}
-                        className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
-                          queueStaffFilter === staff.id
-                            ? 'bg-primary border-primary text-primary-foreground'
-                            : 'bg-muted border-border hover:border-primary'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs font-bold ${queueStaffFilter === staff.id ? 'text-primary-foreground' : 'text-foreground'}`}>
-                            {staff.name}
-                          </span>
-                          <span className={`text-[10px] ${queueStaffFilter === staff.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                            {staff.sessions} svc
-                          </span>
+                    <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                      {selectedServices.map((item, idx) => (
+                        <div key={idx} className="rounded-md border border-border p-2 space-y-1 text-sm bg-muted/30">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-foreground truncate max-w-[140px]">{item.serviceName}</span>
+                            <button type="button" onClick={() => removeServiceFromBuilder(idx)} className="text-destructive hover:opacity-80">
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between gap-1">
+                            <Select value={item.staffId} onValueChange={(v) => assignStaffToBuilder(idx, v)}>
+                              <SelectTrigger className="h-6 text-[10px] py-0 px-2 flex-1">
+                                <SelectValue placeholder="Staff" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {staffForService(availableServices.find((s) => s.id === item.serviceId) as Service).map((st) => (
+                                  <SelectItem key={st.id} value={st.id} className="text-sm">{st.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <span className="font-medium text-sm shrink-0">{item.priceEtb} ETB</span>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[10px] ${queueStaffFilter === staff.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                            Revenue:
-                          </span>
-                          <span className={`text-xs font-bold ${queueStaffFilter === staff.id ? 'text-ink-300' : 'text-foreground'}`}>
-                            {staff.revenue.toLocaleString()} ETB
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[10px] ${queueStaffFilter === staff.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                            Commission:
-                          </span>
-                          <span className={`text-[10px] font-bold ${queueStaffFilter === staff.id ? 'text-ink-200' : 'text-foreground'}`}>
-                            {staff.commissions.toLocaleString()} ETB
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
 
-                    {/* Total */}
-                    <div className="border-t border-border pt-2 mt-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-foreground">Total Revenue</span>
-                        <span className="font-bold text-foreground">{staffEarnings.reduce((s, e) => s + e.revenue, 0).toLocaleString()} ETB</span>
+                    <div className="border-t pt-2 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase font-medium">Total Net</p>
+                        <p className="text-sm font-semibold text-foreground">{cartTotal} ETB</p>
                       </div>
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-muted-foreground">Total Commissions</span>
-                        <span className="font-bold text-foreground">{staffEarnings.reduce((s, e) => s + e.commissions, 0).toLocaleString()} ETB</span>
-                      </div>
+                      <Button onClick={createSession} disabled={isCreating} className="gap-1.5 font-medium" size="sm">
+                        <ShoppingCart className="size-4" />
+                        {isCreating ? 'Creating...' : 'Confirm Queue'}
+                      </Button>
                     </div>
                   </div>
                 )}
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {/* Main Queue Area */}
-            <div className="lg:col-span-9 space-y-3">
-              {/* Search & Filters */}
-              <div className="bg-card border border-border rounded-2xl p-3 shadow-sm">
-                <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search by queue, customer, phone, service, or staff..."
+      {/* FULL WIDTH Main Tabs */}
+      <div className="w-full">
+        <Tabs value={viewTab} onValueChange={(v) => setViewTab(v as 'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses')} className="w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2">
+            <TabsList variant="line" className="h-9">
+              <TabsTrigger value="sessions" className="gap-1.5 text-[13px] font-medium"><Clock className="size-4" />Today's Sessions ({todayBranchSessions.length})</TabsTrigger>
+              <TabsTrigger value="board" className="gap-1.5 text-[13px] font-medium"><LayoutDashboard className="size-4" />Staff Queue Board</TabsTrigger>
+              <TabsTrigger value="inventory" className="gap-1.5 text-[13px] font-medium"><Package className="size-4" />Inventory {lowStockCount > 0 && <Badge variant="destructive" className="text-[9px] px-1.5">{lowStockCount}</Badge>}</TabsTrigger>
+              <TabsTrigger value="expenses" className="gap-1.5 text-[13px] font-medium"><ReceiptText className="size-4" />Expenses</TabsTrigger>
+              <TabsTrigger value="analytics" className="gap-1.5 text-[13px] font-medium"><BarChart3 className="size-4" />Daily Analytics</TabsTrigger>
+            </TabsList>
+
+            {!isBuilderOpen && (
+              <Button size="sm" onClick={() => setIsBuilderOpen(true)} className="gap-1 text-sm font-medium">
+                <Plus className="size-3.5" />
+                Add Session
+              </Button>
+            )}
+          </div>
+
+          {/* TAB 1: SESSIONS (FULL WIDTH) */}
+          <TabsContent value="sessions" className="mt-4 space-y-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative flex-1 w-full">
+                    <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      placeholder="Search by client name, phone, queue number, service or staff..."
                       value={queueSearchQuery}
                       onChange={(e) => setQueueSearchQuery(e.target.value)}
-                      className="w-full bg-muted border border-border rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-primary"
+                      className="pl-9"
                     />
                   </div>
-                  <select
-                    value={queueStaffFilter}
-                    onChange={(e) => setQueueStaffFilter(e.target.value)}
-                    className="bg-muted border border-border rounded-xl px-3 py-2 text-xs outline-none focus:border-primary text-foreground"
-                  >
-                    <option value="all">All Staff</option>
-                    {availableStaff.map((st) => (
-                      <option key={st.id} value={st.id}>{st.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-1 overflow-x-auto">
-                  {(['all', 'queued', 'in_progress', 'completed'] as const).map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => setQueueStatusFilter(st)}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold capitalize whitespace-nowrap cursor-pointer transition-all ${
-                        queueStatusFilter === st
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:text-foreground border border-border'
-                      }`}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant={queueStatusFilter === 'pending' ? 'destructive' : 'outline'}
+                      onClick={() => setQueueStatusFilter(queueStatusFilter === 'pending' ? 'all' : 'pending')}
+                      className="gap-1.5 text-sm font-medium"
                     >
-                      {st === 'all' ? 'All' : st.replace('_', ' ')}
-                    </button>
-                  ))}
-                  {(queueStaffFilter !== 'all' || queueStatusFilter !== 'all' || queueSearchQuery) && (
-                    <button
-                      onClick={() => { setQueueStaffFilter('all'); setQueueStatusFilter('all'); setQueueSearchQuery(''); }}
-                      className="px-2 py-1.5 text-[10px] text-rose-600 hover:text-rose-700 font-bold cursor-pointer"
-                    >
-                      Clear all
-                    </button>
-                  )}
+                      <DollarSign className="size-3.5" />
+                      Unpaid Only ({pendingCount})
+                    </Button>
+                    {(queueStatusFilter !== 'all' || queueSearchQuery) && (
+                      <Button size="sm" variant="ghost" onClick={() => { setQueueStatusFilter('all'); setQueueSearchQuery(''); }} className="text-sm">
+                        Clear Filters
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Queue Table */}
-              {filteredSessions.length === 0 ? (
-                <div className="bg-card border border-border rounded-2xl p-12 text-center shadow-sm">
-                  <Clock className="w-10 h-10 text-primary-foreground/80 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No sessions found</p>
-                </div>
-              ) : (
-                <>
-                  {/* Desktop Table */}
-                  <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
-                        <tr>
-                          <th className="p-3">Queue</th>
-                          <th className="p-3">Customer</th>
-                          <th className="p-3">Services</th>
-                          <th className="p-3">Staff</th>
-                          <th className="p-3 text-right">Amount</th>
-                          <th className="p-3 text-right">Commission</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#efe8d9]">
+                {filteredSessions.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground space-y-2">
+                    <Clock className="size-8 mx-auto opacity-40" />
+                    <p className="text-sm font-semibold">No sessions recorded for today matching your criteria.</p>
+                    <Button variant="outline" size="sm" onClick={() => setIsBuilderOpen(true)}>
+                      + Create First Today Session
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="px-4 py-3.5">Client Name & Phone</TableHead>
+                          <TableHead className="px-4 py-3.5">Service(s) & Staff Assigned</TableHead>
+                          <TableHead className="text-right px-4 py-3.5">Net Total</TableHead>
+                          <TableHead className="w-24 px-4 py-3.5">Status</TableHead>
+                          <TableHead className="w-24 px-4 py-3.5">Payment</TableHead>
+                          <TableHead className="text-right w-36 px-4 py-3.5">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {filteredSessions.map((session) => {
-                          const totalCommission = session.services.reduce((sum, s) => sum + s.commissionEarnedEtb, 0);
+                          const isExpanded = expandedPaymentId === session.id;
+                          const servicesText = session.services.map((s) => s.serviceName).join(', ');
+                          const staffText = [...new Set(session.services.map((s) => s.staffName))].join(', ');
+                          const isActive = session.status === 'queued' || session.status === 'in_progress';
+                          const isPaidNow = session.isPaid || paidIds.includes(session.id);
+
                           return (
-                            <tr key={session.id} className={`hover:bg-muted/50 transition-colors ${
-                              session.status === 'in_progress' ? 'bg-primary/5' : ''
-                            }`}>
-                              <td className="p-3 font-mono font-bold text-foreground">{session.queueNumber}</td>
-                              <td className="p-3">
-                                <div className="font-semibold text-foreground">{session.customerName}</div>
-                                <div className="text-[10px] text-muted-foreground">{session.customerPhone}</div>
-                              </td>
-                              <td className="p-3 text-[10px] text-foreground max-w-[180px]">
-                                {session.services.map((s, i) => (
-                                  <div key={i} className="truncate">• {s.serviceName}</div>
-                                ))}
-                              </td>
-                              <td className="p-3 text-[10px]">
-                                {session.services.map((s, i) => (
-                                  <div key={i} className="text-muted-foreground truncate">{s.staffName}</div>
-                                ))}
-                              </td>
-                              <td className="p-3 text-right font-serif font-bold text-foreground">{session.netTotalEtb.toLocaleString()} ETB</td>
-                              <td className="p-3 text-right text-[10px] text-foreground font-bold">{totalCommission.toLocaleString()} ETB</td>
-                              <td className="p-3">
-                                <Badge variant={session.status === 'in_progress' ? 'default' : 'secondary'} className="uppercase">
-                                  {session.status.replace('_', ' ')}
-                                </Badge>
-                              </td>
-                              <td className="p-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  {session.status === 'queued' && onUpdateSessionStatus && (
-                                    <button onClick={() => onUpdateSessionStatus(session.id, 'in_progress')} className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer">Start</button>
+                            <React.Fragment key={session.id}>
+                              <TableRow className={session.status === 'in_progress' ? 'bg-amber-500/5' : ''}>
+                                <TableCell className="px-4 py-3.5">
+                                  <div className="flex items-center gap-1.5">
+                                    {customers.find((c) => c.id === session.customerId)?.isVip && (
+                                      <Star className="size-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                                    )}
+                                    <span className="font-medium text-sm text-foreground/90">{session.customerName}</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground font-mono">{session.customerPhone}</div>
+                                </TableCell>
+                                <TableCell className="px-4 py-3.5 text-sm">
+                                  <div className="font-medium text-foreground/90">{servicesText}</div>
+                                  <div className="text-xs text-muted-foreground">Staff: {staffText}</div>
+                                </TableCell>
+                                <TableCell className="text-right px-4 py-3.5 font-medium text-sm text-foreground/90">
+                                  {session.netTotalEtb.toLocaleString()} ETB
+                                </TableCell>
+                                <TableCell className="px-4 py-3.5">
+                                  <Badge
+                                    variant={
+                                      session.status === 'in_progress' ? 'default' :
+                                      session.status === 'completed' ? 'secondary' : 'outline'
+                                    }
+                                    className="text-[10px] uppercase font-medium"
+                                  >
+                                    {session.status.replace('_', ' ')}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="px-4 py-3.5">
+                                  {isPaidNow ? (
+                                    <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300">
+                                      Paid ({session.paymentMethod || 'cash'})
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="destructive" className="text-[10px]">Unpaid</Badge>
                                   )}
-                                  {session.status === 'in_progress' && onUpdateSessionStatus && (
-                                    <button onClick={() => onUpdateSessionStatus(session.id, 'completed')} className="px-2 py-1 bg-ink-600 hover:bg-ink-700 text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer">Complete</button>
-                                  )}
-                                  {!session.isPaid && session.status === 'completed' && (
-                                    <button onClick={() => setCheckoutSession(session)} className="px-2 py-1 bg-primary hover:bg-primary/80 text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer">Pay</button>
-                                  )}
-                                  {session.isPaid && (
-                                    <button onClick={() => setInvoiceToPrint(session)} className="px-2 py-1 bg-muted hover:bg-muted/80 border border-border text-foreground rounded-lg text-[10px] font-bold cursor-pointer">Receipt</button>
-                                  )}
+                                </TableCell>
+                                <TableCell className="text-right px-4 py-3.5">
+                                  <div className="flex items-center justify-end gap-1">
+                                    {isActive && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-9 px-3 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                        onClick={() => onCancelSession(session.id)}
+                                      >
+                                        <Trash2 className="size-3.5 mr-1" />Remove
+                                      </Button>
+                                    )}
+                                    {session.status === 'completed' && !isPaidNow && (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="text-xs h-9 font-medium px-3"
+                                        onClick={() => {
+                                          setExpandedPaymentId(isExpanded ? null : session.id);
+                                          setPaymentMethod('cash');
+                                          setPaymentReference('');
+                                        }}
+                                      >
+                                        <DollarSign className="size-3.5 mr-0.5" />Collect Pay
+                                      </Button>
+                                    )}
+                                    {isPaidNow && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-9 px-3 font-semibold"
+                                        onClick={() => setInvoiceToPrint(session)}
+                                      >
+                                        <Printer className="size-3.5 mr-1" />Receipt
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+
+                              {/* Inline Payment Collection Dropdown */}
+                              {isExpanded && (
+                                <TableRow className="bg-muted/40">
+                                  <TableCell colSpan={6} className="p-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3 rounded-md border border-primary/20 ">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-foreground">Select Payment Method:</span>
+                                        <div className="flex gap-1">
+                                          {([
+                                            { id: 'cash' as PaymentMethod, label: 'Cash' },
+                                            { id: 'telebirr' as PaymentMethod, label: 'Telebirr' },
+                                            { id: 'cbe_birr' as PaymentMethod, label: 'CBE Birr' },
+                                            { id: 'card' as PaymentMethod, label: 'Card' },
+                                          ]).map((m) => (
+                                            <Button
+                                              key={m.id}
+                                              size="sm"
+                                              variant={paymentMethod === m.id ? 'default' : 'outline'}
+                                              onClick={() => setPaymentMethod(m.id)}
+                                              className="text-xs h-9 font-medium px-3"
+                                            >
+                                              {m.label}
+                                            </Button>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          placeholder="Transaction Ref #"
+                                          value={paymentReference}
+                                          onChange={(e) => setPaymentReference(e.target.value)}
+                                          className="h-9 w-40 text-sm"
+                                        />
+                                        <span className="font-semibold text-sm text-foreground">{session.netTotalEtb.toLocaleString()} ETB</span>
+                                        <Button size="sm" className="h-9 text-xs font-medium px-3" onClick={() => handleCheckout(session.id)}>
+                                          Confirm Payment
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-9 text-xs px-3" onClick={() => setExpandedPaymentId(null)}>
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+</React.Fragment>
+                           );
+                         })}
+                       </TableBody>
+                     </Table>
+                   </div>
+                 )}
+          </TabsContent>
+
+          {/* TAB 2: STAFF BOARD (FULL WIDTH) */}
+          <TabsContent value="board" className="mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {branchStaff.map((staff) => {
+                const queue = getStaffQueue(staff.id, todayBranchSessions, customers);
+                const serving = queue.find((q) => q.service.status === 'in_progress');
+
+                return (
+                  <Card key={staff.id} className="border-border  hover:border-primary/40 transition-all">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between border-b pb-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-md bg-primary/10 text-primary flex items-center justify-center font-medium text-sm border border-primary/20">
+                            {staff.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm text-foreground">{staff.name}</p>
+                            <p className="text-[10px] text-muted-foreground capitalize">{staff.role}</p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="text-[11px] font-mono">
+                          {queue.length} in queue
+                        </Badge>
+                      </div>
+
+                      {serving ? (
+                        <div className="rounded-md bg-amber-500/10 border border-amber-300 p-2.5 text-sm">
+                          <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">Now Serving</p>
+                          <p className="font-semibold text-foreground">{serving.session.customerName}</p>
+                          <p className="text-[11px] text-muted-foreground">{serving.service.serviceName}</p>
+                        </div>
+                      ) : (
+                        <div className="rounded-md bg-emerald-500/10 border border-emerald-300 p-2 text-sm text-center text-emerald-700 dark:text-emerald-400 font-medium">
+                          Available for next client
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                        {queue.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-4 italic">No pending client queue</p>
+                        ) : (
+                          queue.map((q) => (
+                            <div
+                              key={q.service.id}
+                              className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
+                                q.service.status === 'in_progress' ? 'border-amber-300 bg-amber-500/5 font-semibold' :
+                                q.available ? 'border-emerald-300 bg-emerald-500/5' : 'border-border opacity-70'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[10px] font-mono font-medium text-muted-foreground w-4">#{q.position}</span>
+                                {q.isVip && <Star className="size-3 text-amber-500 fill-amber-500 shrink-0" />}
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">{q.session.customerName}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{q.service.serviceName}</p>
                                 </div>
-                              </td>
-                            </tr>
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-6 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => onCancelSession(q.session.id)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </TabsContent>
+
+          {/* TAB: INVENTORY (FULL WIDTH) */}
+          <TabsContent value="inventory" className="mt-4 space-y-4">
+            {lowStockCount > 0 && (
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-300 rounded-md p-3">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{lowStockCount} item{lowStockCount > 1 ? 's' : ''} at or below reorder level — consider restocking below.</span>
+              </div>
+            )}
+
+            <Card className=" border-border">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative flex-1 w-full">
+                    <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      placeholder="Search inventory by name or SKU..."
+                      value={inventorySearch}
+                      onChange={(e) => setInventorySearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="secondary" className="text-[11px] font-mono">{branchInventory.length} items</Badge>
+                    <Button size="sm" onClick={openAddInventory} className="gap-1.5 text-sm font-medium">
+                      <Plus className="size-3.5" /> Add Item
+                    </Button>
+                  </div>
+                </div>
+
+                {filteredInventory.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground space-y-2">
+                    <Package className="size-8 mx-auto opacity-40" />
+                    <p className="text-sm font-semibold">No inventory items found for this branch.</p>
+                    <Button variant="outline" size="sm" onClick={openAddInventory}>+ Add First Item</Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="">Item & SKU</TableHead>
+                          <TableHead className="text-center">Unit</TableHead>
+                          <TableHead className="text-center">In Stock</TableHead>
+                          <TableHead className="text-center">Reorder Level</TableHead>
+                          <TableHead className="text-right">Unit Cost</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                          <TableHead className="text-right w-44">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredInventory.map((item) => {
+                          const isLow = item.currentStock <= item.reorderLevel;
+                          const isOut = item.currentStock <= 0;
+                          return (
+                            <TableRow key={item.id} className={isLow ? 'bg-amber-500/5' : ''}>
+                              <TableCell>
+                                <p className="font-medium text-sm text-foreground">{item.name}</p>
+                                <p className="text-[10px] text-muted-foreground font-mono">{item.sku}</p>
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-sm">{item.unit}</TableCell>
+                              <TableCell className="text-center">
+                                <span className={`font-mono font-semibold text-sm ${isOut ? 'text-destructive' : isLow ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>
+                                  {item.currentStock}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-sm text-muted-foreground">{item.reorderLevel}</TableCell>
+                              <TableCell className="text-right font-mono font-medium text-sm">{item.unitCostEtb.toLocaleString()} ETB</TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={isOut ? 'destructive' : isLow ? 'secondary' : 'outline'} className="text-[10px]">
+                                  {isOut ? 'Out of Stock' : isLow ? 'Low Stock' : 'In Stock'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button size="sm" variant="outline" className="h-9 gap-1 text-xs font-medium" onClick={() => { setAdjustItem(item); setAdjustQty(0); setAdjustMode('restock'); }}>
+                                    <Plus className="size-3" /> Restock
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-9 gap-1 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => { setAdjustItem(item); setAdjustQty(1); setAdjustMode('use'); }} disabled={item.currentStock <= 0}>
+                                    <Minus className="size-3" /> Use
+                                  </Button>
+                                  <Button size="icon" variant="ghost" className="size-8" title="Edit item" onClick={() => openEditInventory(item)}>
+                                    <Pencil className="size-3.5" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" title="Delete item" onClick={() => setConfirmDeleteItem(item)}>
+                                    <Trash2 className="size-3.5" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
                           );
                         })}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                  {/* Mobile Cards */}
-                  <div className="md:hidden space-y-2">
-                    {filteredSessions.map((session) => {
-                      const totalCommission = session.services.reduce((sum, s) => sum + s.commissionEarnedEtb, 0);
-                      return (
-                        <div key={session.id} className={`bg-card border rounded-xl p-3 shadow-sm ${
-                          session.status === 'in_progress' ? 'border-primary' : 'border-border'
-                        }`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-foreground text-sm">{session.queueNumber}</span>
-                              <span className="font-semibold text-foreground text-xs">{session.customerName}</span>
-                            </div>
-                            <Badge variant={session.status === 'in_progress' ? 'default' : 'secondary'} className="uppercase text-[9px]">
-                              {session.status.replace('_', ' ')}
-                            </Badge>
-                          </div>
-                          <div className="text-[10px] text-muted-foreground mb-1">
-                            {session.services.map((s) => s.serviceName).join(', ')}
-                          </div>
-                          <div className="text-[10px] text-foreground font-bold mb-2">
-                            Staff: {session.services.map((s) => s.staffName).join(', ')}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="font-serif font-bold text-foreground text-sm">{session.netTotalEtb.toLocaleString()} ETB</span>
-                              <span className="text-[10px] text-foreground ml-2">{totalCommission.toLocaleString()} comm</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {session.status === 'queued' && onUpdateSessionStatus && (
-                                <button onClick={() => onUpdateSessionStatus(session.id, 'in_progress')} className="px-2.5 py-1 bg-blue-600 text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer">Start</button>
-                              )}
-                              {session.status === 'in_progress' && onUpdateSessionStatus && (
-                                <button onClick={() => onUpdateSessionStatus(session.id, 'completed')} className="px-2.5 py-1 bg-ink-600 text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer">Complete</button>
-                              )}
-                              {!session.isPaid && session.status === 'completed' && (
-                                <button onClick={() => setCheckoutSession(session)} className="px-2.5 py-1 bg-primary text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer">Pay</button>
-                              )}
-                              {session.isPaid && (
-                                <button onClick={() => setInvoiceToPrint(session)} className="px-2.5 py-1 bg-muted border border-border text-foreground rounded-lg text-[10px] font-bold cursor-pointer">Receipt</button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+          {/* TAB: EXPENSES (FULL WIDTH) */}
+          <TabsContent value="expenses" className="mt-4 space-y-4">
+            {expenseSuccess && (
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-300 rounded-md p-3">
+                <CheckCircle2 className="size-4 shrink-0" />
+                <span>{expenseSuccess}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-1">
+                  <span className="kpi-label">Daily Expense Limit</span>
+                  <p className="kpi-value">{expenseLimit > 0 ? `${expenseLimit.toLocaleString()} ETB` : 'No Limit Set'}</p>
+                  <p className="text-[11px] text-muted-foreground">Set by salon admin in Branch settings</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-1">
+                  <span className="kpi-label">Spent Today</span>
+                  <p className="kpi-value">{todayExpenseTotal.toLocaleString()} ETB</p>
+                  <p className="text-[11px] text-muted-foreground">{todayExpenses.length} expense record{todayExpenses.length === 1 ? '' : 's'} today</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-1">
+                  <span className="kpi-label">Remaining Today</span>
+                  <p className={`kpi-value ${expenseAtLimit ? 'text-destructive' : ''}`}>
+                    {expenseRemaining === null ? '—' : `${expenseRemaining.toLocaleString()} ETB`}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">{expenseAtLimit ? 'Daily limit reached — contact admin for more.' : expenseRemaining !== null && expensePct >= 80 ? 'Approaching the daily limit.' : 'Clear to record expenses.'}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {expenseLimit > 0 && (
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-foreground">Budget usage today</span>
+                    <span className={`font-mono font-medium ${expenseAtLimit ? 'text-destructive' : 'text-foreground'}`}>{expensePct}%</span>
                   </div>
-                </>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${expenseAtLimit ? 'bg-destructive' : expensePct >= 80 ? 'bg-amber-500' : 'bg-primary'}`}
+                      style={{ width: `${expensePct}%` }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="border-border ">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Today's Expense Records</h3>
+                    <p className="text-[11px] text-muted-foreground">Recorded at the front desk ({branch?.name || 'this branch'})</p>
+                  </div>
+                  <Button size="sm" onClick={() => { setExpenseError(null); setShowExpenseModal(true); }} className="gap-1.5 text-sm font-medium">
+                    <Plus className="size-3.5" /> Record Expense
+                  </Button>
+                </div>
+
+                {todayExpenses.length === 0 ? (
+                  <div className="py-10 text-center text-muted-foreground space-y-2">
+                    <ReceiptText className="size-8 mx-auto opacity-40" />
+                    <p className="text-sm font-semibold">No expenses recorded today yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="">Description</TableHead>
+                          <TableHead className="">Category</TableHead>
+                          <TableHead className="text-center">Method</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="">Recorded By</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {todayExpenses.map((exp) => (
+                          <TableRow key={exp.id}>
+                            <TableCell className="font-semibold text-sm">{exp.description}</TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className="text-[10px] capitalize">{exp.category.replace('_', ' ')}</Badge>
+                            </TableCell>
+                            <TableCell className="text-center text-sm capitalize font-mono">{exp.paymentMethod}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold text-sm text-destructive">{exp.amountEtb.toLocaleString()} ETB</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{exp.recordedBy || '—'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 3: DAILY ANALYTICS (FULL WIDTH) */}
+          <TabsContent value="analytics" className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-1">
+                  <span className="kpi-label">Gross Daily Sales</span>
+                  <p className="kpi-value">{todayRevenue.toLocaleString()} ETB</p>
+                  <p className="text-[11px] text-muted-foreground">Collected from completed payments today</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-1">
+                  <span className="kpi-label">Completed Sessions Today</span>
+                  <p className="kpi-value">{completedToday}</p>
+                  <p className="text-[11px] text-muted-foreground">Total client visit checkouts completed</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border ">
+                <CardContent className="p-4 space-y-1">
+                  <span className="kpi-label">Unpaid Receivable Today</span>
+                  <p className="kpi-value text-destructive">{pendingUnpaidAmount.toLocaleString()} ETB</p>
+                  <p className="text-[11px] text-muted-foreground">{pendingCount} completed sessions awaiting payment</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* Hourly Sales Chart */}
+              <Card className="lg:col-span-8 border-border ">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-foreground">Hourly Sales Revenue Today (ETB)</h3>
+                    <Badge variant="outline" className="text-[10px]">Today Only</Badge>
+                  </div>
+                  <div className="h-56 w-full pt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={hourlyRevenueData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis dataKey="hour" fontSize={10} tickLine={false} />
+                        <YAxis fontSize={10} tickLine={false} />
+                        <Tooltip formatter={(value: any) => [`${Number(value).toLocaleString()} ETB`, 'Revenue']} />
+                        <Bar dataKey="revenue" fill="#18181b" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Payment Methods Distribution */}
+              <Card className="lg:col-span-4 border-border ">
+                <CardContent className="p-4 space-y-3">
+                  <h3 className="text-sm font-medium text-foreground">Today's Payment Methods</h3>
+                  {paymentMethodPieData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-10">No payments recorded today yet</p>
+                  ) : (
+                    <div className="h-56 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={paymentMethodPieData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={70}
+                            paddingAngle={3}
+                          >
+                            {paymentMethodPieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(val: any) => [`${Number(val).toLocaleString()} ETB`, 'Amount']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Today's Staff Performance Table */}
+            <Card className="border-border ">
+              <CardContent className="p-4 space-y-3">
+                <h3 className="text-sm font-medium text-foreground">Today's Staff Performance & Commission</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead className="">Staff Member</TableHead>
+                        <TableHead className="">Role</TableHead>
+                        <TableHead className="text-center">Services Rendered Today</TableHead>
+                        <TableHead className="text-right">Revenue Generated Today</TableHead>
+                        <TableHead className="text-right">Commission Accrued</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {todayStaffPerformance.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
+                            No staff activity recorded today yet
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        todayStaffPerformance.map((st, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="">{st.name}</TableCell>
+                            <TableCell className="text-sm capitalize text-muted-foreground">{st.role}</TableCell>
+                            <TableCell className="text-center font-mono font-medium text-sm">{st.count}</TableCell>
+                            <TableCell className="text-right font-mono font-medium text-sm">{st.revenue.toLocaleString()} ETB</TableCell>
+                            <TableCell className="text-right font-mono font-medium text-sm text-primary">{st.commission.toLocaleString()} ETB</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Adjust Stock Modal */}
+      <Dialog open={!!adjustItem} onOpenChange={(o) => !o && setAdjustItem(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-medium">
+              {adjustMode === 'use' ? <Minus className="size-5 text-destructive" /> : <Plus className="size-5 text-primary" />}
+              {adjustMode === 'use' ? 'Use Stock:' : 'Restock:'} {adjustItem?.name}
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              Current stock: <span className="font-mono font-medium text-foreground">{adjustItem?.currentStock} {adjustItem?.unit}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex gap-1.5">
+              <Button type="button" size="sm" variant={adjustMode === 'restock' ? 'default' : 'outline'} className="flex-1 text-xs" onClick={() => { setAdjustMode('restock'); setAdjustQty(0); }}>
+                <Plus className="size-3" /> Add Stock
+              </Button>
+              <Button type="button" size="sm" variant={adjustMode === 'use' ? 'destructive' : 'outline'} className="flex-1 text-xs" onClick={() => { setAdjustMode('use'); setAdjustQty(1); }} disabled={!adjustItem || adjustItem.currentStock <= 0}>
+                <Minus className="size-3" /> Use Stock
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                {adjustMode === 'use' ? 'Quantity Used' : 'Quantity to Add'}
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                max={adjustMode === 'use' ? adjustItem?.currentStock : undefined}
+                value={adjustQty || ''}
+                onChange={(e) => setAdjustQty(Number(e.target.value))}
+                placeholder="e.g. 50"
+                className="h-11 text-sm font-mono"
+                autoFocus
+              />
+              {adjustMode === 'use' && adjustQty > (adjustItem?.currentStock || 0) && (
+                <p className="text-xs text-destructive">Exceeds current stock ({adjustItem?.currentStock} {adjustItem?.unit}).</p>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════ CLIENTS DASHBOARD ═══════════ */}
-      {subTab === 'clients' && (
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-serif font-bold text-foreground flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-foreground" />
-              Client Directory
-            </h3>
-            <button
-              onClick={() => setShowNewCustomerModal(true)}
-              className="px-3 py-1.5 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>New</span>
-            </button>
-          </div>
-
-          <div className="relative">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by name or phone..."
-              value={customerDirSearch}
-              onChange={(e) => setCustomerDirSearch(e.target.value)}
-              className="w-full bg-muted border border-border rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-primary"
-            />
-          </div>
-
-          {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
-                <tr>
-                  <th className="p-3">Name</th>
-                  <th className="p-3">Phone</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Visits</th>
-                  <th className="p-3">Points</th>
-                  <th className="p-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#efe8d9]">
-                {customers
-                  .filter((c) => {
-                    if (!customerDirSearch.trim()) return true;
-                    const q = customerDirSearch.toLowerCase();
-                    return c.name.toLowerCase().includes(q) || c.phone.includes(q);
-                  })
-                  .map((c) => (
-                    <tr key={c.id} className="hover:bg-muted/50">
-                      <td className="p-3 font-bold text-foreground flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-foreground text-[10px] font-bold">
-                          {c.name.charAt(0)}
-                        </div>
-                        {c.name}
-                      </td>
-                      <td className="p-3 font-mono text-foreground">{c.phone}</td>
-                      <td className="p-3">
-                        {c.isVip ? (
-                          <Badge variant="secondary" className="uppercase">VIP</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-[10px]">Standard</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-foreground">{c.totalVisits || 1}</td>
-                      <td className="p-3 text-foreground font-bold">{c.loyaltyPoints || 0}</td>
-                      <td className="p-3 text-right">
-                        <button
-                          onClick={() => { setSelectedCustomer(c); setSubTab('new_session'); }}
-                          className="px-2.5 py-1 bg-primary hover:bg-primary/80 text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer"
-                        >
-                          Select
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Cards */}
-          <div className="md:hidden space-y-2">
-            {customers
-              .filter((c) => {
-                if (!customerDirSearch.trim()) return true;
-                const q = customerDirSearch.toLowerCase();
-                return c.name.toLowerCase().includes(q) || c.phone.includes(q);
-              })
-              .map((c) => (
-                <div key={c.id} className="bg-muted border border-border rounded-xl p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-foreground text-xs font-bold">
-                      {c.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-foreground text-xs">{c.name}</div>
-                      <div className="text-[10px] text-muted-foreground">{c.phone}</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setSelectedCustomer(c); setSubTab('new_session'); }}
-                    className="px-2.5 py-1 bg-primary text-primary-foreground rounded-lg text-[10px] font-bold cursor-pointer"
-                  >
-                    Select
-                  </button>
-                </div>
+            <div className="flex gap-2">
+              {[1, 2, 5, 10].map((q) => (
+                <Button key={q} size="xs" variant={adjustQty === q ? 'default' : 'outline'} className="flex-1" onClick={() => setAdjustQty(q)}>
+                  {adjustMode === 'use' ? q : `+${q}`}
+                </Button>
               ))}
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════ MODALS ═══════════ */}
-
-      {/* Register New Customer */}
-      {showNewCustomerModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
-            <h3 className="text-base font-serif font-bold text-foreground flex items-center gap-2">
-              <UserPlus className="w-4 h-4 text-foreground" />
-              New Client
-            </h3>
-            <form onSubmit={handleCreateNewCustomer} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Full Name</label>
-                <input
-                  type="text" required placeholder="e.g. Bethlehem Assefa"
-                  value={custName} onChange={(e) => setCustName(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-xs outline-none focus:border-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1">Phone</label>
-                <input
-                  type="text" required placeholder="+251 91 123 4567"
-                  value={custPhone} onChange={(e) => setCustPhone(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-xs outline-none focus:border-primary"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowNewCustomerModal(false)} className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-semibold">Cancel</button>
-                <button type="submit" className="px-4 py-1.5 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-lg text-xs">Register</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Checkout Payment */}
-      {checkoutSession && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h3 className="text-base font-serif font-bold text-foreground">{checkoutSession.queueNumber}</h3>
-                <p className="text-xs text-muted-foreground">{checkoutSession.customerName}</p>
-              </div>
-              <button onClick={() => setCheckoutSession(null)} className="text-muted-foreground hover:text-foreground text-lg font-bold">✕</button>
             </div>
+            <DialogFooter className="pt-1">
+              <Button type="button" variant="outline" onClick={() => setAdjustItem(null)} className="text-sm">Cancel</Button>
+              <Button
+                type="button"
+                variant={adjustMode === 'use' ? 'destructive' : 'default'}
+                onClick={handleAdjustStock}
+                disabled={!adjustQty || adjustQty <= 0 || (adjustMode === 'use' && adjustQty > (adjustItem?.currentStock || 0))}
+                className="text-sm font-medium gap-1.5"
+              >
+                {adjustMode === 'use' ? <Minus className="size-3.5" /> : <Plus className="size-3.5" />}
+                {adjustMode === 'use' ? `Deduct ${adjustQty || ''} ${adjustItem?.unit || ''}` : 'Add to Stock'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-            <div className="bg-muted p-3 rounded-xl space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{checkoutSession.subtotalEtb} ETB</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>-{checkoutSession.discountEtb} ETB</span></div>
-              <div className="flex justify-between font-serif font-bold text-base text-foreground pt-1 border-t border-border">
-                <span>Total</span><span>{checkoutSession.netTotalEtb} ETB</span>
+      {/* Add / Edit Inventory Item Modal */}
+      <Dialog open={showInventoryModal} onOpenChange={(o) => !o && setShowInventoryModal(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-medium">
+              <Package className="size-5 text-primary" />
+              {invEditing ? 'Edit Inventory Item' : 'Add Inventory Item'}
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              Items managed here are stocked for {branch?.name || 'this branch'}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={invEditing ? handleUpdateInventorySubmit : handleAddInventorySubmit} className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="invName" className="text-sm font-medium">Item Name *</Label>
+              <Input id="invName" required placeholder="e.g. Hair Clipper Oil" value={invName} onChange={(e) => setInvName(e.target.value)} className="" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="invSku" className="text-sm font-medium">SKU</Label>
+                <Input id="invSku" placeholder="auto-generated" value={invSku} onChange={(e) => setInvSku(e.target.value)} className="font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="invUnit" className="text-sm font-medium">Unit</Label>
+                <Input id="invUnit" placeholder="e.g. bottle, piece, pack" value={invUnit} onChange={(e) => setInvUnit(e.target.value)} className="" />
               </div>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="invStock" className="text-sm font-medium">Stock</Label>
+                <Input id="invStock" type="number" min="0" value={invStock} onChange={(e) => setInvStock(Number(e.target.value))} className="font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="invReorder" className="text-sm font-medium">Reorder At</Label>
+                <Input id="invReorder" type="number" min="0" value={invReorder} onChange={(e) => setInvReorder(Number(e.target.value))} className="font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="invCost" className="text-sm font-medium">Unit Cost (ETB)</Label>
+                <Input id="invCost" type="number" min="0" value={invCost} onChange={(e) => setInvCost(Number(e.target.value))} className="font-mono" />
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowInventoryModal(false)} className="text-sm">Cancel</Button>
+              <Button type="submit" className="text-sm font-medium">{invEditing ? 'Save Changes' : 'Add Item'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-            <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-              {[
-                { id: 'telebirr', label: 'Telebirr' },
-                { id: 'cbe_birr', label: 'CBE Birr' },
-                { id: 'cash', label: 'Cash' },
-                { id: 'card', label: 'Card' },
-              ].map((m) => (
-                <button
-                  key={m.id} type="button" onClick={() => setPaymentMethod(m.id as any)}
-                  className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                    paymentMethod === m.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-foreground border-border'
-                  }`}
+      {/* Record Expense Modal */}
+      <Dialog open={showExpenseModal} onOpenChange={(o) => !o && setShowExpenseModal(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-medium">
+              <ReceiptText className="size-5 text-primary" />
+              Record Expense
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              {expenseLimit > 0
+                ? `Daily limit ${expenseLimit.toLocaleString()} ETB — ${expenseRemaining?.toLocaleString()} ETB remaining today.`
+                : 'No daily limit is currently set by the admin.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {expenseError && (
+            <div className="flex items-center gap-2 text-sm font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{expenseError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleRecordExpense} className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="expDesc" className="text-sm font-medium">Description *</Label>
+              <Input id="expDesc" required placeholder="e.g. Bought towels and disinfectant" value={expDescription} onChange={(e) => setExpDescription(e.target.value)} className="" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="expCat" className="text-sm font-medium">Category *</Label>
+                <select
+                  id="expCat"
+                  value={expCategory}
+                  onChange={(e) => setExpCategory(e.target.value as ExpenseRecord['category'])}
+                  className="w-full h-8 bg-muted border border-border text-foreground rounded-md px-3 text-sm font-medium outline-none focus:border-primary"
                 >
-                  {m.label}
-                </button>
-              ))}
+                  <option value="inventory_purchase">Inventory Purchase</option>
+                  <option value="utilities">Utilities</option>
+                  <option value="rent">Rent</option>
+                  <option value="salary">Salary Advance</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="expAmount" className="text-sm font-medium">Amount (ETB) *</Label>
+                <Input id="expAmount" required type="number" min="1" placeholder="0" value={expAmount} onChange={(e) => setExpAmount(e.target.value)} className="font-mono" />
+              </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Payment Method</Label>
+              <div className="flex gap-1.5 flex-wrap">
+                {(['cash', 'telebirr', 'cbe_birr', 'card'] as PaymentMethod[]).map((m) => (
+                  <Button
+                    key={m}
+                    type="button"
+                    size="xs"
+                    variant={expMethod === m ? 'default' : 'outline'}
+                    className="text-xs capitalize"
+                    onClick={() => setExpMethod(m)}
+                  >
+                    {m === 'cbe_birr' ? 'CBE Birr' : m === 'telebirr' ? 'Telebirr' : m}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowExpenseModal(false)} className="text-sm">Cancel</Button>
+              <Button type="submit" className="text-sm font-medium gap-1.5">
+                <Wallet className="size-3.5" /> Save Expense
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-            <div>
-              <input
-                type="text" placeholder="Transaction ref (optional)"
-                value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)}
-                className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-xs font-mono outline-none"
-              />
-            </div>
+      {/* Delete Inventory Confirm */}
+      <Dialog open={!!confirmDeleteItem} onOpenChange={(o) => !o && setConfirmDeleteItem(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base font-medium">Delete "{confirmDeleteItem?.name}"?</DialogTitle>
+            <DialogDescription className="text-sm">
+              This permanently removes the inventory item from {branch?.name || 'this branch'}. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmDeleteItem(null)} className="text-sm">Cancel</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="text-sm font-medium gap-1.5"
+              onClick={() => {
+                if (confirmDeleteItem) onDeleteInventoryItem?.(confirmDeleteItem.id);
+                onRefresh?.();
+                setConfirmDeleteItem(null);
+              }}
+            >
+              <Trash2 className="size-3.5" /> Delete Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setCheckoutSession(null)} className="flex-1 py-2 bg-muted text-muted-foreground rounded-xl text-xs font-semibold">Cancel</button>
-              <button type="button" onClick={handleExecuteCheckout} className="flex-1 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold rounded-xl text-xs">Confirm</button>
-            </div>
+      {/* Client Picker Modal: Search + Full-Width List + Inline New Client Form */}
+      <Dialog open={showClientPicker} onOpenChange={(o) => !o && setShowClientPicker(false)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-medium">
+              {pickerMode === 'list' ? <Users className="size-5 text-primary" /> : <UserPlus className="size-5 text-primary" />}
+              {pickerMode === 'list' ? 'Select Client' : 'Register New Client'}
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              {pickerMode === 'list'
+                ? 'Search registered clients and pick one for today\'s session.'
+                : 'Add client details to instantly queue them for today\'s services.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={pickerMode === 'list' ? 'default' : 'outline'}
+              onClick={() => setPickerMode('list')}
+              className="gap-1.5 text-sm font-medium"
+            >
+              <Users className="size-3.5" /> Registered Clients ({customers.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={pickerMode === 'new' ? 'default' : 'outline'}
+              onClick={() => setPickerMode('new')}
+              className="gap-1.5 text-sm font-medium"
+            >
+              <UserPlus className="size-3.5" /> + New Client
+            </Button>
           </div>
-        </div>
-      )}
 
-      {/* Print Invoice */}
+          {pickerMode === 'list' ? (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  autoFocus
+                  placeholder="Type mobile number or full name to search clients..."
+                  value={clientSearchQuery}
+                  onChange={(e) => setClientSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+                {filteredPickerCustomers.length === 0 ? (
+                  <div className="py-10 text-center text-muted-foreground space-y-2">
+                    <Users className="size-8 mx-auto opacity-40" />
+                    <p className="text-sm font-semibold">No registered clients match "{clientSearchQuery}".</p>
+                    <Button size="sm" variant="outline" className="text-sm font-medium gap-1.5" onClick={() => setPickerMode('new')}>
+                      <UserPlus className="size-3.5" /> Register as New Client
+                    </Button>
+                  </div>
+                ) : (
+                  filteredPickerCustomers.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setCreationError(null);
+                        setSelectedCustomer(c);
+                        setShowClientPicker(false);
+                        setClientSearchQuery('');
+                      }}
+                      className={`w-full flex items-center gap-3 rounded-md border p-2.5 text-left transition-all cursor-pointer hover:border-primary/60 hover:bg-primary/5 ${
+                        selectedCustomer?.id === c.id ? 'border-primary bg-primary/10' : 'border-border bg-card'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium flex items-center justify-center text-sm shrink-0">
+                        {c.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-sm text-foreground truncate">{c.name}</span>
+                          {c.isVip && <Star className="size-3 text-amber-500 fill-amber-500 shrink-0" />}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                          {c.phone}{c.email ? ` • ${c.email}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge variant="secondary" className="text-[10px] font-mono">{c.totalVisits || 0} visits</Badge>
+                        <Badge variant={c.isVip ? 'secondary' : 'outline'} className="text-[10px] font-mono">{c.loyaltyPoints || 0} Pts</Badge>
+                        {selectedCustomer?.id === c.id && <CheckCircle2 className="size-4 text-primary shrink-0" />}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleCreateNewCustomer} className="space-y-4 py-1">
+              <div className="space-y-1.5">
+                <Label htmlFor="rcpName" className="text-sm font-medium">Full Name *</Label>
+                <div className="relative">
+                  <UserPlus className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    id="rcpName"
+                    required
+                    autoFocus
+                    placeholder="e.g. Almaz Bekele"
+                    value={custName}
+                    onChange={(e) => setCustName(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rcpPhone" className="text-sm font-medium">Mobile Phone Number *</Label>
+                <div className="relative">
+                  <Phone className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    id="rcpPhone"
+                    required
+                    placeholder="+251 91 123 4567"
+                    value={custPhone}
+                    onChange={(e) => setCustPhone(e.target.value)}
+                    className="pl-9 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rcpEmail" className="text-sm font-medium">Email Address (Optional)</Label>
+                <div className="relative">
+                  <Mail className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    id="rcpEmail"
+                    type="email"
+                    placeholder="client@gmail.com"
+                    value={custEmail}
+                    onChange={(e) => setCustEmail(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rcpNotes" className="text-sm font-medium">Preferences & Notes (Optional)</Label>
+                <Input
+                  id="rcpNotes"
+                  placeholder="e.g. Preferred hair stylist, sensitive scalp..."
+                  value={custNotes}
+                  onChange={(e) => setCustNotes(e.target.value)}
+                  className=""
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="custIsVip"
+                  checked={custIsVip}
+                  onChange={(e) => setCustIsVip(e.target.checked)}
+                  className="rounded border-border size-4 accent-primary"
+                />
+                <Label htmlFor="custIsVip" className="text-sm font-medium cursor-pointer flex items-center gap-1">
+                  <Star className="size-3.5 text-amber-500 fill-amber-500" /> Mark as VIP Priority Client
+                </Label>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setPickerMode('list')} className="text-sm">
+                  Back to List
+                </Button>
+                <Button type="submit" className="text-sm font-medium">
+                  Register & Select Client
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Print Invoice Overlay */}
       {invoiceToPrint && (
         <PrintableInvoice
           session={invoiceToPrint}

@@ -1,5 +1,6 @@
 import path from 'path';
 import express from 'express';
+import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -61,12 +62,23 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(compression());
+    app.use(
+      express.static(distPath, {
+        maxAge: '1y',
+        immutable: true,
+        setHeaders(res, filePath) {
+          if (!filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
     app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Serenity salon ERP SaaS running on http://0.0.0.0:${PORT}`);
+    console.log(`Gech Salon ERP SaaS running on http://0.0.0.0:${PORT}`);
   });
 
   const shutdown = () => {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, User, Scissors, Move, CheckCircle2, PlayCircle, AlertCircle, Sparkles, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Calendar, Clock, Scissors, Move, CheckCircle2, PlayCircle, AlertCircle, Sparkles, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Badge } from './ui/badge';
 import { Staff, VisitSession } from '../types';
 
 interface WeeklySchedulerProps {
@@ -115,15 +116,15 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
   };
 
   return (
-    <div className="bg-card border border-border rounded-3xl p-6 space-y-5 shadow-sm font-sans">
+    <div className="bg-card border border-border rounded-md p-5 space-y-4">
       {/* Top Controls & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
           <div className="flex items-center space-x-2">
             <Calendar className="w-5 h-5 text-foreground" />
-            <h3 className="text-lg font-serif font-bold text-foreground">Staff Weekly Schedule & Session Dispatcher</h3>
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">Staff Weekly Schedule & Session Dispatcher</h3>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Interactive Drag & Drop calendar grid with real-time double-booking & staff overlap conflict detection.
           </p>
         </div>
@@ -133,25 +134,25 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
           {totalCollisionCount > 0 && (
             <button
               onClick={() => setHighlightConflictsOnly(!highlightConflictsOnly)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-sm font-semibold border transition-colors cursor-pointer ${
                 highlightConflictsOnly
-                  ? 'bg-red-600 text-primary-foreground border-red-700 shadow-sm'
+                  ? 'bg-red-600 text-primary-foreground border-red-700'
                   : 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100'
               }`}
             >
-              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+              <ShieldAlert className="w-4 h-4 shrink-0" />
               <span>{totalCollisionCount} Overlap Conflict{totalCollisionCount > 1 ? 's' : ''}</span>
             </button>
           )}
 
-          <div className="flex items-center space-x-1 bg-muted p-1 rounded-2xl border border-border text-xs">
+          <div className="flex items-center space-x-1 bg-muted p-0.5 rounded-md border border-border text-sm">
             {['Today', 'Tomorrow', 'This Weekend'].map((day) => (
               <button
                 key={day}
                 onClick={() => setSelectedDay(day)}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
                   selectedDay === day
-                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -165,9 +166,9 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
       {/* Toast Notification */}
       {notification && (
         <div
-          className={`px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center space-x-2 animate-fadeIn border ${
+          className={`px-3 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 animate-fadeIn border ${
             notification.type === 'warning'
-              ? 'bg-red-50 border-red-300 text-red-950 font-bold'
+              ? 'bg-red-50 border-red-300 text-red-950'
               : 'bg-muted border-border text-foreground'
           }`}
         >
@@ -181,7 +182,7 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
       )}
 
       {/* Instruction Banner */}
-      <div className="bg-muted border border-border rounded-2xl px-4 py-2.5 text-xs text-muted-foreground flex flex-col md:flex-row md:items-center justify-between gap-2">
+      <div className="bg-muted border border-border rounded-md px-3.5 py-2 text-sm text-muted-foreground flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div className="flex items-center space-x-2">
           <Move className="w-4 h-4 text-foreground" />
           <span><strong>Drag-and-Drop:</strong> Drag visits into a staff member's slot to reschedule. Overlaps are highlighted automatically.</span>
@@ -189,39 +190,39 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
         <div className="flex items-center space-x-3 text-[11px]">
           <span className="flex items-center space-x-1">
             <span className="w-2 h-2 rounded-full bg-red-500"></span>
-            <span className="font-bold text-red-700">Double-Booked</span>
+            <span className="font-semibold text-red-700">Double-Booked</span>
           </span>
           <span className="flex items-center space-x-1">
-            <span className="w-2 h-2 rounded-full bg-muted0"></span>
+            <span className="w-2 h-2 rounded-full bg-foreground/30"></span>
             <span>Queued</span>
           </span>
           <span className="flex items-center space-x-1">
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
             <span>In Progress</span>
           </span>
           <span className="flex items-center space-x-1">
-            <span className="w-2 h-2 rounded-full bg-muted0"></span>
+            <span className="w-2 h-2 rounded-full bg-foreground/30"></span>
             <span>Completed</span>
           </span>
         </div>
       </div>
 
       {/* Grid Schedule Container */}
-      <div className="overflow-x-auto rounded-2xl border border-border">
-        <table className="w-full text-left text-xs border-collapse">
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="w-full text-left text-sm border-collapse">
           <thead>
-            <tr className="bg-muted text-foreground font-serif border-b border-border">
-              <th className="p-3 border-r border-border w-24 text-center font-bold text-xs uppercase tracking-wider">
+            <tr className="bg-muted border-b border-border">
+              <th className="p-2.5 border-r border-border w-24 text-center th-cell">
                 Time Slot
               </th>
               {staffList.map((stf) => (
                 <th key={stf.id} className="p-3 border-r border-border min-w-[200px]">
                   <div className="flex items-center space-x-2">
-                    <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground font-bold flex items-center justify-center text-xs">
+                    <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground font-semibold flex items-center justify-center text-sm">
                       {stf.name.charAt(0)}
                     </div>
                     <div>
-                      <div className="font-bold text-foreground">{stf.name}</div>
+                      <div className="font-semibold text-foreground">{stf.name}</div>
                       <div className="text-[10px] text-muted-foreground capitalize">{stf.role}</div>
                     </div>
                   </div>
@@ -234,7 +235,7 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
             {TIME_SLOTS.map((timeSlot) => (
               <tr key={timeSlot} className="border-b border-border/60 hover:bg-muted/30 transition-colors">
                 {/* Time Slot Label */}
-                <td className="p-3 border-r border-border font-mono text-[11px] font-bold text-muted-foreground text-center bg-muted/50">
+                <td className="p-2.5 border-r border-border font-mono text-[11px] font-semibold text-muted-foreground text-center bg-muted/50">
                   <div className="flex items-center justify-center space-x-1">
                     <Clock className="w-3 h-3 text-foreground" />
                     <span>{timeSlot}</span>
@@ -280,7 +281,7 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
                     >
                       {/* OVERLAP WARNING BADGE */}
                       {hasOverlapConflict && (
-                        <div className="mb-2 p-1.5 bg-red-100 border border-red-300 rounded-xl text-red-900 font-bold text-[10px] flex items-center justify-between shadow-xs">
+                        <div className="mb-2 p-1.5 bg-red-100 border border-red-300 rounded-md text-red-900 font-semibold text-[10px] flex items-center justify-between">
                           <span className="flex items-center space-x-1">
                             <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0 animate-bounce" />
                             <span>Staff Double-Booked! ({matchingSessions.length} sessions)</span>
@@ -290,14 +291,14 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
 
                       {/* HOVER CONFLICT TOOLTIP */}
                       {isHoveringOnOccupiedCell && !hasOverlapConflict && (
-                        <div className="mb-1.5 p-1 bg-muted border border-border rounded-lg text-foreground font-bold text-[9px] flex items-center space-x-1">
+                        <div className="mb-1.5 p-1 bg-muted border border-border rounded-md text-foreground font-semibold text-[9px] flex items-center space-x-1">
                           <AlertTriangle className="w-3 h-3 text-foreground" />
                           <span>Warning: Dropping creates an overlap!</span>
                         </div>
                       )}
 
                       {matchingSessions.length === 0 ? (
-                        <div className="h-full min-h-[50px] flex items-center justify-center text-[10px] text-stone-300 italic border border-dashed border-border rounded-xl p-1">
+                        <div className="h-full min-h-[50px] flex items-center justify-center text-[10px] text-muted-foreground/60 italic border border-dashed border-border rounded-md p-1">
                           Available Slot
                         </div>
                       ) : (
@@ -311,48 +312,48 @@ export const WeeklyScheduler: React.FC<WeeklySchedulerProps> = ({
                                 key={session.id}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, session.id)}
-                                className={`p-2.5 rounded-2xl border cursor-grab active:cursor-grabbing shadow-sm transition-transform hover:-translate-y-0.5 ${
+                                className={`p-2.5 rounded-md border cursor-grab active:cursor-grabbing transition-transform hover:-translate-y-0.5 ${
                                   hasOverlapConflict && !isCompleted
                                     ? 'bg-red-50 border-red-400 text-red-950 ring-2 ring-red-200'
                                     : isCompleted
-                                    ? 'bg-muted border-border text-ink-950'
+                                    ? 'bg-muted border-border text-foreground'
                                     : isInProgress
-                                    ? 'bg-blue-50 border-blue-200 text-blue-950'
-                                    : 'bg-muted border-border text-ink-950'
+                                    ? 'bg-amber-50 border-amber-200 text-amber-950'
+                                    : 'bg-muted border-border text-foreground'
                                 }`}
                               >
                                 <div className="flex items-center justify-between mb-1">
-                                  <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-card/80 border border-border">
+                                  <span className="font-mono font-semibold text-[10px] px-1.5 py-0.5 rounded-md bg-card/80 border border-border">
                                     {session.queueNumber}
                                   </span>
                                   {hasOverlapConflict && !isCompleted ? (
-                                    <span className="px-1.5 py-0.2 rounded bg-red-200 text-red-900 text-[9px] font-bold uppercase flex items-center space-x-0.5">
+                                    <span className="px-1.5 py-0.2 rounded-full bg-red-200 text-red-900 text-[9px] font-semibold uppercase flex items-center space-x-0.5">
                                       <AlertTriangle className="w-2.5 h-2.5 text-red-700" />
                                       <span>Overlap</span>
                                     </span>
                                   ) : isCompleted ? (
                                     <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
                                   ) : isInProgress ? (
-                                    <PlayCircle className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                                    <PlayCircle className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
                                   ) : (
                                     <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
                                   )}
                                 </div>
 
-                                <div className="font-bold text-xs truncate">{session.customerName}</div>
+                                <div className="font-semibold text-sm truncate">{session.customerName}</div>
                                 
-                                <div className="text-[10px] text-stone-600 flex items-center space-x-1 mt-0.5">
+                                <div className="text-[10px] text-muted-foreground flex items-center space-x-1 mt-0.5">
                                   <Scissors className="w-2.5 h-2.5" />
                                   <span className="truncate">
                                     {session.services.map((s) => s.serviceName).join(', ')}
                                   </span>
                                 </div>
 
-                                <div className="mt-1.5 pt-1 border-t border-border/60 flex items-center justify-between text-[10px] font-bold">
-                                  <span>{session.netTotalEtb.toLocaleString()} ETB</span>
-                                  <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-card/60">
+                                <div className="mt-1.5 pt-1 border-t border-border/60 flex items-center justify-between text-[10px] font-semibold">
+                                  <span className="tabular-nums">{session.netTotalEtb.toLocaleString()} ETB</span>
+                                  <Badge variant="neutral" className="text-[9px] uppercase px-1.5">
                                     {session.status}
-                                  </span>
+                                  </Badge>
                                 </div>
                               </div>
                             );

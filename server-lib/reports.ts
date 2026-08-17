@@ -55,18 +55,19 @@ export function createReportsRouter(pool: DbPool): Router {
     const from = typeof req.query.from === 'string' ? req.query.from : null;
     const to = typeof req.query.to === 'string' ? req.query.to : null;
     let dateFilter = '';
+    const dateValues = [...values];
     if (from) {
       dateFilter += ' AND DATE(started_at) >= ?';
-      values.push(from);
+      dateValues.push(from);
     }
     if (to) {
       dateFilter += ' AND DATE(started_at) <= ?';
-      values.push(to);
+      dateValues.push(to);
     }
 
     const [[revRows]] = (await pool.query(
       `SELECT COALESCE(SUM(net_total_etb),0) AS revenue, COUNT(*) AS visits FROM visit_sessions ${where} AND status='completed'${dateFilter}`,
-      values
+      dateValues
     )) as any;
     const [[commRows]] = (await pool.query(
       `SELECT COALESCE(SUM(commission_amount_etb),0) AS commissions FROM commission_logs ${where}`,

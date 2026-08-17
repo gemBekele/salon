@@ -26,7 +26,12 @@ export function createAdminRouter(pool: DbPool): Router {
     const [brRows] = await pool.query(`SELECT * FROM branches ${scope}`, params);
     const [buRows] = await pool.query(`SELECT * FROM business_units ${scope}`, params);
     const [stfRows] = await pool.query(`SELECT * FROM staff ${scope}`, params);
-    const [srvRows] = await pool.query(`SELECT * FROM services ${scope}`, params);
+    const [srvRows] = await pool.query(
+      companyId
+        ? `SELECT * FROM services WHERE company_id = ? AND is_active = TRUE`
+        : 'SELECT * FROM services WHERE is_active = TRUE',
+      companyId ? [companyId] : []
+    );
     const [reqRows] = await pool.query(
       companyId
         ? `SELECT sir.* FROM service_inventory_requirements sir JOIN services s ON sir.service_id = s.id WHERE s.company_id = ?`
@@ -72,6 +77,7 @@ export function createAdminRouter(pool: DbPool): Router {
       branches: jsonArr(brRows, (r) => ({
         id: r.id, companyId: r.company_id, name: r.name, city: r.city, address: r.address || '',
         phone: r.phone || '', isMainBranch: Boolean(r.is_main_branch), status: r.status,
+        dailyExpenseLimitEtb: Number(r.daily_expense_limit_etb || 0),
       })),
       businessUnits: jsonArr(buRows, (r) => ({
         id: r.id, companyId: r.company_id, branchId: r.branch_id, type: r.type, name: r.name, code: r.code, status: r.status,
@@ -108,11 +114,11 @@ export function createAdminRouter(pool: DbPool): Router {
         discountEtb: Number(r.discount_etb), taxEtb: Number(r.tax_etb), netTotalEtb: Number(r.net_total_etb),
         paymentMethod: r.payment_method || undefined, paymentReference: r.payment_reference || undefined,
         isPaid: Boolean(r.is_paid), startedAt: r.started_at, completedAt: r.completed_at || undefined,
-        notes: r.notes || undefined,
+        notes: r.notes || undefined, createdAt: r.created_at || r.started_at,
         services: (sessionSrvRows as any[]).filter((s) => s.visit_session_id === r.id).map((s) => ({
           id: s.id, serviceId: s.service_id, serviceName: s.service_name, staffId: s.staff_id, staffName: s.staff_name,
           priceEtb: Number(s.price_etb), durationMinutes: s.duration_minutes,
-          commissionEarnedEtb: Number(s.commission_earned_etb), status: s.status,
+          commissionEarnedEtb: Number(s.commission_earned_etb), status: s.status, createdAt: s.created_at,
         })),
       })),
       commissionRules: jsonArr(ruleRows, (r) => ({

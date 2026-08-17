@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
-import { mgmtOnly, asyncHandler } from '../middleware';
+import { mgmtOnly, posOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound, createAuditLogger, buildUpdate } from '../core';
+import { hashPassword, defaultPinForPhone } from '../auth';
 
 /**
  * Tenant & catalog CRUD: companies, branches, business units, staff,
@@ -12,7 +13,7 @@ export function createEntitiesRouter(pool: DbPool): Router {
   const router = Router();
   const insertAudit = createAuditLogger(pool);
 
-  router.use(['/companies', '/branches', '/business-units', '/staff', '/services', '/inventory-items'], ...mgmtOnly);
+  router.use(['/companies', '/branches', '/business-units', '/staff', '/services'], ...mgmtOnly);
 
   // ==========================================================
   // Companies (super_admin only)
@@ -70,8 +71,8 @@ export function createEntitiesRouter(pool: DbPool): Router {
     const b = req.body;
     const id = uid('br');
     await pool.query(
-      `INSERT INTO branches (id, company_id, name, city, address, phone, is_main_branch, status) VALUES (?,?,?,?,?,?,?,?)`,
-      [id, b.companyId, b.name, b.city, b.address || '', b.phone || '', b.isMainBranch ? 1 : 0, b.status || 'active']
+      `INSERT INTO branches (id, company_id, name, city, address, phone, is_main_branch, status, daily_expense_limit_etb) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [id, b.companyId, b.name, b.city, b.address || '', b.phone || '', b.isMainBranch ? 1 : 0, b.status || 'active', b.dailyExpenseLimitEtb || 0]
     );
     res.json({ success: true, id });
   }));
@@ -88,6 +89,7 @@ export function createEntitiesRouter(pool: DbPool): Router {
       address: { column: 'address' },
       phone: { column: 'phone' },
       isMainBranch: { column: 'is_main_branch', transform: (v) => (v ? 1 : 0) },
+      dailyExpenseLimitEtb: { column: 'daily_expense_limit_etb' },
       status: { column: 'status' },
     });
     const changed = await update(pool, req.params.id, req.body);
@@ -169,12 +171,13 @@ export function createEntitiesRouter(pool: DbPool): Router {
 
     const b = req.body;
     const id = uid('stf');
+    const defaultPin = defaultPinForPhone(b.phone);
     await pool.query(
-      `INSERT INTO staff (id, company_id, branch_id, business_unit_id, name, phone, email, role, specialties, default_commission_percentage, status, avatar_url)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, b.companyId, b.branchId, b.businessUnitId, b.name, b.phone || null, b.email || null, b.role || 'barber', JSON.stringify(b.specialties || []), b.defaultCommissionPercentage, b.status || 'available', b.avatarUrl || null]
+      `INSERT INTO staff (id, company_id, branch_id, business_unit_id, name, phone, email, role, specialties, default_commission_percentage, status, avatar_url, pin_hash, pin_changed)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,FALSE)`,
+      [id, b.companyId, b.branchId, b.businessUnitId, b.name, b.phone || null, b.email || null, b.role || 'barber', JSON.stringify(b.specialties || []), b.defaultCommissionPercentage, b.status || 'available', b.avatarUrl || null, hashPassword(defaultPin)]
     );
-    res.json({ success: true, id });
+    res.json({ success: true, id, defaultPin });
   }));
 
   router.put('/staff/:id', asyncHandler(async (req, res) => {
@@ -277,7 +280,7 @@ export function createEntitiesRouter(pool: DbPool): Router {
   // ==========================================================
   // Inventory items
   // ==========================================================
-  router.post('/inventory-items', asyncHandler(async (req, res) => {
+  router.post('/inventory-items', ...mgmtOnly, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
     const errs = validate(req.body, {
       companyId: { required: true },
@@ -297,7 +300,7 @@ export function createEntitiesRouter(pool: DbPool): Router {
     res.json({ success: true, id });
   }));
 
-  router.put('/inventory-items/:id', asyncHandler(async (req, res) => {
+  router.put('/inventory-items/:id', ...mgmtOnly, asyncHandler(async (req, res) => {
     const [rows] = (await pool.query(`SELECT company_id FROM inventory_items WHERE id = ?`, [req.params.id])) as any;
     const inv = rows[0];
     if (!inv) return notFound('Inventory item not found');
@@ -319,7 +322,7 @@ export function createEntitiesRouter(pool: DbPool): Router {
     res.json({ success: true });
   }));
 
-  router.delete('/inventory-items/:id', asyncHandler(async (req, res) => {
+  router.delete('/inventory-items/:id', ...mgmtOnly, asyncHandler(async (req, res) => {
     const [rows] = (await pool.query(`SELECT company_id, name FROM inventory_items WHERE id = ?`, [req.params.id])) as any;
     const inv = rows[0];
     if (!inv) return notFound('Inventory item not found');
@@ -329,15 +332,19 @@ export function createEntitiesRouter(pool: DbPool): Router {
     res.json({ success: true });
   }));
 
-  router.post('/inventory-items/adjust-stock', asyncHandler(async (req, res) => {
+  router.post('/inventory-items/adjust-stock', ...posOnly, asyncHandler(async (req, res) => {
     const b = req.body;
     const [rows] = (await pool.query(`SELECT company_id, branch_id, name FROM inventory_items WHERE id = ?`, [b.id])) as any;
     const item = rows[0];
     if (!item) return notFound('Inventory item not found');
     if (!canAccessCompany(req.user!, item.company_id)) return res.status(403).json({ error: 'Company not found' });
     const added = Number(b.addedStock) || 0;
-    await pool.query(`UPDATE inventory_items SET current_stock = current_stock + ? WHERE id = ?`, [added, b.id]);
-    await insertAudit({ companyId: item.company_id, branchId: item.branch_id }, 'inventory_adjustment', `Stock restocked: ${item.name} (+${added} unit(s))`, 'Tenant Admin', `Adjusted by ${req.user!.name}`);
+    await pool.query(`UPDATE inventory_items SET current_stock = GREATEST(current_stock + ?, 0) WHERE id = ?`, [added, b.id]);
+    if (added < 0) {
+      await insertAudit({ companyId: item.company_id, branchId: item.branch_id }, 'inventory_usage', `Stock used: ${item.name} (${added} unit(s))`, req.user!.name, `Adjusted by ${req.user!.name}`);
+    } else {
+      await insertAudit({ companyId: item.company_id, branchId: item.branch_id }, 'inventory_adjustment', `Stock restocked: ${item.name} (+${added} unit(s))`, req.user!.name, `Adjusted by ${req.user!.name}`);
+    }
     res.json({ success: true });
   }));
 

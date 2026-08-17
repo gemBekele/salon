@@ -24,7 +24,7 @@ export function createSmsService(pool: DbPool) {
   const provider = (process.env.SMS_PROVIDER || 'log').toLowerCase();
   const providerUrl = process.env.SMS_PROVIDER_URL || '';
   const apiKey = process.env.SMS_API_KEY || '';
-  const senderId = process.env.SMS_SENDER_ID || 'Serenity';
+  const senderId = process.env.SMS_SENDER_ID || 'Gech Salon';
 
   async function sendViaProvider(recipientPhone: string, content: string): Promise<boolean> {
     if (provider === 'http' && providerUrl) {
