@@ -9,7 +9,7 @@ import {
 } from './ui/dialog';
 import { Button } from './ui/button';
 import { PinPad } from './PinPad';
-import { readApiError } from '../lib/api';
+import { API_BASE, readApiError } from '../lib/api';
 
 interface StaffPinChangeDialogProps {
   open: boolean;
@@ -62,7 +62,7 @@ export const StaffPinChangeDialog: React.FC<StaffPinChangeDialogProps> = ({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/staff/change-pin', {
+      const res = await fetch(API_BASE + '/api/staff/change-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

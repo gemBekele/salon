@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tv, Star } from 'lucide-react';
+import { Tv, Star, Users } from 'lucide-react';
 import { Company, Branch, VisitSession, BusinessUnit, Staff, Customer } from '../types';
 import { getStaffQueue } from '../lib/queue';
 
@@ -57,17 +57,17 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
     .map((staff) => {
       const queue = getStaffQueue(staff.id, visitSessions, customers);
       const serving = queue.find((q) => q.service.status === 'in_progress');
-      const next = queue.find((q) => q.available);
+      const next = queue.filter((q) => q.available);
       return { staff, serving, next, count: queue.length };
     })
-    .filter((b) => b.serving || b.next);
+    .filter((b) => b.serving || b.next.length > 0);
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white flex flex-col font-sans select-none">
       {/* Top bar */}
       <div className="flex items-center justify-between px-8 py-4 border-b border-white/10">
         <div>
-          <h1 className="text-2xl font-medium tracking-tight">{company.name}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{company.name}</h1>
           <p className="text-sm text-white/50">{branch.name}</p>
         </div>
         <div className="flex items-center gap-6 text-white/60">
@@ -85,25 +85,27 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
         {staffBoards.length === 0 ? (
           <p className="text-white/20 text-lg flex items-center justify-center h-full">No active queue</p>
         ) : (
-          <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(320px, 1fr))` }}>
+          <div className="grid gap-6 items-start justify-items-center" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(340px, 1fr))` }}>
             {staffBoards.map(({ staff, serving, next }) => (
-              <div key={staff.id} className="rounded-md bg-white/[0.04] border border-white/[0.08] p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-medium">{staff.name}</h2>
-                  <span className="text-sm uppercase tracking-widest text-white/40">{staff.role}</span>
+              <div key={staff.id} className="w-full rounded-xl bg-white/[0.04] border border-white/[0.08] p-6 flex flex-col items-center text-center">
+                <div className="mb-5 text-center">
+                  <h2 className="text-xl font-bold">{staff.name}</h2>
+                  <span className="text-xs font-medium uppercase tracking-widest text-white/40">{staff.role}</span>
                 </div>
 
                 {/* Now serving */}
-                <div className="mb-4">
-                  <p className="text-[11px] uppercase tracking-widest text-amber-400/70 mb-2">Now Serving</p>
+                <div className="w-full mb-5">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-amber-400/80 mb-2">Now Serving</p>
                   {serving ? (
-                    <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-3">
+                    <div className="rounded-lg bg-amber-500/10 border-2 border-amber-500/30 px-4 py-4 flex flex-col items-center gap-1.5">
                       <div className="flex items-center gap-2">
-                        {serving.isVip && <Star className="size-4 text-amber-400 fill-amber-400" />}
-                        <span className="text-xl font-medium font-mono">{maskPhone(serving.session.customerPhone)}</span>
+                        {serving.isVip && <Star className="size-5 text-amber-400 fill-amber-400" />}
+                        <span className="text-2xl font-bold font-mono tracking-wide">{maskPhone(serving.session.customerPhone)}</span>
                       </div>
-                      <p className="text-sm text-white/60 mt-1">{serving.service.serviceName}</p>
-                      <p className="text-xs text-amber-400/80 mt-0.5">Go to: {unitNameFor(staff)}</p>
+                      <p className="text-sm font-semibold text-white/70">{serving.service.serviceName}</p>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 px-3 py-1 text-sm font-bold text-emerald-300">
+                        Go to {unitNameFor(staff)}
+                      </span>
                     </div>
                   ) : (
                     <p className="text-white/20 text-sm">—</p>
@@ -111,17 +113,26 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
                 </div>
 
                 {/* Next up */}
-                <div>
-                  <p className="text-[11px] uppercase tracking-widest text-white/40 mb-2">Next Up</p>
-                  {next ? (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {next.isVip && <Star className="size-4 text-amber-400 fill-amber-400" />}
-                      <span className="text-base font-semibold text-white/80 font-mono">{maskPhone(next.session.customerPhone)}</span>
-                      <span className="text-sm text-white/40">· {next.service.serviceName}</span>
-                      <span className="text-xs text-white/50">→ {unitNameFor(staff)}</span>
-                    </div>
-                  ) : (
+                <div className="w-full flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/40 mb-2">Next Up</p>
+                  {next.length === 0 ? (
                     <p className="text-white/20 text-sm">—</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {next.slice(0, 3).map((q) => (
+                        <li key={q.service.id} className="flex items-center justify-center gap-3 rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+                          <span className="text-sm font-bold text-white/40">#{q.position}</span>
+                          {q.isVip && <Star className="size-4 text-amber-400 fill-amber-400" />}
+                          <span className="text-lg font-bold font-mono tracking-wide">{maskPhone(q.session.customerPhone)}</span>
+                          <span className="text-xs font-semibold text-white/40">· {q.service.serviceName}</span>
+                        </li>
+                      ))}
+                      {next.length > 3 && (
+                        <li className="text-sm font-semibold text-white/40 pt-1">
+                          <Users className="size-4 inline mr-1 -mt-0.5" />+{next.length - 3} more
+                        </li>
+                      )}
+                    </ul>
                   )}
                 </div>
               </div>

@@ -17,6 +17,7 @@ import {
   Check,
   LogOut,
   Star,
+  Loader2,
 } from 'lucide-react';
 import {
   Staff,
@@ -56,7 +57,7 @@ import {
   SelectValue,
 } from './ui/select';
 import { PinPad } from './PinPad';
-import { apiFetch, readApiError } from '../lib/api';
+import { apiFetch, API_BASE, readApiError } from '../lib/api';
 import { getStaffQueue } from '../lib/queue';
 import { cn } from '../lib/utils';
 
@@ -139,6 +140,16 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   const [switchTarget, setSwitchTarget] = useState<Staff | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  const runPending = async (key: string, fn: () => Promise<void> | void) => {
+    setPendingAction(key);
+    try {
+      await fn();
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   // Add Extra Service Modal to existing session
   const [extraServiceModalSession, setExtraServiceModalSession] = useState<VisitSession | null>(null);
@@ -201,7 +212,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   };
 
   // Create Client Session from Staff Workstation
-  const handleCreateSession = (startImmediately: boolean = false) => {
+  const handleCreateSession = async (startImmediately: boolean = false) => {
     if (!selectedCustomer || selectedServices.length === 0 || !onCreateVisitSession) return;
 
     const queueNum = `Q-${100 + visitSessions.length + 1}`;
@@ -244,10 +255,15 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
       notes: sessionNotes || undefined,
     };
 
-    onCreateVisitSession(newSession);
-    setSelectedServices([]);
-    setSessionNotes('');
-    setSelectedCustomer(null);
+    setPendingAction('create');
+    try {
+      await onCreateVisitSession(newSession);
+      setSelectedServices([]);
+      setSessionNotes('');
+      setSelectedCustomer(null);
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   // Register New Customer from Staff Station
@@ -295,11 +311,16 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     setExtraServiceModalSession(null);
   };
 
-  const handleCheckoutSession = () => {
+  const handleCheckoutSession = async () => {
     if (!checkoutSession || !onCheckoutSession) return;
     const ref = `PAY-${Math.floor(100000 + Math.random() * 900000)}`;
-    onCheckoutSession(checkoutSession.id, paymentMethod, ref);
-    setCheckoutSession(null);
+    setPendingAction('pay');
+    try {
+      await onCheckoutSession(checkoutSession.id, paymentMethod, ref);
+      setCheckoutSession(null);
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   // Switch Active Employee (requires the target employee's PIN)
@@ -315,7 +336,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     setSwitching(true);
     setSwitchError(null);
     try {
-      const res = await fetch('/api/staff/verify-pin', {
+      const res = await fetch(API_BASE + '/api/staff/verify-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ staffId: switchTarget.id, pin }),
@@ -584,18 +605,23 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                           <Button
                             variant="outline"
                             className="flex-1 sm:flex-initial"
-                            disabled={!selectedCustomer}
+                            disabled={!selectedCustomer || pendingAction !== null}
                             onClick={() => handleCreateSession(false)}
                           >
+                            {pendingAction === 'create' ? <Loader2 className="size-4 animate-spin" /> : null}
                             Add to Queue
                           </Button>
                           <Button
                             className="flex-1 sm:flex-initial gap-1.5"
-                            disabled={!selectedCustomer}
+                            disabled={!selectedCustomer || pendingAction !== null}
                             onClick={() => handleCreateSession(true)}
                           >
-                            <PlayCircle className="size-4" />
-                            Start Now
+                            {pendingAction === 'create' ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <PlayCircle className="size-4" />
+                            )}
+                            {pendingAction === 'create' ? 'Creating...' : 'Start Now'}
                           </Button>
                         </div>
                       </div>
@@ -661,10 +687,15 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                                 <Button
                                   size="sm"
                                   className="flex-1 gap-1.5"
-                                  onClick={() => onUpdateServiceStatus(item.service.id, 'in_progress')}
+                                  disabled={pendingAction !== null}
+                                  onClick={() => runPending(`start-${item.service.id}`, () => onUpdateServiceStatus(item.service.id, 'in_progress'))}
                                 >
-                                  <PlayCircle className="size-4" />
-                                  Start
+                                  {pendingAction === `start-${item.service.id}` ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <PlayCircle className="size-4" />
+                                  )}
+                                  {pendingAction === `start-${item.service.id}` ? 'Starting...' : 'Start'}
                                 </Button>
                               )}
                               {inProgress && (
@@ -672,10 +703,15 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                                   size="sm"
                                   variant="outline"
                                   className="flex-1 gap-1.5"
-                                  onClick={() => onUpdateServiceStatus(item.service.id, 'completed')}
+                                  disabled={pendingAction !== null}
+                                  onClick={() => runPending(`complete-${item.service.id}`, () => onUpdateServiceStatus(item.service.id, 'completed'))}
                                 >
-                                  <CheckCircle className="size-4" />
-                                  Complete
+                                  {pendingAction === `complete-${item.service.id}` ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="size-4" />
+                                  )}
+                                  {pendingAction === `complete-${item.service.id}` ? 'Completing...' : 'Complete'}
                                 </Button>
                               )}
                             </div>
@@ -989,7 +1025,10 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
             <Button variant="outline" onClick={() => setCheckoutSession(null)}>
               Cancel
             </Button>
-            <Button onClick={handleCheckoutSession}>Confirm Payment &amp; Complete</Button>
+            <Button onClick={handleCheckoutSession} disabled={pendingAction !== null}>
+              {pendingAction === 'pay' && <Loader2 className="size-4 animate-spin mr-2" />}
+              {pendingAction === 'pay' ? 'Processing...' : 'Confirm Payment & Complete'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

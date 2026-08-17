@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { PinPad } from './PinPad';
 import { AuthUser, StaffLoginOption } from '../types';
 import { cn } from '../lib/utils';
+import { API_BASE } from '../lib/api';
 
 interface LoginScreenProps {
   onLogin: (user: AuthUser, pin?: string) => void;
@@ -46,7 +47,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
   const [tvPinError, setTvPinError] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/staff-login-options')
+    fetch(API_BASE + '/api/auth/staff-login-options')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const list = data?.companies ?? [];
@@ -71,7 +72,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(API_BASE + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -95,7 +96,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
     setPinError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/staff-login', {
+      const res = await fetch(API_BASE + '/api/auth/staff-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ staffId: selectedStaff.id, pin }),

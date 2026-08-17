@@ -1,5 +1,8 @@
 const TOKEN_KEY = 'sserp_token';
 
+/** API origin for builds served from a static CDN (set via VITE_API_BASE); empty = same-origin. */
+export const API_BASE: string = (import.meta.env.VITE_API_BASE as string) || '';
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -56,7 +59,7 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
-  const res = await fetch(input, { ...init, headers, credentials: 'include' });
+  const res = await fetch(API_BASE + String(input), { ...init, headers, credentials: 'include' });
 
   if (res.status === 401) {
     clearToken();
