@@ -41,7 +41,7 @@ export function createStaffRouter(pool: DbPool): Router {
     if (!isValidPin(String(newPin))) return res.status(400).json({ error: 'New PIN must be exactly 4 digits' });
 
     const isSelf = req.user!.id === staffId;
-    const isManager = req.user!.role === 'super_admin' || req.user!.role === 'tenant_manager';
+    const isManager = ['super_admin', 'owner', 'manager'].includes(req.user!.role);
     if (!isSelf && !isManager) {
       return res.status(403).json({ error: 'You can only change your own PIN' });
     }
@@ -59,7 +59,7 @@ export function createStaffRouter(pool: DbPool): Router {
   }));
 
   router.post('/:id/reset-pin', authenticate, asyncHandler(async (req, res) => {
-    if (req.user!.role !== 'super_admin' && req.user!.role !== 'tenant_manager') {
+    if (!['super_admin', 'owner', 'manager'].includes(req.user!.role)) {
       return res.status(403).json({ error: 'Only managers can reset staff PINs' });
     }
     const [rows] = (await pool.query(`SELECT phone FROM staff WHERE id = ?`, [req.params.id])) as any;

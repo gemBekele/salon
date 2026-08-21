@@ -167,7 +167,7 @@ export function createAdminRouter(pool: DbPool): Router {
       name: { required: true, type: 'string' },
       email: { required: true, type: 'string' },
       password: { required: true, type: 'string' },
-      role: { required: true, enum: ['super_admin', 'tenant_manager', 'receptionist', 'staff'] },
+      role: { required: true, enum: ['super_admin', 'owner', 'manager', 'reception', 'staff'] },
     });
     if (errs.length) return res.status(400).json({ error: errs.join('; ') });
 

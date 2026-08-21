@@ -12,7 +12,7 @@ export function createFinanceRouter(pool: DbPool): Router {
   const router = Router();
   const insertAudit = createAuditLogger(pool);
 
-  router.use(['/commission-rules', '/commission-logs', '/expenses', '/audit-logs', '/audit', '/sms-logs'], ...mgmtOnly);
+  router.use(['/commission-rules', '/commission-logs', '/expenses', '/audit-logs', '/audit', '/sms-logs', '/feedback'], ...mgmtOnly);
 
   // ==========================================================
   // Commission rules
@@ -70,6 +70,78 @@ export function createFinanceRouter(pool: DbPool): Router {
     res.json({ success: true });
   }));
 
+  // Pay a staff member: accept a specific amount, mark the oldest unpaid
+  // commission logs as paid up to that amount, and record the payout on that date.
+  // Anything not covered stays unpaid.
+  router.patch('/commission-logs/payout/batch', asyncHandler(async (req, res) => {
+    const { staffId, companyId, amountAcceptedEtb, notes } = req.body;
+    if (!staffId || !companyId) {
+      return res.status(400).json({ error: 'staffId and companyId are required' });
+    }
+    if (typeof amountAcceptedEtb !== 'number' || !isFinite(amountAcceptedEtb) || amountAcceptedEtb < 0) {
+      return res.status(400).json({ error: 'amountAcceptedEtb must be a non-negative number' });
+    }
+    if (!canAccessCompany(req.user!, companyId)) return res.status(403).json({ error: 'Company not found' });
+
+    // Oldest unpaid logs first, so "paid up to X" always starts with the due-iest.
+    const [logs] = (await pool.query(
+      `SELECT id, commission_amount_etb, staff_name
+       FROM commission_logs
+       WHERE staff_id = ? AND company_id = ? AND payout_status != 'paid'
+       ORDER BY created_at ASC, id ASC`,
+      [staffId, companyId]
+    )) as any;
+    if (logs.length === 0) {
+      return res.status(400).json({ error: 'No unpaid commissions for this staff member' });
+    }
+
+    let remaining = amountAcceptedEtb;
+    const toPay: string[] = [];
+    for (const log of logs) {
+      const amt = Number(log.commission_amount_etb) || 0;
+      if (amt <= remaining && amt > 0) {
+        toPay.push(log.id);
+        remaining -= amt;
+      } else {
+        // A single log is an indivisible record; if the accepted amount can't
+        // cover it completely it stays fully unpaid for a later payout.
+        break;
+      }
+    }
+
+    let logsPaid = 0;
+    if (toPay.length > 0) {
+      await pool.query(
+        `UPDATE commission_logs SET payout_status = 'paid'
+         WHERE id IN (${toPay.map(() => '?').join(',')})`,
+        toPay
+      );
+      // The pool adapter only returns rows; the update affects exactly toPay.length
+      // rows because every one of them was selected as `payout_status != 'paid'`.
+      logsPaid = toPay.length;
+    }
+
+    const payoutId = uid('pay_');
+    const staffName = logs[0].staff_name;
+    await pool.query(
+      `INSERT INTO commission_payouts (id, company_id, branch_id, staff_id, staff_name, amount_accepted_etb, logs_paid, notes, created_at)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [payoutId, companyId, staffId, staffName, amountAcceptedEtb, logsPaid, notes || null]
+    );
+    await insertAudit(
+      { companyId, branchId: null },
+      'commission_change',
+      `Payout of ${amountAcceptedEtb} ETB accepted for staff ${staffName} (${staffId}) on ${new Date().toISOString().split('T')[0]} - ${logsPaid} log(s) marked paid`,
+      req.user!.name
+    );
+    res.json({
+      success: true,
+      payoutId,
+      amountPaidEtb: toPay.length > 0 ? amountAcceptedEtb - remaining : 0,
+      logsPaid,
+    });
+  }));
+
   // ==========================================================
   // Expenses
   // ==========================================================
@@ -89,7 +161,7 @@ export function createFinanceRouter(pool: DbPool): Router {
     const id = uid('exp');
 
     // Enforce the branch daily expense limit (set by salon admin) for receptionist-recorded expenses
-    if (req.user && req.user.role === 'receptionist') {
+    if (req.user && req.user.role === 'reception') {
       const [brRows] = (await pool.query(`SELECT daily_expense_limit_etb FROM branches WHERE id = ?`, [b.branchId])) as any;
       const br = brRows[0];
       const limit = br ? Number(br.daily_expense_limit_etb || 0) : 0;
@@ -177,6 +249,49 @@ export function createFinanceRouter(pool: DbPool): Router {
       ...rows.map((r: any) => [r.id, r.timestamp, r.action_type, esc(r.description), esc(r.performed_by), esc(r.details), r.ip_address || '127.0.0.1'].join(',')),
     ].join('\n');
     res.status(200).type('text/csv').setHeader('Content-Disposition', `attachment; filename="security_audit_${new Date().toISOString().split('T')[0]}.csv"`).send(csv);
+  }));
+
+  // ==========================================================
+  // Feedback & complaints review (owner / manager)
+  // ==========================================================
+  router.get('/feedback', asyncHandler(async (req, res) => {
+    const companyId = req.user!.role === 'super_admin' ? (typeof req.query.companyId === 'string' ? req.query.companyId : null) : req.user!.companyId;
+    const values: any[] = [];
+    let where = companyId ? 'WHERE f.company_id = ?' : '';
+    if (companyId) values.push(companyId);
+    if (typeof req.query.branchId === 'string' && req.query.branchId) {
+      where += where ? ` AND f.branch_id = ?` : 'WHERE f.branch_id = ?';
+      values.push(req.query.branchId);
+    }
+    const [rows] = (await pool.query(
+      `SELECT f.id, f.company_id, f.branch_id, f.visit_session_id, f.customer_id, f.rating, f.complaint,
+              f.is_anonymous, f.created_at,
+              vs.queue_number, vs.customer_name AS session_customer_name,
+              c.name AS customer_name, c.phone AS customer_phone
+       FROM feedback f
+       LEFT JOIN visit_sessions vs ON vs.id = f.visit_session_id
+       LEFT JOIN customers c ON c.id = f.customer_id
+       ${where}
+       ORDER BY f.created_at DESC
+       LIMIT 200`,
+      values
+    )) as any;
+    res.json({
+      feedback: (rows as any[]).map((r) => ({
+        id: r.id,
+        companyId: r.company_id,
+        branchId: r.branch_id,
+        visitSessionId: r.visit_session_id,
+        customerId: r.customer_id,
+        rating: Number(r.rating),
+        complaint: r.complaint || undefined,
+        isAnonymous: Boolean(r.is_anonymous),
+        createdAt: r.created_at,
+        queueNumber: r.queue_number || undefined,
+        customerName: r.is_anonymous ? undefined : (r.customer_name || r.session_customer_name || undefined),
+        customerPhone: r.is_anonymous ? undefined : (r.customer_phone || undefined),
+      })),
+    });
   }));
 
   // ==========================================================

@@ -1,28 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   GitBranch,
   Scissors,
   Package,
   DollarSign,
-  BarChart3,
   Plus,
   AlertTriangle,
   CheckCircle,
   TrendingUp,
   Clock,
-  Building2,
   Trash2,
   Edit2,
-  Calendar,
   ShieldCheck,
   Download,
   Repeat,
   RefreshCw,
   Activity,
-  FileText,
   Search,
-  Zap,
   Minus,
+  X,
+  Star,
 } from 'lucide-react';
 import {
   Company,
@@ -37,14 +34,17 @@ import {
   VisitSession,
   AuditLog,
   User,
+  Feedback,
 } from '../types';
 import { ReportsDashboard } from './ReportsDashboard';
 import { apiFetch } from '../lib/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useAdminTab } from '../lib/adminNav';
+import { revenueOn, activeQueue, unpaidCompleted, lowStockItems } from '../lib/kpi';
+import { showToast } from './Toast';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, toSelectItems } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 interface TenantAdminViewProps {
@@ -79,6 +79,7 @@ interface TenantAdminViewProps {
   onDeleteInventoryItem?: (itemId: string) => void;
   onAddUser?: (user: User) => void;
   onUpdateUser?: (user: User & { password?: string }) => void;
+  onRefresh?: () => Promise<void>;
 }
 
 export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
@@ -113,8 +114,9 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   onDeleteInventoryItem,
   onAddUser,
   onUpdateUser,
+  onRefresh,
 }) => {
-  const { adminTab } = useAdminTab();
+  const { adminTab, setAdminTab } = useAdminTab();
 
   // Branch Metric Selection State
   const [selectedMetricBranchId, setSelectedMetricBranchId] = useState<string>(
@@ -124,6 +126,18 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   // Keep the in-page metric branch in sync with the sidebar branch selector
   React.useEffect(() => {
     if (selectedBranch?.id) setSelectedMetricBranchId(selectedBranch.id);
+  }, [selectedBranch?.id]);
+
+  // Overview scope: company-wide by default, or "All Branches"
+  const [overviewBranchId, setOverviewBranchId] = useState<string>(selectedBranch?.id || 'all');
+  React.useEffect(() => {
+    if (selectedBranch?.id) setOverviewBranchId(selectedBranch.id);
+  }, [selectedBranch?.id]);
+
+  // Staff scope: "All Branches" or a single branch (synced to the sidebar)
+  const [staffScopeBranchId, setStaffScopeBranchId] = useState<string>(selectedBranch?.id || 'all');
+  React.useEffect(() => {
+    if (selectedBranch?.id) setStaffScopeBranchId(selectedBranch.id);
   }, [selectedBranch?.id]);
 
   // Expense Form State
@@ -141,6 +155,27 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   // Security Audit Filters
   const [auditFilterType, setAuditFilterType] = useState<string>('all');
   const [auditSearchQuery, setAuditSearchQuery] = useState<string>('');
+
+  // Reviews & Complaints
+  const [feedbackItems, setFeedbackItems] = useState<Feedback[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFeedbackLoading(true);
+      try {
+        const res = await apiFetch(`/api/feedback?companyId=${encodeURIComponent(company.id)}`);
+        const data = await res.json();
+        if (!cancelled) setFeedbackItems(res.ok ? (data?.feedback ?? []) : []);
+      } catch {
+        if (!cancelled) setFeedbackItems([]);
+      } finally {
+        if (!cancelled) setFeedbackLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [company.id]);
 
   // Modal States
   const [showAddBranchModal, setShowAddBranchModal] = useState(false);
@@ -161,12 +196,12 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const [branchName, setBranchName] = useState('');
   const [branchCity, setBranchCity] = useState('Addis Ababa');
   const [branchAddress, setBranchAddress] = useState('');
-  const [branchPhone, setBranchPhone] = useState('');
+  const [branchPhone, setBranchPhone] = useState('+251 ');
   const [branchExpenseLimit, setBranchExpenseLimit] = useState('0');
 
   // Staff Form
   const [staffName, setStaffName] = useState('');
-  const [staffPhone, setStaffPhone] = useState('');
+  const [staffPhone, setStaffPhone] = useState('+251 ');
   const [staffRole, setStaffRole] = useState<any>('barber');
   const [staffCommission, setStaffCommission] = useState(30);
   const [staffBranchId, setStaffBranchId] = useState(branches[0]?.id || '');
@@ -198,6 +233,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const companyInventory = inventoryItems.filter((i) => i.companyId === company.id);
   const companyCommissions = commissionLogs.filter((c) => c.companyId === company.id);
   const companyExpenses = expenses.filter((e) => e.companyId === company.id);
+  const companyUsers = users.filter((u) => u.companyId === company.id);
 
   const filteredAuditLogs = auditLogs.filter((log) => {
     if (log.companyId !== company.id) return false;
@@ -218,17 +254,14 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const currentMetricBranch = companyBranches.find((b) => b.id === activeBranchId) || companyBranches[0];
 
   const branchUnitIds = companyBusinessUnits.filter((bu) => bu.branchId === activeBranchId).map((bu) => bu.id);
-  const branchStaff = companyStaff.filter((st) => st.branchId === activeBranchId);
   const branchServices = companyServices.filter((s) => branchUnitIds.includes(s.businessUnitId));
   const branchInventory = companyInventory.filter((i) => i.branchId === activeBranchId);
   const branchExpenses = companyExpenses.filter((e) => e.branchId === activeBranchId);
-  const branchCommissions = companyCommissions.filter((c) => c.branchId === activeBranchId);
 
   const totalCompletedRevenueEtb = visitSessions
     .filter((s) => s.companyId === company.id && s.status === 'completed' && s.branchId === activeBranchId)
     .reduce((acc, s) => acc + s.netTotalEtb, 0);
 
-  const totalCommissionsEtb = branchCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
   const totalExpensesEtb = branchExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
   const lowStockInventory = branchInventory.filter((i) => i.currentStock <= i.reorderLevel);
 
@@ -266,6 +299,90 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
   const totalBranchStaffCount = branchStaffMembers.length;
   const staffOccupancyPct =
     totalBranchStaffCount > 0 ? Math.round((busyBranchStaffCount / totalBranchStaffCount) * 100) : 0;
+
+  // Overview derived data (company-wide or single branch)
+  const overviewSessions = visitSessions.filter((s) => {
+    if (s.companyId !== company.id) return false;
+    if (overviewBranchId !== 'all' && s.branchId !== overviewBranchId) return false;
+    return true;
+  });
+  const overviewInventory = companyInventory.filter((i) =>
+    overviewBranchId === 'all' ? true : i.branchId === overviewBranchId
+  );
+  const overviewExpenses = companyExpenses.filter((e) =>
+    overviewBranchId === 'all' ? true : e.branchId === overviewBranchId
+  );
+  const overviewLowStock = lowStockItems(overviewInventory);
+  const overviewUnpaid = unpaidCompleted(overviewSessions);
+  const overviewQueue = activeQueue(overviewSessions);
+  const overviewRevenueToday = revenueOn(todayDateStr, overviewSessions);
+  const overviewCompletedToday = overviewSessions.filter(
+    (s) =>
+      s.status === 'completed' &&
+      ((s.completedAt && s.completedAt.startsWith(todayDateStr)) ||
+        (s.startedAt && s.startedAt.startsWith(todayDateStr)))
+  ).length;
+  const overviewExpensesToday = overviewExpenses.filter((e) => e.date === todayDateStr)
+    .reduce((acc, e) => acc + e.amountEtb, 0);
+  const overviewNetToday = overviewRevenueToday - overviewExpensesToday;
+  const overviewStaff = companyStaff.filter((st) =>
+    overviewBranchId === 'all' ? true : st.branchId === overviewBranchId
+  );
+  const overviewStaffOnShift = overviewStaff.filter(
+    (st) => st.status === 'available' || st.status === 'busy'
+  ).length;
+  const overviewLiveQueue = overviewSessions
+    .filter((s) => s.status === 'queued' || s.status === 'in_progress')
+    .slice(0, 5);
+  const overviewBranchName =
+    overviewBranchId === 'all'
+      ? 'All Branches'
+      : companyBranches.find((b) => b.id === overviewBranchId)?.name || '—';
+
+  // Staff scope derived data (All Branches or single branch)
+  const scopeStaff = companyStaff.filter((st) =>
+    staffScopeBranchId === 'all' ? true : st.branchId === staffScopeBranchId
+  );
+  const scopeStaffOnShift = scopeStaff.filter(
+    (st) => st.status === 'available' || st.status === 'busy'
+  );
+  const scopeVisits = visitSessions.filter((s) => {
+    if (s.companyId !== company.id) return false;
+    if (staffScopeBranchId !== 'all' && s.branchId !== staffScopeBranchId) return false;
+    return true;
+  });
+  const scopeCommissions = companyCommissions.filter((c) =>
+    staffScopeBranchId === 'all' ? true : c.branchId === staffScopeBranchId
+  );
+  const scopeCommissionTotal = scopeCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
+  const scopePendingPayouts = scopeCommissions
+    .filter((c) => c.payoutStatus !== 'paid')
+    .reduce((acc, c) => acc + c.commissionAmountEtb, 0);
+  const payoutDueByStaffId = (() => {
+    const map: Record<string, number> = {};
+    scopeCommissions
+      .filter((c) => c.payoutStatus !== 'paid')
+      .forEach((c) => {
+        map[c.staffId] = (map[c.staffId] || 0) + c.commissionAmountEtb;
+      });
+    return map;
+  })();
+  const scopeInProgressByStaff = (() => {
+    const map: Record<string, VisitSession> = {};
+    scopeVisits
+      .filter((s) => s.status === 'in_progress')
+      .forEach((s) =>
+        s.services
+          .filter((sv) => sv.status === 'in_progress' || sv.status === 'pending')
+          .forEach((sv) => {
+            if (!map[sv.staffId]) map[sv.staffId] = s;
+          })
+      );
+    return map;
+  })();
+  const scopeStaffBusy = scopeStaff.filter(
+    (st) => st.status === 'busy' || !!scopeInProgressByStaff[st.id]
+  );
 
   // Handlers for Recurring Expenses & Security Audit
   const handleCreateExpenseSubmit = (e: React.FormEvent) => {
@@ -341,7 +458,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       });
     }
 
-    alert(`Automated Expense Cycle Check executed! Created ${createdCount} recurring expense ledger items.`);
+    showToast('success', `Automated Expense Cycle Check executed! Created ${createdCount} recurring expense ledger items.`);
   };
 
   const handleExportSecurityAuditCsv = async () => {
@@ -388,6 +505,56 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
     }
   };
 
+  // Payout confirmation: show full unpaid total, accept the amount being paid now
+  const [payoutUpdatingId, setPayoutUpdatingId] = useState<string | null>(null);
+  const [payoutTarget, setPayoutTarget] = useState<{ staffId: string; staffName: string } | null>(null);
+  const [payoutAmount, setPayoutAmount] = useState<string>('');
+  const [payoutNote, setPayoutNote] = useState<string>('');
+
+  const unpaidCommissionsFor = (staffId: string) => {
+    return scopeCommissions.filter((c) => c.staffId === staffId && c.payoutStatus !== 'paid');
+  };
+
+  const payoutTotalFor = (staffId: string) => {
+    return unpaidCommissionsFor(staffId).reduce((acc, c) => acc + c.commissionAmountEtb, 0);
+  };
+
+  const handleBatchPayout = async () => {
+    if (!payoutTarget) return;
+    if (payoutUpdatingId) return;
+    const accepted = Number(payoutAmount);
+    if (!isFinite(accepted) || accepted <= 0) {
+      showToast('error', 'Enter the amount accepted for this payout');
+      return;
+    }
+    if (accepted > payoutTotalFor(payoutTarget.staffId)) {
+      showToast('error', `Accepted amount can't exceed the ${payoutTotalFor(payoutTarget.staffId).toLocaleString()} ETB due`);
+      return;
+    }
+    setPayoutUpdatingId(payoutTarget.staffId);
+    try {
+      const res = await apiFetch('/api/commission-logs/payout/batch', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          staffId: payoutTarget.staffId,
+          companyId: company.id,
+          amountAcceptedEtb: accepted,
+          notes: payoutNote.trim() || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to process payout');
+      showToast('success', `Paid ${accepted.toLocaleString()} ETB to ${payoutTarget.staffName}`);
+      setPayoutTarget(null);
+      setPayoutAmount('');
+      setPayoutNote('');
+      await onRefresh?.();
+    } catch (e) {
+      showToast('error', e instanceof Error ? e.message : 'Failed to process payout');
+    } finally {
+      setPayoutUpdatingId(null);
+    }
+  };
+
   // Handlers
   const handleCreateBranch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -398,7 +565,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       name: branchName,
       city: branchCity,
       address: branchAddress || 'Center City',
-      phone: branchPhone || '+251 11 000 0000',
+      phone: branchPhone.trim().length > 4 ? branchPhone : '+251 11 000 0000',
       isMainBranch: false,
       status: 'active',
       dailyExpenseLimitEtb: Number(branchExpenseLimit) || 0,
@@ -418,7 +585,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       branchId: staffBranchId,
       businessUnitId: companyBusinessUnits.find((u) => u.branchId === staffBranchId)?.id || companyBusinessUnits[0]?.id || '',
       name: staffName,
-      phone: staffPhone || '+251 91 000 0000',
+      phone: staffPhone.trim().length > 4 ? staffPhone : '+251 91 000 0000',
       email: `${staffName.toLowerCase().replace(/\s+/g, '')}@${company.slug}.et`,
       role: staffRole,
       specialties: ['General Salon Services'],
@@ -441,7 +608,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
     }
     setShowAddStaffModal(false);
     setStaffName('');
-    setStaffPhone('');
+    setStaffPhone('+251 ');
     setStaffRuleEnabled(false);
     setStaffRuleType('percentage');
     setStaffRuleValue(30);
@@ -490,6 +657,172 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* TAB 0: OVERVIEW (landing page for managers) */}
+      {adminTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="bg-card border border-border rounded-md p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+              <div>
+                <h3 className="section-title">Salon Overview</h3>
+                <p className="text-sm text-muted-foreground">Today's business at a glance for <strong className="text-foreground">{overviewBranchName}</strong>.</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-muted-foreground">Scope:</span>
+                <Select value={overviewBranchId} onValueChange={(v) => setOverviewBranchId(v)} items={{ all: 'All Branches', ...toSelectItems(companyBranches.map((b) => ({ value: b.id, label: `${b.name} (${b.city})` }))) }}>
+                  <SelectTrigger className="h-8 w-auto rounded-md bg-background border border-input text-sm font-medium">
+                    <SelectValue placeholder="Select branch..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {companyBranches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name} ({b.city})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+              <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+                <span className="kpi-label">Revenue Today</span>
+                <div className="kpi-value">{overviewRevenueToday.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">ETB</span></div>
+                <div className="text-[11px] text-muted-foreground">Completed sales today</div>
+              </div>
+              <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+                <span className="kpi-label">Completed Today</span>
+                <div className="kpi-value">{overviewCompletedToday} <span className="text-sm font-medium text-muted-foreground">visits</span></div>
+                <div className="text-[11px] text-muted-foreground">Finished sessions</div>
+              </div>
+              <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+                <span className="kpi-label">Active Queue</span>
+                <div className="kpi-value">{overviewQueue.queued + overviewQueue.inProgress}</div>
+                <div className="text-[11px] text-muted-foreground">{overviewQueue.inProgress} in service · {overviewQueue.queued} waiting</div>
+              </div>
+              <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+                <span className="kpi-label">Net Today</span>
+                <div className="kpi-value">{overviewNetToday.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">ETB</span></div>
+                <div className="text-[11px] text-muted-foreground">After {overviewExpensesToday.toLocaleString()} ETB expenses</div>
+              </div>
+              <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+                <span className="kpi-label">Unpaid Sessions</span>
+                <div className="kpi-value text-destructive">{overviewUnpaid.length}</div>
+                <div className="text-[11px] text-muted-foreground">Completed, payment pending</div>
+              </div>
+              <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+                <span className="kpi-label">Low Stock Items</span>
+                <div className="kpi-value text-amber-600">{overviewLowStock.length}</div>
+                <div className="text-[11px] text-muted-foreground">{overviewStaffOnShift} staff on shift</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Unpaid sessions */}
+            <div className="bg-card border border-border rounded-md p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="section-title">Needs Payment</h3>
+                <Button size="sm" variant="outline" onClick={() => setAdminTab('financials')}>View Financials</Button>
+              </div>
+              {overviewUnpaid.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No unpaid completed sessions — great.</p>
+              ) : (
+                <div className="space-y-2">
+                  {overviewUnpaid.slice(0, 5).map((s) => (
+                    <div key={s.id} className="flex items-center justify-between text-sm p-3 bg-muted/40 border border-border rounded-md">
+                      <div>
+                        <span className="font-semibold text-foreground">{s.queueNumber}</span>
+                        <span className="text-muted-foreground"> · {s.customerName}</span>
+                        <span className="text-[11px] text-muted-foreground block">{s.branchId && (branches.find((b) => b.id === s.branchId)?.name || '')}</span>
+                      </div>
+                      <span className="font-mono font-semibold text-destructive num">{s.netTotalEtb.toLocaleString()} ETB</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Low stock */}
+            <div className="bg-card border border-border rounded-md p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="section-title">Low Stock Alerts</h3>
+                <Button size="sm" variant="outline" onClick={() => setAdminTab('inventory')}>Open Inventory</Button>
+              </div>
+              {overviewLowStock.length === 0 ? (
+                <p className="text-sm text-muted-foreground">All inventory levels are healthy.</p>
+              ) : (
+                <div className="space-y-2">
+                  {overviewLowStock.slice(0, 5).map((item) => (
+                    <div key={item.id} className="flex items-center justify-between text-sm p-3 bg-amber-50/60 border border-amber-200 rounded-md dark:bg-amber-950/30 dark:border-amber-900">
+                      <div>
+                        <span className="font-semibold text-foreground">{item.name}</span>
+                        <span className="text-[11px] text-muted-foreground block">SKU {item.sku}</span>
+                      </div>
+                      <span className="font-mono font-semibold num text-amber-700 dark:text-amber-400">{item.currentStock} / reorder {item.reorderLevel}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Live queue preview */}
+            <div className="lg:col-span-2 bg-card border border-border rounded-md p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="section-title">Live Queue</h3>
+                <Button size="sm" variant="outline" onClick={() => setAdminTab('branches')}>Open POS Board</Button>
+              </div>
+              {overviewLiveQueue.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sessions waiting or in service right now.</p>
+              ) : (
+                <div className="space-y-2">
+                  {overviewLiveQueue.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between text-sm p-3 bg-muted/40 border border-border rounded-md">
+                      <div>
+                        <span className="font-semibold text-foreground">{s.queueNumber}</span>
+                        <span className="text-muted-foreground"> · {s.customerName}</span>
+                        <span className="text-[11px] text-muted-foreground block">{s.services.map((sv) => sv.serviceName).join(', ')}</span>
+                      </div>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        s.status === 'in_progress'
+                          ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900'
+                          : 'bg-muted text-muted-foreground border-border'
+                      }`}>
+                        {s.status === 'in_progress' ? 'In Service' : 'Waiting'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick actions */}
+            <div className="bg-card border border-border rounded-md p-5 space-y-3">
+              <h3 className="section-title">Quick Actions</h3>
+              <div className="grid grid-cols-1 gap-2">
+                <Button variant="outline" className="justify-start gap-2 text-sm font-medium" onClick={() => setShowAddStaffModal(true)}>
+                  <Plus className="size-4" /> Add Staff Member
+                </Button>
+                <Button variant="outline" className="justify-start gap-2 text-sm font-medium" onClick={() => setShowAddServiceModal(true)}>
+                  <Plus className="size-4" /> Create New Service
+                </Button>
+                <Button variant="outline" className="justify-start gap-2 text-sm font-medium" onClick={() => setShowAddExpenseModal(true)}>
+                  <Plus className="size-4" /> Record Expense
+                </Button>
+                <Button variant="outline" className="justify-start gap-2 text-sm font-medium" onClick={() => setShowAddInventoryModal(true)}>
+                  <Plus className="size-4" /> Add Stock Item
+                </Button>
+                <Button variant="outline" className="justify-start gap-2 text-sm font-medium" onClick={() => setAdminTab('reports')}>
+                  <TrendingUp className="size-4" /> View Reports & Analytics
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: BRANCHES & BUSINESS UNITS */}
       {adminTab === 'branches' && (
         <div className="space-y-6">
@@ -509,6 +842,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
             <Select
               value={activeBranchId}
               onValueChange={(v) => setSelectedMetricBranchId(v)}
+              items={toSelectItems(companyBranches.map((b) => ({ value: b.id, label: `${b.name} (${b.city})` })))}
             >
               <SelectTrigger className="h-8 w-auto rounded-md bg-background border border-input text-sm font-medium">
                 <SelectValue placeholder="Select branch..." />
@@ -680,23 +1014,63 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
         </div>
       )}
 
-      {/* TAB 2: STAFF ROSTER */}
+      {/* TAB 2: STAFF */}
       {adminTab === 'staff' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-              <h3 className="section-title">Staff Roster & Commission Rules</h3>
+              <h3 className="section-title">Staff</h3>
               <p className="text-sm text-muted-foreground">
-                Manage staff, their commission rates, and custom commission rules — all from one place.
+                Manage team members, commission rates, and commission payouts in one place.
               </p>
             </div>
-            <Button
-              onClick={() => setShowAddStaffModal(true)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Staff Member</span>
-            </Button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-muted-foreground">Scope:</span>
+                <Select value={staffScopeBranchId} onValueChange={(v) => setStaffScopeBranchId(v)} items={{ all: 'All Branches', ...toSelectItems(companyBranches.map((b) => ({ value: b.id, label: `${b.name} (${b.city})` }))) }}>
+                  <SelectTrigger className="h-8 w-auto rounded-md bg-background border border-input text-sm font-medium">
+                    <SelectValue placeholder="Select branch..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {companyBranches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name} ({b.city})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={() => setShowAddStaffModal(true)}
+                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold text-sm rounded-md"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Staff Member</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Staff KPI Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+              <span className="kpi-label">Team Size</span>
+              <div className="kpi-value">{scopeStaff.length}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {scopeStaffOnShift.length} on shift · {scopeStaffBusy.length} busy
+              </div>
+            </div>
+            <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+              <span className="kpi-label">Occupancy</span>
+              <div className="kpi-value">{scopeStaff.length > 0 ? Math.round((scopeStaffBusy.length / scopeStaff.length) * 100) : 0}%</div>
+              <div className="text-[11px] text-muted-foreground">{scopeStaffBusy.length} of {scopeStaff.length} staff in service</div>
+            </div>
+            <div className="bg-muted/30 border border-border rounded-md p-4 space-y-1">
+              <span className="kpi-label">Pending Payouts</span>
+              <div className="kpi-value text-amber-600">{scopePendingPayouts.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">ETB</span></div>
+              <div className="text-[11px] text-muted-foreground">{scopeCommissions.filter((c) => c.payoutStatus !== 'paid').length} unpaid record(s)</div>
+            </div>
           </div>
 
           {/* Staff Table */}
@@ -706,54 +1080,57 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 <TableRow>
                   <TableHead className="">Staff Member</TableHead>
                   <TableHead className="">Role</TableHead>
-                  <TableHead className="">Branch</TableHead>
+                  {staffScopeBranchId === 'all' && <TableHead className="">Branch</TableHead>}
                   <TableHead className="">Commission Rate</TableHead>
                   <TableHead className="">Status</TableHead>
+                  <TableHead className="text-right num">Pending Payout</TableHead>
                   <TableHead className="">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="">
-                {branchStaff.length === 0 ? (
+                {scopeStaff.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
+                    <TableCell colSpan={staffScopeBranchId === 'all' ? 7 : 6} className="py-12 text-center text-muted-foreground text-sm">
                       No staff members yet — add your team to start tracking commissions and shifts.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  branchStaff.map((staff) => {
-                    const staffBr = companyBranches.find((b) => b.id === staff.branchId);
+                  scopeStaff.map((staffMember) => {
+                    const staffBr = companyBranches.find((b) => b.id === staffMember.branchId);
+                    const serving = scopeInProgressByStaff[staffMember.id];
+                    const payoutDue = payoutDueByStaffId[staffMember.id] || 0;
                     const statusColor =
-                      staff.status === 'available'
+                      staffMember.status === 'available'
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
-                        : staff.status === 'busy'
+                        : staffMember.status === 'busy'
                         ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900'
                         : 'bg-muted text-muted-foreground border-border';
                     return (
-                      <TableRow key={staff.id} className="hover:bg-muted/40">
+                      <TableRow key={staffMember.id} className="hover:bg-muted/40">
                         <TableCell className="">
                           <div className="flex items-center space-x-3">
                             <img
-                              src={staff.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
-                              alt={staff.name}
+                              src={staffMember.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
+                              alt={staffMember.name}
                               className="w-9 h-9 rounded-full object-cover border border-border shrink-0"
                             />
                             <div>
-                              <div className="font-medium text-foreground">{staff.name}</div>
-                              <div className="text-[11px] text-muted-foreground">{staff.phone}</div>
+                              <div className="font-medium text-foreground">{staffMember.name}</div>
+                              <div className="text-[11px] text-muted-foreground">{staffMember.phone}</div>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-foreground font-medium capitalize">{staff.role}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {staffBr?.name || staff.branchId}
-                        </TableCell>
+                        <TableCell className="text-foreground font-medium capitalize">{staffMember.role}</TableCell>
+                        {staffScopeBranchId === 'all' && (
+                          <TableCell className="text-muted-foreground">{staffBr?.name || staffMember.branchId}</TableCell>
+                        )}
                         <TableCell className="">
                           <div>
-                            <div className="text-foreground font-medium">{staff.defaultCommissionPercentage}%</div>
-                            {commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === staff.id && r.isActive) && (
+                            <div className="text-foreground font-medium">{staffMember.defaultCommissionPercentage}%</div>
+                            {commissionRules.find((r) => r.companyId === company.id && r.targetType === 'staff' && r.targetId === staffMember.id && r.isActive) && (
                               <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
                                 {(() => {
-                                  const r = commissionRules.find((x) => x.targetType === 'staff' && x.targetId === staff.id && x.isActive);
+                                  const r = commissionRules.find((x) => x.targetType === 'staff' && x.targetId === staffMember.id && x.isActive);
                                   return r ? (r.type === 'percentage' ? `Rule: ${r.value}%` : `Rule: ${r.value.toLocaleString()} ETB`) : '';
                                 })()}
                               </span>
@@ -762,20 +1139,46 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                         </TableCell>
                         <TableCell className="">
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold capitalize border ${statusColor}`}>
-                            {staff.status}
+                            {staffMember.status}
                           </span>
+                          {serving && (
+                            <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                              Serving: {serving.customerName}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {payoutDue > 0 ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="font-mono font-semibold num text-amber-700 dark:text-amber-400">{payoutDue.toLocaleString()} ETB</span>
+                              <Button
+                                onClick={() => {
+                                  setPayoutAmount(String(payoutDue));
+                                  setPayoutNote('');
+                                  setPayoutTarget({ staffId: staffMember.id, staffName: staffMember.name });
+                                }}
+                                className="px-2.5 py-1 h-auto rounded-md bg-emerald-600 text-white hover:bg-emerald-700 text-xs transition-colors"
+                                title={`Pay pending commission (${payoutDue.toLocaleString()} ETB)`}
+                              >
+                                <DollarSign className="w-3.5 h-3.5" />
+                                Pay
+                              </Button>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="">
                           <div className="flex items-center space-x-1.5">
                             <Button
-                              onClick={() => setEditingEntity({ type: 'staff', data: staff })}
+                              onClick={() => setEditingEntity({ type: 'staff', data: staffMember })}
                               className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/80 transition-colors"
                               title="Edit Staff & Commission Rules"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
                             <Button
-                              onClick={() => setConfirmDelete({ type: 'staff', id: staff.id, name: staff.name })}
+                              onClick={() => setConfirmDelete({ type: 'staff', id: staffMember.id, name: staffMember.name })}
                               className="p-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
                               title="Deactivate Staff"
                             >
@@ -791,73 +1194,25 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
             </Table>
           </div>
 
-          {/* Staff Commission Logs & Payout Schedule */}
-          <div className="bg-card border border-border rounded-md p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="section-title">Staff Commission Logs & Payout Schedule</h4>
-                <p className="text-sm text-muted-foreground">
-                  Calculated automatically per completed service session — export payroll or track payout status from the roster.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  onClick={handleExportPayrollCsv}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md cursor-pointer transition-all"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export Payroll CSV</span>
-                </Button>
-                <div className="text-sm text-foreground font-semibold num bg-muted px-3 h-8 flex items-center rounded-md border border-border">
-                  Total Earned Commissions: {totalCommissionsEtb.toLocaleString()} ETB
-                </div>
-              </div>
+          {/* Payout Summary */}
+          <div className="bg-card border border-border rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 className="section-title">Payroll Overview</h4>
+              <p className="text-sm text-muted-foreground">
+                Use the payout button on each staff row to settle commissions in a single step — daily, weekly, or all accumulated.
+              </p>
             </div>
-
-            <div className="overflow-x-auto font-sans">
-              <Table className="w-full text-left text-sm text-foreground">
-                <TableHeader className="">
-                  <TableRow>
-                    <TableHead className="">Staff Member</TableHead>
-                    <TableHead className="">Service Performed</TableHead>
-                    <TableHead className="">Session Price</TableHead>
-                    <TableHead className="">Earned Commission</TableHead>
-                    <TableHead className="">Rule Applied</TableHead>
-                    <TableHead className="">Payout Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="">
-                  {branchCommissions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
-                        No commission logs yet — commissions appear here automatically after completed sessions.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    branchCommissions.map((log) => (
-                      <TableRow key={log.id} className="hover:bg-muted/40">
-                        <TableCell className=" font-medium text-foreground">{log.staffName}</TableCell>
-                        <TableCell className=" text-muted-foreground">{log.serviceName}</TableCell>
-                        <TableCell className=" text-muted-foreground">{log.servicePriceEtb} ETB</TableCell>
-                        <TableCell className=" text-foreground font-medium">{log.commissionAmountEtb} ETB</TableCell>
-                        <TableCell className=" text-muted-foreground">{log.ruleApplied}</TableCell>
-                        <TableCell className="">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                            log.payoutStatus === 'paid'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
-                              : log.payoutStatus === 'payout_requested'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900'
-                              : 'bg-muted text-muted-foreground border-border'
-                          }`}>
-                            {log.payoutStatus === 'payout_requested' ? 'Requested' : log.payoutStatus}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={handleExportPayrollCsv}
+                className="flex items-center space-x-1.5 px-4 py-2 bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md cursor-pointer transition-all"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Payroll CSV</span>
+              </Button>
+              <div className="text-sm text-foreground font-semibold num bg-muted px-3 h-8 flex items-center rounded-md border border-border">
+                Total Earned: {scopeCommissionTotal.toLocaleString()} ETB
+              </div>
             </div>
           </div>
         </div>
@@ -1102,7 +1457,6 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
           staffList={staffList}
           services={services}
           visitSessions={visitSessions}
-          commissionLogs={commissionLogs}
           expenses={expenses}
         />
       )}
@@ -1344,7 +1698,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                           <TableCell className=" text-foreground font-medium">{log.performedBy}</TableCell>
                           <TableCell className=" text-muted-foreground max-w-xs truncate">{log.details || '-'}</TableCell>
                           <TableCell className=" text-muted-foreground font-mono text-[10px]">
-                            {log.ipAddress || '197.156.102.88'}
+                            {log.ipAddress || '—'}
                           </TableCell>
                         </TableRow>
                       );
@@ -1389,25 +1743,26 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody className="">
-                {users.filter((u) => company.id === '' || u.companyId === company.id).length === 0 ? (
+                {companyUsers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
                       No users yet — invite your first user to collaborate.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  users.filter((u) => company.id === '' || u.companyId === company.id).map((usr) => (
+                  companyUsers.map((usr) => (
                   <TableRow key={usr.id} className="hover:bg-muted/40">
                     <TableCell className=" font-medium text-foreground">{usr.name}</TableCell>
                     <TableCell className=" text-muted-foreground">{usr.email}</TableCell>
                     <TableCell className="">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
                         usr.role === 'super_admin' ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900' :
-                        usr.role === 'tenant_manager' ? 'bg-primary/10 text-primary border-primary/20' :
-                        usr.role === 'receptionist' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900' :
+                        usr.role === 'owner' ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900' :
+                        usr.role === 'manager' ? 'bg-primary/10 text-primary border-primary/20' :
+                        usr.role === 'reception' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900' :
                         'bg-muted text-muted-foreground border-border'
                       }`}>
-                        {usr.role === 'tenant_manager' ? 'Manager' : usr.role === 'super_admin' ? 'Super Admin' : usr.role}
+                        {usr.role === 'manager' ? 'Manager' : usr.role === 'owner' ? 'Owner' : usr.role === 'super_admin' ? 'Super Admin' : usr.role === 'reception' ? 'Receptionist' : usr.role}
                       </span>
                     </TableCell>
                     <TableCell className="">
@@ -1432,6 +1787,110 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 )}
               </TableBody>
             </Table>
+          </div>
+        </div>
+      )}
+
+      {/* REVIEWS & COMPLAINTS */}
+      {adminTab === 'feedback' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="section-title">Reviews & Complaints</h3>
+              <p className="text-sm text-muted-foreground">
+                Customer ratings and complaints captured from the walk-in tablet (per visit).
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setFeedbackLoading(true);
+                try {
+                  const res = await apiFetch(`/api/feedback?companyId=${encodeURIComponent(company.id)}`);
+                  const data = await res.json();
+                  setFeedbackItems(res.ok ? (data?.feedback ?? []) : []);
+                  showToast('success', 'Feedback refreshed');
+                } catch {
+                  showToast('error', 'Could not refresh feedback');
+                } finally {
+                  setFeedbackLoading(false);
+                }
+              }}
+              className="flex items-center space-x-1.5 px-4 py-2 text-sm font-medium"
+            >
+              <RefreshCw className={feedbackLoading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} />
+              <span>Refresh</span>
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto bg-card border border-border rounded-md p-5 font-sans">
+            {feedbackItems.length === 0 ? (
+              <p className="py-12 text-center text-muted-foreground text-sm">
+                {feedbackLoading ? 'Loading reviews…' : 'No reviews yet — share the tablet link with customers to collect feedback.'}
+              </p>
+            ) : (
+              <Table className="w-full text-left text-sm text-foreground">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Rating</TableHead>
+                    <TableHead>Complaint / Comment</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Ticket</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {feedbackItems.map((f) => {
+                    const branchName = branches.find((b) => b.id === f.branchId)?.name || f.branchId;
+                    const stars = Array.from({ length: 5 }, (_, i) => i + 1);
+                    return (
+                      <TableRow key={f.id} className="hover:bg-muted/40 align-top">
+                        <TableCell>
+                          <span className="flex items-center gap-0.5">
+                            {stars.map((n) => (
+                              <Star
+                                key={n}
+                                className={`size-4 ${n <= f.rating ? 'text-amber-500 fill-amber-500' : 'text-muted-foreground/30'}`}
+                              />
+                            ))}
+                          </span>
+                          {!f.isAnonymous && f.rating < 4 && (
+                            <span className="block mt-1 text-[10px] font-semibold text-red-600 dark:text-red-400">
+                              Needs attention
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          {f.complaint ? (
+                            <span className="text-foreground">{f.complaint}</span>
+                          ) : (
+                            <span className="text-muted-foreground italic">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {f.isAnonymous ? (
+                            <span className="text-muted-foreground">Anonymous</span>
+                          ) : (
+                            <span>
+                              {f.customerName || 'Walk-in'}
+                              {f.customerPhone && (
+                                <span className="block text-xs text-muted-foreground">{f.customerPhone}</span>
+                              )}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-foreground">{f.queueNumber || '—'}</TableCell>
+                        <TableCell className="text-muted-foreground">{branchName}</TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          {f.createdAt ? new Date(f.createdAt).toLocaleDateString() : ''}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </div>
       )}
@@ -1540,6 +1999,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <Select
                     value={staffRole}
                     onValueChange={(v) => setStaffRole(v)}
+                    items={{ barber: 'Barber', hairstylist: 'Hairstylist', masseuse: 'Masseuse', esthetician: 'Esthetician', reception: 'Receptionist' }}
                   >
                     <SelectTrigger className="w-full bg-background border-input text-foreground">
                       <SelectValue placeholder="Select role" />
@@ -1549,7 +2009,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <SelectItem value="hairstylist">Hairstylist</SelectItem>
                       <SelectItem value="masseuse">Masseuse</SelectItem>
                       <SelectItem value="esthetician">Esthetician</SelectItem>
-                      <SelectItem value="receptionist">Receptionist</SelectItem>
+                      <SelectItem value="reception">Receptionist</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1578,22 +2038,10 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 </label>
                 {staffRuleEnabled && (
                   <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1">Category</label>
-                <Input
-                  type="text"
-                  required
-                  placeholder="e.g. Hair & Grooming, Spa & Bath, Nails"
-                  value={srvCategory}
-                  onChange={(e) => setSrvCategory(e.target.value)}
-                  className="w-full bg-background border-input text-foreground"
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-semibold text-foreground mb-1">Rule Type</label>
-                        <Select value={staffRuleType} onValueChange={(v) => setStaffRuleType(v as any)}>
+                        <Select value={staffRuleType} onValueChange={(v) => setStaffRuleType(v as any)} items={{ percentage: 'Percentage (%)', fixed_amount: 'Fixed Amount (ETB)' }}>
                           <SelectTrigger className="w-full bg-background border-input text-foreground">
                             <SelectValue />
                           </SelectTrigger>
@@ -1880,6 +2328,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <Select
                     value={expCategory}
                     onValueChange={(v) => setExpCategory(v as any)}
+                    items={{ rent: 'Rent & Facility', utilities: 'Utilities & Electricity', salary: 'Staff Salaries & Advances', inventory_purchase: 'Inventory Supplies', marketing: 'Marketing & Ads', other: 'Other Overhead' }}
                   >
                     <SelectTrigger className="w-full bg-background border-input text-foreground">
                       <SelectValue placeholder="Select category" />
@@ -1913,6 +2362,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                   <Select
                     value={expPaymentMethod}
                     onValueChange={(v) => setExpPaymentMethod(v as any)}
+                    items={{ cbe_birr: 'CBE Birr', telebirr: 'Telebirr', cash: 'Cash', card: 'Card / POS' }}
                   >
                     <SelectTrigger className="w-full bg-background border-input text-foreground">
                       <SelectValue placeholder="Select payment method" />
@@ -1956,6 +2406,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                       <Select
                         value={expRecurrenceFreq}
                         onValueChange={(v) => setExpRecurrenceFreq(v as any)}
+                        items={{ weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly' }}
                       >
                         <SelectTrigger className="w-full bg-background border-input text-foreground">
                           <SelectValue placeholder="Select frequency" />
@@ -2037,8 +2488,9 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">Role</label>
                 <select name="role" className="w-full">
-                  <option value="tenant_manager">Tenant Manager</option>
-                  <option value="receptionist">Receptionist</option>
+                  <option value="owner">Owner</option>
+                  <option value="manager">Manager</option>
+                  <option value="reception">Receptionist</option>
                   <option value="staff">Staff</option>
                 </select>
               </div>
@@ -2101,7 +2553,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 <div><label className="block text-sm font-semibold text-foreground mb-1">Email</label><Input name="email" defaultValue={editingEntity.data.email} className="w-full" /></div>
                 <div><label className="block text-sm font-semibold text-foreground mb-1">Role</label>
                   <select name="role" defaultValue={editingEntity.data.role} className="w-full">
-                    <option value="barber">Barber</option><option value="hairstylist">Hairstylist</option><option value="masseuse">Masseuse</option><option value="esthetician">Esthetician</option><option value="receptionist">Receptionist</option><option value="manager">Manager</option>
+                    <option value="barber">Barber</option><option value="hairstylist">Hairstylist</option><option value="masseuse">Masseuse</option><option value="esthetician">Esthetician</option><option value="reception">Receptionist</option><option value="manager">Manager</option>
                   </select>
                 </div>
                 <div><label className="block text-sm font-semibold text-foreground mb-1">Commission %</label><Input name="commission" type="number" defaultValue={editingEntity.data.defaultCommissionPercentage} className="w-full" /></div>
@@ -2149,7 +2601,7 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 <div><label className="block text-sm font-semibold text-foreground mb-1">Password (leave blank to keep)</label><Input name="password" type="password" className="w-full" /></div>
                 <div><label className="block text-sm font-semibold text-foreground mb-1">Role</label>
                   <select name="role" defaultValue={editingEntity.data.role} className="w-full">
-                    <option value="tenant_manager">Tenant Manager</option><option value="receptionist">Receptionist</option><option value="staff">Staff</option>
+                    <option value="owner">Owner</option><option value="manager">Manager</option><option value="reception">Receptionist</option><option value="staff">Staff</option>
                   </select>
                 </div>
               </>)}
@@ -2158,6 +2610,63 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
                 <Button type="submit" className="px-5 py-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-md">Save Changes</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {payoutTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPayoutTarget(null)}>
+          <div className="bg-card rounded-md shadow-xl border border-border p-5 w-full max-w-sm animate-[scaleIn_0.15s_ease]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground">Pay Pending Commission</h3>
+              <button onClick={() => setPayoutTarget(null)} className="ml-auto p-1 hover:bg-muted rounded-md"><X className="w-4 h-4 text-muted-foreground" /></button>
+            </div>
+
+            <div className="rounded-md border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/30 text-[13px] p-3 mb-4">
+              <div className="text-muted-foreground">Total unpaid for <strong className="text-foreground">{payoutTarget.staffName}</strong></div>
+              <div className="text-xl font-bold num text-emerald-700 dark:text-emerald-400 mt-0.5">
+                {payoutTotalFor(payoutTarget.staffId).toLocaleString()} ETB
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1">{unpaidCommissionsFor(payoutTarget.staffId).length} unpaid record(s). Enter the amount accepted in this payout; anything not covered stays unpaid.</div>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount Accepted (ETB)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  max={payoutTotalFor(payoutTarget.staffId)}
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  placeholder={payoutTotalFor(payoutTarget.staffId).toLocaleString()}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes (optional)</label>
+                <Input
+                  value={payoutNote}
+                  onChange={(e) => setPayoutNote(e.target.value)}
+                  placeholder="e.g. weekly settlement, cash"
+                  className="text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button onClick={() => setPayoutTarget(null)} variant="outline">Cancel</Button>
+              <Button
+                onClick={handleBatchPayout}
+                disabled={payoutUpdatingId === payoutTarget.staffId}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                {payoutUpdatingId === payoutTarget.staffId ? 'Processing…' : 'Confirm Payout'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

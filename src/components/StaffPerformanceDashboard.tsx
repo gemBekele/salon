@@ -16,12 +16,14 @@ import {
 } from 'recharts';
 import { TrendingUp, Calendar, CalendarDays, Scissors, Building2 } from 'lucide-react';
 import { Staff, CommissionLog, VisitSession, Branch, BusinessUnit } from '../types';
+import { COLORS } from '../lib/kpi';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  toSelectItems,
 } from './ui/select';
 
 interface StaffPerformanceDashboardProps {
@@ -31,8 +33,6 @@ interface StaffPerformanceDashboardProps {
   branches?: Branch[];
   businessUnits?: BusinessUnit[];
 }
-
-const COLORS = ['#0d9488', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6', '#0d9488'];
 
 export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps> = ({
   activeStaff,
@@ -129,7 +129,7 @@ export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps>
         <div className="flex items-center flex-wrap gap-2 text-sm">
           <div className="flex items-center space-x-1.5 bg-muted px-3 py-1.5 rounded-full border border-border">
             <Calendar className="w-3.5 h-3.5 text-foreground" />
-            <Select value={timeRange} onValueChange={(v) => { setTimeRange(v as any); setCustomDate(''); }}>
+            <Select value={timeRange} onValueChange={(v) => { setTimeRange(v as any); setCustomDate(''); }} items={{ day: 'Today (1 Day)', week: 'Last 7 Days (Weekly)', month: 'Last 30 Days (Monthly)' }}>
               <SelectTrigger className="h-6 gap-1 border-0 bg-transparent p-0 text-sm font-semibold text-foreground focus:ring-0 focus-visible:ring-0">
                 <SelectValue />
               </SelectTrigger>
@@ -155,7 +155,7 @@ export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps>
 
           <div className="flex items-center space-x-1.5 bg-muted px-3 py-1.5 rounded-full border border-border">
             <Building2 className="w-3.5 h-3.5 text-foreground" />
-            <Select value={selectedBranchFilter} onValueChange={(v) => setSelectedBranchFilter(v)}>
+            <Select value={selectedBranchFilter} onValueChange={(v) => setSelectedBranchFilter(v)} items={{ all: 'All Branches', ...toSelectItems(branches.map((b) => ({ value: b.id, label: b.name }))) }}>
               <SelectTrigger className="h-6 gap-1 border-0 bg-transparent p-0 text-sm font-semibold text-foreground focus:ring-0 focus-visible:ring-0">
                 <SelectValue />
               </SelectTrigger>
@@ -172,7 +172,7 @@ export const StaffPerformanceDashboard: React.FC<StaffPerformanceDashboardProps>
 
           <div className="flex items-center space-x-1.5 bg-muted px-3 py-1.5 rounded-full border border-border">
             <Scissors className="w-3.5 h-3.5 text-foreground" />
-            <Select value={selectedUnitFilter} onValueChange={(v) => setSelectedUnitFilter(v)}>
+            <Select value={selectedUnitFilter} onValueChange={(v) => setSelectedUnitFilter(v)} items={{ all: 'All Business Units', ...toSelectItems(businessUnits.map((u) => ({ value: u.id, label: u.name }))) }}>
               <SelectTrigger className="h-6 gap-1 border-0 bg-transparent p-0 text-sm font-semibold text-foreground focus:ring-0 focus-visible:ring-0">
                 <SelectValue />
               </SelectTrigger>

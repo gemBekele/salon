@@ -6,7 +6,7 @@ export type PersonaRole =
   | 'architect_lead'
   | 'queue_tv';
 
-export type AuthUserRole = 'super_admin' | 'tenant_manager' | 'receptionist' | 'staff';
+export type AuthUserRole = 'super_admin' | 'owner' | 'manager' | 'reception' | 'staff';
 
 export interface AuthUser {
   id: string;
@@ -86,7 +86,7 @@ export interface Staff {
   name: string;
   phone: string;
   email: string;
-  role: 'receptionist' | 'barber' | 'hairstylist' | 'masseuse' | 'esthetician' | 'manager';
+  role: 'reception' | 'barber' | 'hairstylist' | 'masseuse' | 'esthetician' | 'manager';
   specialties: string[];
   defaultCommissionPercentage: number;
   status: 'available' | 'busy' | 'off_shift' | 'inactive';
@@ -270,4 +270,122 @@ export interface ArchitectureDocSection {
     language: string;
     code: string;
   }[];
+}
+
+/** Feature-expansion domain types (migration 009). */
+
+export type PaymentChannel = 'cash' | 'bank';
+export type PayableType = 'visit' | 'material_sale' | 'group';
+
+export interface Bank {
+  id: string;
+  companyId: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface ServiceBundle {
+  id: string;
+  companyId: string;
+  branchId?: string;
+  businessUnitId?: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  items: ServiceBundleItem[];
+  createdAt?: string;
+}
+
+export interface ServiceBundleItem {
+  id: string;
+  bundleId: string;
+  serviceId: string;
+  serviceName?: string;
+  priceEtb: number;
+}
+
+export interface MaterialSaleItem {
+  id: string;
+  materialSaleId: string;
+  inventoryItemId: string;
+  itemName: string;
+  sku?: string;
+  unit?: string;
+  quantity: number;
+  unitPriceEtb: number;
+  totalEtb: number;
+}
+
+export interface MaterialSale {
+  id: string;
+  companyId: string;
+  branchId: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone?: string;
+  subtotalEtb: number;
+  discountEtb: number;
+  netTotalEtb: number;
+  status: 'open' | 'completed' | 'cancelled';
+  isPaid: boolean;
+  paidAt?: string;
+  items: MaterialSaleItem[];
+  payments?: Payment[];
+  createdAt?: string;
+}
+
+export interface Payment {
+  id: string;
+  companyId: string;
+  branchId: string;
+  payableType: PayableType;
+  payableId: string;
+  visitSessionId?: string;
+  method: PaymentChannel;
+  bankId?: string;
+  bankName?: string;
+  txnReference?: string;
+  amountEtb: number;
+  cashbackEtb: number;
+  receiptPath?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface GroupVisitMember {
+  id: string;
+  groupId: string;
+  visitSessionId: string;
+}
+
+export interface GroupVisit {
+  id: string;
+  companyId: string;
+  branchId: string;
+  name: string;
+  note?: string;
+  subtotalEtb: number;
+  discountEtb: number;
+  taxEtb: number;
+  netTotalEtb: number;
+  status: 'open' | 'completed' | 'cancelled';
+  isPaid: boolean;
+  createdAt?: string;
+  completedAt?: string;
+  members?: GroupVisitMember[];
+  payments?: Payment[];
+}
+
+export interface Feedback {
+  id: string;
+  companyId: string;
+  branchId: string;
+  visitSessionId?: string;
+  customerId?: string;
+  rating: number;
+  complaint?: string;
+  isAnonymous: boolean;
+  createdAt?: string;
 }

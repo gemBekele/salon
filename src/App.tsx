@@ -17,6 +17,7 @@ const QueueDisplayView = lazy(() => import('./components/QueueDisplayView').then
 const AiAssistantModal = lazy(() => import('./components/AiAssistantModal').then(m => ({ default: m.AiAssistantModal })));
 const CustomerWebsiteView = lazy(() => import('./components/CustomerWebsiteView').then(m => ({ default: m.CustomerWebsiteView })));
 const AppointmentBookingModal = lazy(() => import('./components/AppointmentBookingModal').then(m => ({ default: m.AppointmentBookingModal })));
+const WalkInTabletView = lazy(() => import('./components/WalkInTabletView').then(m => ({ default: m.WalkInTabletView })));
 
 import { mockArchitectureSections } from './data/mockErpData';
 
@@ -76,6 +77,9 @@ export default function App() {
   const [websiteTheme, setWebsiteTheme] = useState<'dark' | 'light'>('dark');
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [bookingServiceId, setBookingServiceId] = useState<string | null>(null);
+
+  // The `/tablet` route is the public walk-in self-registration kiosk that the
+  // login screen links to (no auth required).
 
   // ── fetchDbState ──
   const fetchDbState = useCallback(async () => {
@@ -297,7 +301,6 @@ export default function App() {
                 services={services}
                 staffList={staffList}
                 onOpenBooking={(srvId) => { setBookingServiceId(srvId || null); setIsBookingModalOpen(true); }}
-                onOpenLogin={() => window.location.href = '/login'}
                 onLaunchStaffErp={() => window.location.href = '/login'}
                 theme={websiteTheme}
                 setTheme={setWebsiteTheme}
@@ -320,6 +323,20 @@ export default function App() {
         {/* ── Public: Login ── */}
         <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
 
+        {/* ── Public: Walk-in registration tablet ── */}
+        <Route path="/tablet" element={
+          <ErrorBoundary fallbackLabel="Failed to load the walk-in tablet">
+            <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-[#09090b] text-[#fafafa] text-sm">Loading Walk-in Registration...</div>}>
+              <TabletPage
+                company={selectedCompany || companies[0] || { id: 'cmp_gech_01', name: 'Gech Beauty Salon', slug: 'gech', subscriptionPlanId: '', status: 'active', currency: 'ETB', timezone: 'Africa/Addis_Ababa', phone: '', email: '', createdAt: new Date().toISOString() }}
+                branch={selectedBranch || branches[0] || { id: 'br_mens_01', companyId: 'cmp_gech_01', name: 'Main Branch', city: 'Hawassa', address: '', phone: '', isMainBranch: true, status: 'active' }}
+                services={services}
+                staffList={staffList}
+              />
+            </Suspense>
+          </ErrorBoundary>
+        } />
+
         {/* ── Public: TV fullscreen ── */}
         <Route path="/tv" element={
           <ErrorBoundary fallbackLabel="Failed to load TV display">
@@ -340,7 +357,7 @@ export default function App() {
             <Route path="/admin" element={
               <TenantAdminView company={selectedCompany} branches={branches} businessUnits={businessUnits} staffList={staffList} services={services} inventoryItems={inventoryItems} commissionLogs={commissionLogs} commissionRules={commissionRules} expenses={expenses} visitSessions={visitSessions} auditLogs={auditLogs} users={users} selectedBranch={selectedBranch}
                 onAddBranch={handleAddBranch} onAddStaff={handleAddStaff} onAddService={handleAddService} onAddInventoryItem={handleAddInventoryItem} onUpdateInventoryStock={handleUpdateInventoryStock} onSaveCommissionRule={handleSaveCommissionRule} onAddExpense={handleAddExpense} onAddAuditLog={handleAddAuditLog}
-                onUpdateBranch={handleUpdateBranch} onDeleteBranch={handleDeleteBranch} onUpdateStaff={handleUpdateStaff} onDeleteStaff={handleDeleteStaff} onUpdateService={handleUpdateService} onDeleteService={handleDeleteService} onUpdateInventoryItem={handleUpdateInventoryItem} onDeleteInventoryItem={handleDeleteInventoryItem} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser}
+                onUpdateBranch={handleUpdateBranch} onDeleteBranch={handleDeleteBranch} onUpdateStaff={handleUpdateStaff} onDeleteStaff={handleDeleteStaff} onUpdateService={handleUpdateService} onDeleteService={handleDeleteService} onUpdateInventoryItem={handleUpdateInventoryItem} onDeleteInventoryItem={handleDeleteInventoryItem} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onRefresh={fetchDbState}
               />
             } />
             <Route path="/pos" element={
@@ -394,12 +411,26 @@ function LoginPage({ onLogin }: { onLogin: (u: AuthUser, pin?: string) => void }
       onLogin={(u, pin) => {
         onLogin(u, pin);
         const defaults: Record<string, string> = {
-          staff: '/staff', receptionist: '/pos', tenant_manager: '/admin', super_admin: '/saas',
+          staff: '/staff', reception: '/pos', manager: '/admin', owner: '/admin', super_admin: '/saas',
         };
         navigate(defaults[u.role] || '/pos', { replace: true });
       }}
       onLaunchTv={() => navigate('/tv')}
-      onReturnToWebsite={() => navigate('/')}
+      onReturnToWebsite={() => navigate('/tablet')}
+    />
+  );
+}
+
+/** Wraps the walk-in registration tablet with routing. */
+function TabletPage(props: { company: Company; branch: Branch; services: Service[]; staffList: Staff[] }) {
+  const navigate = useNavigate();
+  return (
+    <WalkInTabletView
+      company={props.company}
+      branch={props.branch}
+      services={props.services}
+      staffList={props.staffList}
+      onExitTvMode={() => navigate('/')}
     />
   );
 }

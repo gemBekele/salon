@@ -24,21 +24,21 @@ import {
 import {
   Company,
   Branch,
-  BusinessUnit,
   Staff,
   Service,
   VisitSession,
-  CommissionLog,
   ExpenseRecord,
 } from '../types';
 import { apiFetch } from '../lib/api';
 import { Button } from './ui/button';
+import { COLORS, channelTotals, staffAggFromVisits, servicePopularity, categoryRevenue } from '../lib/kpi';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  toSelectItems,
 } from './ui/select';
 import {
   Table,
@@ -55,11 +55,8 @@ interface ReportsDashboardProps {
   staffList: Staff[];
   services: Service[];
   visitSessions: VisitSession[];
-  commissionLogs: CommissionLog[];
   expenses: ExpenseRecord[];
 }
-
-const COLORS = ['#0d9488', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6'];
 
 export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
   company,
@@ -67,11 +64,13 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
   staffList,
   services,
   visitSessions,
-  commissionLogs,
   expenses,
 }) => {
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
+  const [selectedPayment, setSelectedPayment] = useState<string>('all');
   const [reportData, setReportData] = useState<any>(null);
   const [loadingReports, setLoadingReports] = useState(true);
 
@@ -105,16 +104,18 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
       apiFetch(`/api/reports/revenue?${qs}`),
       apiFetch(`/api/reports/commissions?${qs}`),
       apiFetch(`/api/reports/expenses?${qs}`),
+      apiFetch(`/api/reports/payments?${qs}`),
     ])
-      .then(async ([summary, revenue, commissions, expenses]) => {
+      .then(async ([summary, revenue, commissions, expenses, payments]) => {
         if (!active) return;
-        const [s, r, c, e] = await Promise.all([
+        const [s, r, c, e, p] = await Promise.all([
           summary.ok ? summary.json() : null,
           revenue.ok ? revenue.json() : null,
           commissions.ok ? commissions.json() : null,
           expenses.ok ? expenses.json() : null,
+          payments.ok ? payments.json() : null,
         ]);
-        setReportData({ summary: s, revenue: r || [], commissions: c || [], expenses: e || [] });
+        setReportData({ summary: s, revenue: r || [], commissions: c || [], expenses: e || [], payments: p || [] });
       })
       .catch((err) => console.error('Failed to load reports from API:', err))
       .finally(() => active && setLoadingReports(false));
@@ -123,22 +124,17 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
     };
   }, [selectedBranchId, dateFilter]);
 
-  // Filter visit sessions by company & selected branch
+  // Filter visit sessions by company, selected branch and date range
   const companyVisits = useMemo(() => {
     return visitSessions.filter((s) => {
       if (s.companyId !== company.id) return false;
       if (selectedBranchId !== 'all' && s.branchId !== selectedBranchId) return false;
+      const d = s.startedAt ? s.startedAt.split('T')[0] : '';
+      if (d && dateFilter.from && d < dateFilter.from) return false;
+      if (d && dateFilter.to && d > dateFilter.to) return false;
       return true;
     });
-  }, [visitSessions, company.id, selectedBranchId]);
-
-  const companyCommissions = useMemo(() => {
-    return commissionLogs.filter((c) => {
-      if (c.companyId !== company.id) return false;
-      if (selectedBranchId !== 'all' && c.branchId !== selectedBranchId) return false;
-      return true;
-    });
-  }, [commissionLogs, company.id, selectedBranchId]);
+  }, [visitSessions, company.id, selectedBranchId, dateFilter]);
 
   const companyExpenses = useMemo(() => {
     return expenses.filter((e) => {
@@ -148,18 +144,66 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
     });
   }, [expenses, company.id, selectedBranchId]);
 
+  // Analytics filter option lists
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    services.forEach((s) => {
+      if (s.companyId === company.id && s.category) set.add(s.category);
+    });
+    return Array.from(set).sort();
+  }, [services, company.id]);
+
+  const staffOptions = useMemo(() => {
+    return staffList.filter((s) => s.companyId === company.id);
+  }, [staffList, company.id]);
+
+  const channelOptions = useMemo(() => channelTotals(reportData?.payments || []), [reportData]);
+
+  // Visits narrowed by category + staff filters (drives charts/KPIs when active).
+  const serviceCategoryOf = useMemo(() => {
+    const map: Record<string, string> = {};
+    services.forEach((s) => (map[s.id] = s.category || 'General Services'));
+    return map;
+  }, [services]);
+
+  const completedVisits = useMemo(() => {
+    return companyVisits.filter((s) => {
+      if (s.status !== 'completed') return false;
+      if (selectedCategory !== 'all' && !s.services.some((sv) => serviceCategoryOf[sv.serviceId] === selectedCategory)) return false;
+      if (selectedStaffId !== 'all' && !s.services.some((sv) => sv.staffId === selectedStaffId)) return false;
+      return true;
+    });
+  }, [companyVisits, selectedCategory, selectedStaffId, serviceCategoryOf]);
+
+  const hasServiceFilter = selectedCategory !== 'all' || selectedStaffId !== 'all';
+  const hasPaymentFilter = selectedPayment !== 'all';
+
   // Key KPI Calculations (prefer authoritative server summary; fall back to local)
-  const completedVisits = companyVisits.filter((s) => s.status === 'completed');
   const summary = reportData?.summary;
-  const totalGrossRevenue = summary ? Number(summary.totalRevenue || 0) : completedVisits.reduce((acc, s) => acc + s.netTotalEtb, 0);
-  const totalCommissionsEarned = summary ? Number(summary.totalCommissions || 0) : companyCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
-  const totalExpensesAmount = summary ? Number(summary.totalExpenses || 0) : companyExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
-  const netProfit = summary ? Number(summary.netProfit || 0) : totalGrossRevenue - totalCommissionsEarned - totalExpensesAmount;
-  const avgTicketValue = summary ? Number(summary.avgTicket || 0) : completedVisits.length > 0 ? Math.round(totalGrossRevenue / completedVisits.length) : 0;
+  const useServerSummary = !hasServiceFilter && !hasPaymentFilter && !!summary;
+  const ledgerChannelTotal = useMemo(() => {
+    if (selectedPayment === 'all') return null;
+    const ch = channelOptions.find((c) => c.name === selectedPayment);
+    return ch ? ch.amount : 0;
+  }, [selectedPayment, channelOptions]);
+
+  const totalGrossRevenue = hasPaymentFilter
+    ? ledgerChannelTotal || 0
+    : useServerSummary
+      ? Number(summary.totalRevenue || 0)
+      : completedVisits.reduce((acc, s) => acc + s.netTotalEtb, 0);
+  const totalCommissionsEarned = useServerSummary
+    ? Number(summary.totalCommissions || 0)
+    : completedVisits.reduce((acc, s) => acc + s.services.reduce((a, sv) => a + sv.commissionEarnedEtb, 0), 0);
+  const totalExpensesAmount = useServerSummary
+    ? Number(summary.totalExpenses || 0)
+    : companyExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
+  const netProfit = totalGrossRevenue - totalCommissionsEarned - totalExpensesAmount;
+  const avgTicketValue = completedVisits.length > 0 ? Math.round(totalGrossRevenue / completedVisits.length) : 0;
 
   // Daily Sales & Revenue Trend Data
   const dailySalesData = useMemo(() => {
-    if (reportData?.revenue && reportData.revenue.length > 0) {
+    if (!hasServiceFilter && !hasPaymentFilter && reportData?.revenue && reportData.revenue.length > 0) {
       return reportData.revenue.map((r: any) => ({
         date: r.date ? String(r.date).split('T')[0] : '',
         revenue: Number(r.revenue || 0),
@@ -183,56 +227,21 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
     }
 
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
-  }, [reportData, completedVisits, totalGrossRevenue]);
+  }, [reportData, completedVisits, hasServiceFilter, hasPaymentFilter]);
 
   // Service Category Breakdown (Pie Chart)
-  const categoryData = useMemo(() => {
-    const map: Record<string, number> = {};
+  const categoryData = useMemo(() => categoryRevenue(completedVisits, services), [completedVisits, services]);
 
-    completedVisits.forEach((session) => {
-      session.services.forEach((srvItem) => {
-        const matchingSrv = services.find((s) => s.id === srvItem.serviceId);
-        const cat = matchingSrv?.category || 'General Services';
-        map[cat] = (map[cat] || 0) + srvItem.priceEtb;
-      });
-    });
-
-    const result = Object.keys(map).map((catName) => ({
-      name: catName,
-      value: map[catName],
-    }));
-
-    if (result.length === 0) {
-      return [];
-    }
-    return result;
-  }, [completedVisits, services]);
-
-  // Payment Method Distribution Data
+  // Payment Channel Distribution (split-payment aware, sourced from ledger)
   const paymentMethodData = useMemo(() => {
-    const map: Record<string, number> = {
-      telebirr: 0,
-      cbe_birr: 0,
-      cash: 0,
-      card: 0,
-    };
-
-    completedVisits.forEach((session) => {
-      const pm = session.paymentMethod || 'telebirr';
-      map[pm] = (map[pm] || 0) + session.netTotalEtb;
-    });
-
-    return [
-      { name: 'Telebirr', amount: map.telebirr },
-      { name: 'CBE Birr', amount: map.cbe_birr },
-      { name: 'Cash', amount: map.cash },
-      { name: 'Card / POS', amount: map.card },
-    ].filter((item) => item.amount > 0);
-  }, [completedVisits]);
+    return channelTotals(reportData?.payments || []).filter(
+      (ch) => selectedPayment === 'all' || ch.name === selectedPayment
+    );
+  }, [reportData, selectedPayment]);
 
   // Staff Performance Ranking (server-authoritative when available)
   const staffPerformance = useMemo(() => {
-    if (reportData?.commissions && reportData.commissions.length > 0) {
+    if (!hasServiceFilter && reportData?.commissions && reportData.commissions.length > 0) {
       return reportData.commissions.map((c: any) => {
         const stf = staffList.find((s) => s.id === c.staff_id);
         return {
@@ -245,72 +254,23 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
         };
       });
     }
-    const map: Record<
-      string,
-      {
-        staffId: string;
-        staffName: string;
-        role: string;
-        servicesCompleted: number;
-        revenueGenerated: number;
-        commissionEarned: number;
-      }
-    > = {};
-
-    completedVisits.forEach((session) => {
-      session.services.forEach((srv) => {
-        if (!map[srv.staffId]) {
-          const stf = staffList.find((s) => s.id === srv.staffId);
-          map[srv.staffId] = {
-            staffId: srv.staffId,
-            staffName: srv.staffName,
-            role: stf?.role || 'Provider',
-            servicesCompleted: 0,
-            revenueGenerated: 0,
-            commissionEarned: 0,
-          };
-        }
-        map[srv.staffId].servicesCompleted += 1;
-        map[srv.staffId].revenueGenerated += srv.priceEtb;
-        map[srv.staffId].commissionEarned += srv.commissionEarnedEtb;
-      });
-    });
-
-    return Object.values(map).sort((a, b) => b.revenueGenerated - a.revenueGenerated);
-  }, [reportData, completedVisits, staffList]);
+    return staffAggFromVisits(completedVisits, staffList);
+  }, [reportData, completedVisits, staffList, hasServiceFilter]);
 
   // Service Popularity Ranking
-  const servicePopularity = useMemo(() => {
-    const map: Record<
-      string,
-      { serviceName: string; category: string; priceEtb: number; count: number; totalRevenue: number }
-    > = {};
-
-    completedVisits.forEach((session) => {
-      session.services.forEach((srv) => {
-        if (!map[srv.serviceId]) {
-          const s = services.find((item) => item.id === srv.serviceId);
-          map[srv.serviceId] = {
-            serviceName: srv.serviceName,
-            category: s?.category || 'General',
-            priceEtb: srv.priceEtb,
-            count: 0,
-            totalRevenue: 0,
-          };
-        }
-        map[srv.serviceId].count += 1;
-        map[srv.serviceId].totalRevenue += srv.priceEtb;
-      });
-    });
-
-    return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [completedVisits, services]);
+  const servicePopularityList = useMemo(
+    () => servicePopularity(completedVisits, services),
+    [completedVisits, services]
+  );
 
   const handleExportCsv = async () => {
     const params = new URLSearchParams();
     if (selectedBranchId !== 'all') params.set('branchId', selectedBranchId);
     if (dateFilter.from) params.set('from', dateFilter.from);
     params.set('to', dateFilter.to);
+    if (hasServiceFilter) params.set('completed', 'true');
+    if (selectedCategory !== 'all') params.set('serviceCategory', selectedCategory);
+    if (selectedStaffId !== 'all') params.set('staffId', selectedStaffId);
     const res = await apiFetch(`/api/reports/export/visits.csv?${params.toString()}`);
     if (!res.ok) {
       console.error('CSV export failed', res.status);
@@ -348,7 +308,7 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
           {/* Branch Select */}
           <div className="flex items-center space-x-1.5 bg-muted border border-border rounded-md px-3 py-2 text-sm">
             <Filter className="w-4 h-4 text-muted-foreground" />
-            <Select value={selectedBranchId} onValueChange={(v) => setSelectedBranchId(v)}>
+            <Select value={selectedBranchId} onValueChange={(v) => setSelectedBranchId(v)} items={{ all: 'All Branches', ...toSelectItems(branches.filter((b) => b.companyId === company.id).map((b) => ({ value: b.id, label: `${b.name} (${b.city})` }))) }}>
               <SelectTrigger className="h-8 gap-1 border-0 bg-transparent p-0 text-sm font-medium text-foreground focus:ring-0 focus-visible:ring-0 [&>svg]:hidden">
                 <SelectValue />
               </SelectTrigger>
@@ -361,6 +321,54 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
                       {b.name} ({b.city})
                     </SelectItem>
                   ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Service Category Select */}
+          <div className="flex items-center space-x-1.5 bg-muted border border-border rounded-md px-3 py-2 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Category</span>
+            <Select value={selectedCategory} onValueChange={(v) => setSelectedCategory(v)}>
+              <SelectTrigger className="h-8 gap-1 border-0 bg-transparent p-0 text-sm font-medium text-foreground focus:ring-0 focus-visible:ring-0 [&>svg]:hidden">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categoryOptions.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Staff Select */}
+          <div className="flex items-center space-x-1.5 bg-muted border border-border rounded-md px-3 py-2 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Staff</span>
+            <Select value={selectedStaffId} onValueChange={(v) => setSelectedStaffId(v)} items={{ all: 'All Staff', ...toSelectItems(staffOptions.map((st) => ({ value: st.id, label: st.name }))) }}>
+              <SelectTrigger className="h-8 gap-1 border-0 bg-transparent p-0 text-sm font-medium text-foreground focus:ring-0 focus-visible:ring-0 [&>svg]:hidden">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Staff</SelectItem>
+                {staffOptions.map((st) => (
+                  <SelectItem key={st.id} value={st.id}>{st.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Payment Channel Select */}
+          <div className="flex items-center space-x-1.5 bg-muted border border-border rounded-md px-3 py-2 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Channel</span>
+            <Select value={selectedPayment} onValueChange={(v) => setSelectedPayment(v)}>
+              <SelectTrigger className="h-8 gap-1 border-0 bg-transparent p-0 text-sm font-medium text-foreground focus:ring-0 focus-visible:ring-0 [&>svg]:hidden">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Channels</SelectItem>
+                {channelOptions.map((ch) => (
+                  <SelectItem key={ch.name} value={ch.name}>{ch.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -555,6 +563,62 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
         </div>
       </div>
 
+      {/* Payment Channel Breakdown */}
+      <div className="bg-card rounded-md p-6 border border-border space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="section-title">Payment Channel Breakdown</h3>
+            <p className="text-meta mt-0.5">Split-payment aware: sourced from the payment ledger, so mixed cash/bank invoices are counted correctly</p>
+          </div>
+          {selectedPayment !== 'all' && paymentMethodData.length > 0 && (
+            <span className="text-sm px-2.5 py-1 rounded-full bg-muted text-foreground font-semibold border border-border capitalize">
+              Filtered: {selectedPayment}
+            </span>
+          )}
+        </div>
+
+        {paymentMethodData.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No payment ledger data recorded yet for this selection.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {paymentMethodData.map((ch, idx) => {
+              const pct = paymentMethodData.reduce((a, x) => a + x.amount, 0) > 0
+                ? Math.round((ch.amount / paymentMethodData.reduce((a, x) => a + x.amount, 0)) * 100)
+                : 0;
+              return (
+                <div key={ch.name} className="flex flex-col md:flex-row md:items-center gap-2">
+                  <div className="flex items-center space-x-2 md:w-52 shrink-0">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                    <span className="font-semibold text-sm text-foreground capitalize">{ch.name}</span>
+                    <span
+                      className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full font-semibold ${
+                        ch.method === 'cash' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400'
+                      }`}
+                    >
+                      {ch.method}
+                    </span>
+                  </div>
+                  <div className="flex-1 h-6 bg-muted rounded-sm overflow-hidden">
+                    <div
+                      className="h-full rounded-sm flex items-center justify-end pr-2"
+                      style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: COLORS[idx % COLORS.length] }}
+                    >
+                      <span className="text-[10px] font-bold text-white">{pct}%</span>
+                    </div>
+                  </div>
+                  <div className="md:w-56 text-right shrink-0">
+                    <span className="font-mono font-semibold text-foreground num">{ch.amount.toLocaleString()} ETB</span>
+                    <span className="text-[11px] text-muted-foreground ml-2">{ch.lines} line{ch.lines === 1 ? '' : 's'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Staff Performance KPIs Table */}
       <div className="bg-card rounded-md p-6 border border-border space-y-4">
         <div className="flex justify-between items-center">
@@ -619,7 +683,7 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
       <div className="bg-card rounded-md p-6 border border-border space-y-4">
         <h3 className="section-title">Most Popular & High-Margin Services</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {servicePopularity.slice(0, 6).map((srv, idx) => (
+          {servicePopularityList.slice(0, 6).map((srv, idx) => (
             <div key={idx} className="p-4 bg-muted rounded-md border border-border space-y-2">
               <div className="flex justify-between items-start">
                 <div>

@@ -170,11 +170,11 @@ export function requireRoles(...roles: string[]): RequestHandler {
 /** Role guards used by the write routers — manager/admin-only vs POS staff. */
 export const mgmtOnly: RequestHandler[] = [
   authenticate,
-  requireRoles('super_admin', 'tenant_manager'),
+  requireRoles('super_admin', 'owner', 'manager'),
   rateLimit(120, 60_000),
 ];
 export const posOnly: RequestHandler[] = [
   authenticate,
-  requireRoles('super_admin', 'tenant_manager', 'receptionist', 'staff'),
+  requireRoles('super_admin', 'owner', 'manager', 'reception', 'staff'),
   rateLimit(180, 60_000),
 ];

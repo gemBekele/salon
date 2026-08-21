@@ -209,7 +209,7 @@ export const mockStaff: Staff[] = [
     name: 'Dawit Solomon',
     phone: '+251 91 445 6677',
     email: 'dawit.s@glamourserenity.et',
-    role: 'receptionist',
+    role: 'reception',
     specialties: ['POS Operations', 'Queue Dispatching', 'Customer Care'],
     defaultCommissionPercentage: 0,
     status: 'available',

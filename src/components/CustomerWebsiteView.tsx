@@ -9,7 +9,6 @@ interface CustomerWebsiteViewProps {
   services: Service[];
   staffList: Staff[];
   onOpenBooking: (serviceId?: string) => void;
-  onOpenLogin: () => void;
   onLaunchStaffErp: () => void;
   theme: 'dark' | 'light';
   setTheme: (t: 'dark' | 'light') => void;
@@ -21,7 +20,6 @@ export function CustomerWebsiteView({
   services,
   staffList,
   onOpenBooking,
-  onOpenLogin,
   onLaunchStaffErp,
   theme,
   setTheme,
@@ -181,15 +179,6 @@ export function CustomerWebsiteView({
               </button>
 
               <button
-                onClick={onOpenLogin}
-                className={`text-[11px] font-sans font-medium tracking-[0.2em] uppercase transition-colors px-2 ${
-                  !scrolled || isDark ? 'text-white/80 hover:text-brass-300' : 'text-zinc-800 hover:text-brass-600'
-                }`}
-              >
-                {tr('signIn')}
-              </button>
-
-              <button
                 onClick={() => onOpenBooking()}
                 className="bg-brass-500 hover:bg-brass-400 text-ink-950 font-sans font-bold text-[11px] tracking-[0.16em] uppercase px-5 py-2 rounded-full transition-colors"
               >
@@ -247,12 +236,6 @@ export function CustomerWebsiteView({
                 className="w-full text-center py-3 bg-brass-500 text-ink-950 font-bold rounded-md tracking-wider"
               >
                 {tr('bookOnline')} →
-              </button>
-              <button
-                onClick={() => { setMobileMenuOpen(false); onOpenLogin(); }}
-                className={`block w-full text-center py-2 ${isDark ? 'text-cream-100/80' : 'text-zinc-700'}`}
-              >
-                {tr('customerSignIn')}
               </button>
               <button
                 onClick={() => { setMobileMenuOpen(false); onLaunchStaffErp(); }}
@@ -511,7 +494,6 @@ export function CustomerWebsiteView({
           }`}>
             <span>{tr('rights', { name: company?.name || 'Gech Barbershop' })}</span>
             <div className="flex items-center gap-6">
-              <button onClick={onOpenLogin} className="hover:text-brass-500 transition-colors">{tr('signIn')}</button>
               <button onClick={onLaunchStaffErp} className="hover:text-brass-500 transition-colors">{tr('footerErp')}</button>
             </div>
           </div>

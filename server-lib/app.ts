@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import type { DbPool } from './db';
 import type { GoogleGenAI } from '@google/genai';
 import {
@@ -14,6 +15,8 @@ import { createEntitiesRouter } from './routes/entities';
 import { createStaffRouter } from './routes/staff';
 import { createFinanceRouter } from './routes/finance';
 import { createPosRouter } from './routes/pos';
+import { createPaymentsRouter } from './routes/payments';
+import { createMaterialSalesRouter } from './routes/materialSales';
 import { createAdminRouter } from './routes/admin';
 import { createGeminiRouter } from './routes/gemini';
 
@@ -48,12 +51,17 @@ export function createApp(pool: DbPool, opts: AppOptions): express.Express {
   app.use(corsMiddleware);
   app.use(requestLogger);
 
+  // Receipt proof images (client-compressed uploads, served back to the app).
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
   app.use('/api/auth', createAuthRouter(pool));
   app.use('/api/staff', createStaffRouter(pool));
   app.use('/api/reports', createReportsRouter(pool));
   app.use('/api', createEntitiesRouter(pool));
   app.use('/api', createFinanceRouter(pool));
   app.use('/api', createPosRouter(pool, opts.sms));
+  app.use('/api/payments', createPaymentsRouter(pool, opts.sms));
+  app.use('/api', createMaterialSalesRouter(pool));
   app.use('/api', createAdminRouter(pool));
   app.use('/api/gemini', createGeminiRouter(opts.aiClient, opts.geminiModel));
 

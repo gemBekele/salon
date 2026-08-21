@@ -19,7 +19,6 @@ import {
   Plus,
   Sparkles,
   Phone,
-  Mail,
   FileText,
   ChevronDown,
   ChevronUp,
@@ -57,8 +56,11 @@ import {
   BusinessUnit,
 } from '../types';
 import { usePolling } from '../lib/usePolling';
+import { apiFetch } from '../lib/api';
 import { PrintableInvoice } from './PrintableInvoice';
-import { getStaffQueue, suggestStaff } from '../lib/queue';
+import { PaymentCheckoutModal, PaymentTarget } from './PaymentCheckoutModal';
+import { RetailTab } from './RetailTab';
+import { groupStaffQueue, suggestStaff } from '../lib/queue';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
@@ -87,6 +89,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  toSelectItems,
 } from './ui/select';
 
 interface ReceptionistPosProps {
@@ -140,7 +143,6 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   visitSessions,
   onCreateVisitSession,
   onAddCustomer,
-  onCheckoutSession,
   onCancelSession,
   onRefresh,
   inventoryItems = [],
@@ -161,7 +163,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [pickerMode, setPickerMode] = useState<'list' | 'new'>('list');
   const [custName, setCustName] = useState('');
-  const [custPhone, setCustPhone] = useState('');
+  const [custPhone, setCustPhone] = useState('+251 ');
   const [custEmail, setCustEmail] = useState('');
   const [custNotes, setCustNotes] = useState('');
   const [custIsVip, setCustIsVip] = useState(false);
@@ -171,12 +173,15 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [queueSearchQuery, setQueueSearchQuery] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
-  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [paymentReference, setPaymentReference] = useState('');
   const [paidIds, setPaidIds] = useState<string[]>([]);
-  const [viewTab, setViewTab] = useState<'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses'>('sessions');
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [payModal, setPayModal] = useState<VisitSession | null>(null);
+  const [reassignFor, setReassignFor] = useState<VisitSession | null>(null);
+  const [reassignStaffId, setReassignStaffId] = useState('');
+  const [reassignMsg, setReassignMsg] = useState('');
+  const [reassignBusy, setReassignBusy] = useState(false);
+  const [viewTab, setViewTab] = useState<'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses' | 'retail'>('sessions');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [creationError, setCreationError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showAllDates, setShowAllDates] = useState(false);
@@ -219,7 +224,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
   // ---- Daily Filtered Data ----
   const branchStaff = useMemo(
-    () => staffList.filter((s) => (branchId ? s.branchId === branchId : true) && s.role !== 'receptionist'),
+    () => staffList.filter((s) => (branchId ? s.branchId === branchId : true) && !['receptionist', 'reception'].includes(s.role)),
     [staffList, branchId]
   );
 
@@ -241,7 +246,11 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
       // Always show queued or in-progress clients in the active queue
       if (s.status === 'queued' || s.status === 'in_progress') return true;
 
-      // Show completed or cancelled sessions if they match today or user toggled showAllDates
+      // Completed sessions awaiting payment must always surface for "Collect Pay",
+      // even if they were finished on a previous day and never got a completed_at.
+      if (s.status === 'completed' && !s.isPaid) return true;
+
+      // Show other completed or cancelled sessions if they match today or user toggled showAllDates
       return showAllDates || isToday(s.completedAt || s.startedAt || s.createdAt);
     });
   }, [visitSessions, company, activeCompanyId, branchId, showAllDates]);
@@ -250,6 +259,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
     let list = todayBranchSessions;
     if (queueStatusFilter === 'pending') {
       list = list.filter((s) => s.status === 'completed' && !s.isPaid && !paidIds.includes(s.id));
+    } else if (queueStatusFilter === 'done') {
+      list = list.filter((s) => s.isPaid || paidIds.includes(s.id));
     } else if (queueStatusFilter !== 'all') {
       list = list.filter((s) => s.status === queueStatusFilter);
     }
@@ -262,7 +273,15 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
         s.services.some((svc) => svc.serviceName.toLowerCase().includes(q) || svc.staffName.toLowerCase().includes(q))
       );
     }
-    return list;
+    const isPendingPaid = (s: VisitSession) => s.status === 'completed' && !s.isPaid && !paidIds.includes(s.id);
+    return [...list].sort((a, b) => {
+      const aPend = isPendingPaid(a) ? 1 : 0;
+      const bPend = isPendingPaid(b) ? 1 : 0;
+      if (aPend !== bPend) return bPend - aPend;
+      const aTime = new Date(a.startedAt || a.createdAt || 0).getTime();
+      const bTime = new Date(b.startedAt || b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
   }, [todayBranchSessions, queueStatusFilter, queueSearchQuery, paidIds]);
 
   const filteredPickerCustomers = useMemo(() => {
@@ -283,6 +302,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   const pendingPaymentSessions = todayBranchSessions.filter((s) => s.status === 'completed' && !s.isPaid && !paidIds.includes(s.id));
   const pendingCount = pendingPaymentSessions.length;
   const pendingUnpaidAmount = pendingPaymentSessions.reduce((acc, s) => acc + s.netTotalEtb, 0);
+  const paidCount = todayBranchSessions.filter((s) => s.isPaid || paidIds.includes(s.id)).length;
+  const cancelledCount = todayBranchSessions.filter((s) => s.status === 'cancelled').length;
 
   const todayRevenue = useMemo(() => {
     return todayBranchSessions
@@ -513,7 +534,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
       await onCreateVisitSession(newSession);
       setSelectedServices([]);
       setSelectedCustomer(null);
-      setIsBuilderOpen(false);
+      setShowCreateModal(false);
+      setCreateStep(1);
       onRefresh?.();
     } catch (err: any) {
       setCreationError(err?.message || 'Failed to create session. Please try again.');
@@ -526,7 +548,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
   const handleCreateNewCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!custName || !custPhone) return;
+    if (!custName || custPhone.trim().length <= 4) return;
     const newCust: Customer = {
       id: `cust_${Date.now()}`,
       companyId: activeCompanyId,
@@ -546,29 +568,58 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
       setShowClientPicker(false);
       setPickerMode('list');
       setClientSearchQuery('');
-      setCustName(''); setCustPhone(''); setCustEmail(''); setCustNotes(''); setCustIsVip(false);
-      setIsBuilderOpen(true);
+      setCustName(''); setCustPhone('+251 '); setCustEmail(''); setCustNotes(''); setCustIsVip(false);
+      setShowCreateModal(true);
+      setCreateStep(1);
     } catch (err: any) {
       alert(err?.message || 'Failed to create customer');
     }
   };
 
-  const handleCheckout = async (sessionId: string) => {
-    setPaidIds((prev) => [...prev, sessionId]);
-    setExpandedPaymentId(null);
+  const handleReassign = async (session: VisitSession) => {
+    if (!reassignStaffId) return;
+    const staff = staffList.find((s) => s.id === reassignStaffId);
+    setReassignBusy(true);
+    setReassignMsg('');
     try {
-      await onCheckoutSession(sessionId, paymentMethod, paymentReference);
-      onRefresh?.();
+      const res = await apiFetch('/api/visit-sessions/staff', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          id: session.id,
+          staffId: staff?.id,
+          staffName: staff?.name,
+          companyId: session.companyId,
+        }),
+      });
+      if (!res.ok) {
+        setReassignMsg((await res.json().catch(() => ({})))?.error || 'Reassign failed on this session.');
+      } else {
+        setReassignFor(null);
+        setReassignStaffId('');
+        await onRefresh?.();
+      }
     } catch {
-      // handled by parent
+      setReassignMsg('Reassign failed — try again.');
     } finally {
-      setPaymentReference('');
+      setReassignBusy(false);
     }
   };
 
   const staffForService = (service: Service) => {
     return branchStaff.filter((s) => s.businessUnitId === service.businessUnitId);
   };
+
+  const toPaymentTarget = (s: VisitSession): PaymentTarget => ({
+    type: 'visit',
+    id: s.id,
+    customerName: s.customerName,
+    customerPhone: s.customerPhone,
+    ticketLabel: s.queueNumber,
+    lines: s.services.map((sv) => ({ label: sv.serviceName, subtitle: sv.staffName, amountEtb: sv.priceEtb })),
+    subtotalEtb: s.subtotalEtb,
+    taxEtb: s.taxEtb ?? 0,
+    discountEtb: s.discountEtb ?? 0,
+  });
 
   // ---- Daily Analytics Computations ----
   const paymentMethodPieData = useMemo(() => {
@@ -668,14 +719,6 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
             <Badge variant="secondary" className="text-sm px-3 py-1 font-mono">
               Live {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Syncing...'}
             </Badge>
-            <Button
-              onClick={() => { setIsBuilderOpen(!isBuilderOpen); setCreationError(null); }}
-              className="gap-2  font-semibold text-sm"
-              variant={isBuilderOpen ? 'secondary' : 'default'}
-            >
-              {isBuilderOpen ? <ChevronUp className="size-4" /> : <Plus className="size-4" />}
-              {isBuilderOpen ? 'Hide Builder' : '+ New Client Session'}
-            </Button>
             {onLogout && (
               <Button
                 onClick={onLogout}
@@ -723,154 +766,6 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
         ))}
       </div>
 
-      {/* Top Collapsible Session Builder Panel */}
-      {isBuilderOpen && (
-        <Card className="border-primary/40 bg-card animate-in fade-in-50 duration-200">
-          <CardContent className="p-4 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="size-5 text-primary" />
-                <h2 className="text-base font-medium text-foreground">Create New Session</h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setPickerMode('new'); setClientSearchQuery(''); setShowClientPicker(true); }} className="gap-1.5 text-[13px] font-medium border-primary/40 hover:bg-primary/10">
-                  <UserPlus className="size-3.5 text-primary" />
-                  + Register New Client
-                </Button>
-                <Button variant="ghost" size="icon" className="size-8" onClick={() => setIsBuilderOpen(false)}>
-                  <X className="size-4" />
-                </Button>
-              </div>
-            </div>
-
-            {creationError && (
-              <div className="flex items-center gap-2 text-sm font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
-                <AlertCircle className="size-4 shrink-0" />
-                <span>{creationError}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              {/* Client Selection */}
-              <div className="lg:col-span-4 space-y-2">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">1. Select Client *</Label>
-
-                {selectedCustomer ? (
-                  <div className="rounded-md border border-primary/30 bg-primary/10 p-3 flex items-center justify-between gap-2 text-sm">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground truncate">{selectedCustomer.name}</span>
-                        {selectedCustomer.isVip && <Star className="size-3 text-amber-500 fill-amber-500 shrink-0" />}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground font-mono truncate">{selectedCustomer.phone}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant="secondary" className="text-[10px] font-medium">{selectedCustomer.loyaltyPoints || 0} Pts</Badge>
-                      <Button size="icon" variant="ghost" className="size-7" onClick={() => setSelectedCustomer(null)} title="Change client">
-                        <X className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium italic">
-                    ← No client selected yet.
-                  </p>
-                )}
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { setPickerMode('list'); setClientSearchQuery(''); setShowClientPicker(true); }}
-                  className="w-full gap-2 text-[13px] font-medium border-primary/30 hover:bg-primary/10"
-                >
-                  <Users className="size-4 text-primary" />
-                  {selectedCustomer ? '⇄ Change Client' : 'Choose Client'}
-                </Button>
-              </div>
-
-              {/* Service Selection */}
-              <div className="lg:col-span-5 space-y-2">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">2. Pick Services *</Label>
-                <div className="flex gap-1 overflow-x-auto pb-1">
-                  <Button size="xs" variant={serviceCategory === 'all' ? 'default' : 'outline'} onClick={() => setServiceCategory('all')} className="text-xs">
-                    All
-                  </Button>
-                  {categories.map((cat) => (
-                    <Button key={cat} size="xs" variant={serviceCategory === cat ? 'default' : 'outline'} onClick={() => setServiceCategory(cat)} className="text-xs">
-                      {cat}
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 max-h-[180px] overflow-y-auto pr-1">
-                  {filteredServices.map((srv) => (
-                    <button
-                      key={srv.id}
-                      type="button"
-                      onClick={() => addServiceToBuilder(srv)}
-                      className="bg-background border border-border hover:border-primary hover:bg-primary/5 p-2 rounded-md text-left cursor-pointer transition-colors"
-                    >
-                      <div className="font-semibold text-sm text-foreground truncate">{srv.name}</div>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[10px] text-muted-foreground">{srv.durationMinutes}m</span>
-                        <span className="font-medium text-sm text-foreground">{srv.priceEtb} ETB</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Selected Cart & Staff Assignment */}
-              <div className="lg:col-span-3 space-y-2 border-t lg:border-t-0 lg:border-l lg:pl-4 pt-3 lg:pt-0">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">3. Session Summary</Label>
-                {selectedServices.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center italic">No services selected yet. Click services on the left.</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                      {selectedServices.map((item, idx) => (
-                        <div key={idx} className="rounded-md border border-border p-2 space-y-1 text-sm bg-muted/30">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-foreground truncate max-w-[140px]">{item.serviceName}</span>
-                            <button type="button" onClick={() => removeServiceFromBuilder(idx)} className="text-destructive hover:opacity-80">
-                              <X className="size-3.5" />
-                            </button>
-                          </div>
-                          <div className="flex items-center justify-between gap-1">
-                            <Select value={item.staffId} onValueChange={(v) => assignStaffToBuilder(idx, v)}>
-                              <SelectTrigger className="h-6 text-[10px] py-0 px-2 flex-1">
-                                <SelectValue placeholder="Staff" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {staffForService(availableServices.find((s) => s.id === item.serviceId) as Service).map((st) => (
-                                  <SelectItem key={st.id} value={st.id} className="text-sm">{st.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <span className="font-medium text-sm shrink-0">{item.priceEtb} ETB</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t pt-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] text-muted-foreground uppercase font-medium">Total Net</p>
-                        <p className="text-sm font-semibold text-foreground">{cartTotal} ETB</p>
-                      </div>
-                      <Button onClick={createSession} disabled={isCreating} className="gap-1.5 font-medium" size="sm">
-                        <ShoppingCart className="size-4" />
-                        {isCreating ? 'Creating...' : 'Confirm Queue'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* FULL WIDTH Main Tabs */}
       <div className="w-full">
         <Tabs value={viewTab} onValueChange={(v) => setViewTab(v as 'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses')} className="w-full">
@@ -879,55 +774,73 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               <TabsTrigger value="sessions" className="gap-1.5 text-[13px] font-medium"><Clock className="size-4" />Today's Sessions ({todayBranchSessions.length})</TabsTrigger>
               <TabsTrigger value="board" className="gap-1.5 text-[13px] font-medium"><LayoutDashboard className="size-4" />Staff Queue Board</TabsTrigger>
               <TabsTrigger value="inventory" className="gap-1.5 text-[13px] font-medium"><Package className="size-4" />Inventory {lowStockCount > 0 && <Badge variant="destructive" className="text-[9px] px-1.5">{lowStockCount}</Badge>}</TabsTrigger>
+              <TabsTrigger value="retail" className="gap-1.5 text-[13px] font-medium"><ShoppingCart className="size-4" />Retail Sales</TabsTrigger>
               <TabsTrigger value="expenses" className="gap-1.5 text-[13px] font-medium"><ReceiptText className="size-4" />Expenses</TabsTrigger>
               <TabsTrigger value="analytics" className="gap-1.5 text-[13px] font-medium"><BarChart3 className="size-4" />Daily Analytics</TabsTrigger>
             </TabsList>
 
-            {!isBuilderOpen && (
-              <Button size="sm" onClick={() => setIsBuilderOpen(true)} className="gap-1 text-sm font-medium">
-                <Plus className="size-3.5" />
-                Add Session
-              </Button>
-            )}
+            <Button size="sm" onClick={() => { setShowCreateModal(true); setCreateStep(1); setCreationError(null); }} className="gap-1 text-sm font-medium">
+              <Plus className="size-3.5" />
+              Add Customer
+            </Button>
           </div>
 
           {/* TAB 1: SESSIONS (FULL WIDTH) */}
           <TabsContent value="sessions" className="mt-4 space-y-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="relative flex-1 w-full">
-                    <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <Input
-                      placeholder="Search by client name, phone, queue number, service or staff..."
-                      value={queueSearchQuery}
-                      onChange={(e) => setQueueSearchQuery(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      variant={queueStatusFilter === 'pending' ? 'destructive' : 'outline'}
-                      onClick={() => setQueueStatusFilter(queueStatusFilter === 'pending' ? 'all' : 'pending')}
-                      className="gap-1.5 text-sm font-medium"
-                    >
-                      <DollarSign className="size-3.5" />
-                      Unpaid Only ({pendingCount})
-                    </Button>
-                    {(queueStatusFilter !== 'all' || queueSearchQuery) && (
-                      <Button size="sm" variant="ghost" onClick={() => { setQueueStatusFilter('all'); setQueueSearchQuery(''); }} className="text-sm">
-                        Clear Filters
-                      </Button>
-                    )}
-                  </div>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    placeholder="Search by client name, phone, queue number, service or staff..."
+                    value={queueSearchQuery}
+                    onChange={(e) => setQueueSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
                 </div>
+                {([
+                  { key: 'all', label: 'All', count: todayBranchSessions.length },
+                  { key: 'queued', label: 'On Queue', count: queuedCount },
+                  { key: 'in_progress', label: 'In Progress', count: inProgressCount },
+                  { key: 'pending', label: 'Unpaid', count: pendingCount },
+                  { key: 'done', label: 'Done', count: paidCount },
+                  { key: 'cancelled', label: 'Cancelled', count: cancelledCount },
+                ] as { key: string; label: string; count: number }[]).map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setQueueStatusFilter(f.key)}
+                    aria-pressed={queueStatusFilter === f.key}
+                    className={`px-4 py-2 rounded-full text-sm font-bold border-2 transition-colors cursor-pointer ${
+                      queueStatusFilter === f.key
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                        : 'bg-card text-foreground border-border hover:border-primary/50 hover:bg-muted'
+                    }`}
+                  >
+                    {f.label} <span className="opacity-80 font-semibold">({f.count})</span>
+                  </button>
+                ))}
+                {queueSearchQuery && (
+                  <button type="button" onClick={() => setQueueSearchQuery('')} className="px-3 py-2 rounded-full text-sm font-bold text-destructive bg-destructive/10 border-2 border-destructive/30 hover:bg-destructive/20 transition-colors cursor-pointer">
+                    ✕ Clear Search
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground font-medium">{filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'} shown</p>
+                <Button size="sm" variant="outline" onClick={() => { setQueueStatusFilter('all'); setQueueSearchQuery(''); }} className="text-sm">
+                  Reset Filters
+                </Button>
+              </div>
+            </div>
 
                 {filteredSessions.length === 0 ? (
                   <div className="py-12 text-center text-muted-foreground space-y-2">
                     <Clock className="size-8 mx-auto opacity-40" />
                     <p className="text-sm font-semibold">No sessions recorded for today matching your criteria.</p>
-                    <Button variant="outline" size="sm" onClick={() => setIsBuilderOpen(true)}>
-                      + Create First Today Session
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => { setShowCreateModal(true); setCreateStep(1); setCreationError(null); }}>
+                    + Add First Customer
+                  </Button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-md border border-border">
@@ -944,7 +857,6 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                       </TableHeader>
                       <TableBody>
                         {filteredSessions.map((session) => {
-                          const isExpanded = expandedPaymentId === session.id;
                           const servicesText = session.services.map((s) => s.serviceName).join(', ');
                           const staffText = [...new Set(session.services.map((s) => s.staffName))].join(', ');
                           const isActive = session.status === 'queued' || session.status === 'in_progress';
@@ -992,25 +904,35 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                                 <TableCell className="text-right px-4 py-3.5">
                                   <div className="flex items-center justify-end gap-1">
                                     {isActive && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-xs h-9 px-3 text-destructive border-destructive/30 hover:bg-destructive/10"
-                                        onClick={() => onCancelSession(session.id)}
-                                      >
-                                        <Trash2 className="size-3.5 mr-1" />Remove
-                                      </Button>
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-xs h-9 px-3"
+                                          onClick={() => {
+                                            setReassignFor(reassignFor?.id === session.id ? null : session);
+                                            setReassignStaffId('');
+                                            setReassignMsg('');
+                                          }}
+                                        >
+                                          <Users className="size-3.5 mr-1" />Reassign
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-xs h-9 px-3 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                          onClick={() => onCancelSession(session.id)}
+                                        >
+                                          <Trash2 className="size-3.5 mr-1" />Remove
+                                        </Button>
+                                      </>
                                     )}
                                     {session.status === 'completed' && !isPaidNow && (
                                       <Button
                                         size="sm"
                                         variant="destructive"
                                         className="text-xs h-9 font-medium px-3"
-                                        onClick={() => {
-                                          setExpandedPaymentId(isExpanded ? null : session.id);
-                                          setPaymentMethod('cash');
-                                          setPaymentReference('');
-                                        }}
+                                        onClick={() => setPayModal(session)}
                                       >
                                         <DollarSign className="size-3.5 mr-0.5" />Collect Pay
                                       </Button>
@@ -1029,45 +951,35 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                                 </TableCell>
                               </TableRow>
 
-                              {/* Inline Payment Collection Dropdown */}
-                              {isExpanded && (
+                              {/* Inline Staff Reassign */}
+                              {reassignFor?.id === session.id && (
                                 <TableRow className="bg-muted/40">
                                   <TableCell colSpan={6} className="p-3">
-                                    <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3 rounded-md border border-primary/20 ">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3 rounded-md border border-primary/20">
                                       <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-foreground">Select Payment Method:</span>
-                                        <div className="flex gap-1">
-                                          {([
-                                            { id: 'cash' as PaymentMethod, label: 'Cash' },
-                                            { id: 'telebirr' as PaymentMethod, label: 'Telebirr' },
-                                            { id: 'cbe_birr' as PaymentMethod, label: 'CBE Birr' },
-                                            { id: 'card' as PaymentMethod, label: 'Card' },
-                                          ]).map((m) => (
-                                            <Button
-                                              key={m.id}
-                                              size="sm"
-                                              variant={paymentMethod === m.id ? 'default' : 'outline'}
-                                              onClick={() => setPaymentMethod(m.id)}
-                                              className="text-xs h-9 font-medium px-3"
-                                            >
-                                              {m.label}
-                                            </Button>
-                                          ))}
-                                        </div>
+                                        <span className="text-sm font-medium text-foreground">Reassign all pending services to:</span>
+                                        <Select value={reassignStaffId} onValueChange={setReassignStaffId} items={toSelectItems(branchStaff.map((st) => ({ value: st.id, label: `${st.name} — ${st.role}` })))}>
+                                          <SelectTrigger className="w-52 h-9 text-sm"><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                                          <SelectContent>
+                                            {branchStaff.map((st) => (
+                                              <SelectItem key={st.id} value={st.id}>{st.name} — {st.role}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
                                       </div>
-
+                                      {reassignMsg && (
+                                        <span className="text-xs text-destructive font-medium">{reassignMsg}</span>
+                                      )}
                                       <div className="flex items-center gap-2">
-                                        <Input
-                                          placeholder="Transaction Ref #"
-                                          value={paymentReference}
-                                          onChange={(e) => setPaymentReference(e.target.value)}
-                                          className="h-9 w-40 text-sm"
-                                        />
-                                        <span className="font-semibold text-sm text-foreground">{session.netTotalEtb.toLocaleString()} ETB</span>
-                                        <Button size="sm" className="h-9 text-xs font-medium px-3" onClick={() => handleCheckout(session.id)}>
-                                          Confirm Payment
+                                        <Button
+                                          size="sm"
+                                          className="h-9 text-xs font-medium px-3"
+                                          disabled={!reassignStaffId || reassignBusy}
+                                          onClick={() => handleReassign(session)}
+                                        >
+                                          {reassignBusy ? 'Saving…' : 'Confirm Reassign'}
                                         </Button>
-                                        <Button size="sm" variant="ghost" className="h-9 text-xs px-3" onClick={() => setExpandedPaymentId(null)}>
+                                        <Button size="sm" variant="ghost" className="h-9 text-xs px-3" onClick={() => setReassignFor(null)}>
                                           Cancel
                                         </Button>
                                       </div>
@@ -1088,8 +1000,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
           <TabsContent value="board" className="mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {branchStaff.map((staff) => {
-                const queue = getStaffQueue(staff.id, todayBranchSessions, customers);
-                const serving = queue.find((q) => q.service.status === 'in_progress');
+                const queue = groupStaffQueue(staff.id, todayBranchSessions, customers);
+                const serving = queue.find((q) => q.inProgress);
 
                 return (
                   <Card key={staff.id} className="border-border  hover:border-primary/40 transition-all">
@@ -1113,7 +1025,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                         <div className="rounded-md bg-amber-500/10 border border-amber-300 p-2.5 text-sm">
                           <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">Now Serving</p>
                           <p className="font-semibold text-foreground">{serving.session.customerName}</p>
-                          <p className="text-[11px] text-muted-foreground">{serving.service.serviceName}</p>
+                          <p className="text-[11px] text-muted-foreground">#{serving.session.queueNumber}</p>
                         </div>
                       ) : (
                         <div className="rounded-md bg-emerald-500/10 border border-emerald-300 p-2 text-sm text-center text-emerald-700 dark:text-emerald-400 font-medium">
@@ -1127,28 +1039,32 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                         ) : (
                           queue.map((q) => (
                             <div
-                              key={q.service.id}
-                              className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
-                                q.service.status === 'in_progress' ? 'border-amber-300 bg-amber-500/5 font-semibold' :
+                              key={q.session.id}
+                              className={`rounded-md border px-3 py-2 text-sm ${
+                                q.inProgress ? 'border-amber-300 bg-amber-500/5' :
                                 q.available ? 'border-emerald-300 bg-emerald-500/5' : 'border-border opacity-70'
                               }`}
                             >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-[10px] font-mono font-medium text-muted-foreground w-4">#{q.position}</span>
-                                {q.isVip && <Star className="size-3 text-amber-500 fill-amber-500 shrink-0" />}
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-foreground truncate">{q.session.customerName}</p>
-                                  <p className="text-[10px] text-muted-foreground truncate">{q.service.serviceName}</p>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-lg font-bold font-mono text-foreground">{q.session.queueNumber}</span>
+                                  {q.isVip && <Star className="size-3.5 text-amber-500 fill-amber-500 shrink-0" />}
                                 </div>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-6 text-muted-foreground hover:text-destructive shrink-0"
+                                  onClick={() => onCancelSession(q.session.id)}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
                               </div>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-6 text-muted-foreground hover:text-destructive shrink-0"
-                                onClick={() => onCancelSession(q.session.id)}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
+                              <p className="font-semibold text-foreground text-sm">{q.session.customerName}</p>
+                              {q.services.length > 0 && (
+                                <p className="text-[11px] text-muted-foreground font-medium truncate">
+                                  {q.services.map((s) => s.serviceName).join(' + ')}
+                                </p>
+                              )}
                             </div>
                           ))
                         )}
@@ -1158,6 +1074,16 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                 );
               })}
             </div>
+          </TabsContent>
+
+          {/* TAB: RETAIL SALES */}
+          <TabsContent value="retail" className="mt-4">
+            <RetailTab
+              companyId={activeCompanyId}
+              branchId={branchId || activeCompanyId || ''}
+              inventoryItems={branchInventory}
+              onRefresh={onRefresh}
+            />
           </TabsContent>
 
           {/* TAB: INVENTORY (FULL WIDTH) */}
@@ -1700,6 +1626,203 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
         </DialogContent>
       </Dialog>
 
+      {/* Create Session Modal: Step 1 = details, Step 2 = summary confirmation */}
+      <Dialog open={showCreateModal} onOpenChange={(o) => {
+        if (!o && !isCreating) { setShowCreateModal(false); setCreateStep(1); setCreationError(null); }
+      }}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-medium">
+              <ShoppingCart className="size-5 text-primary" />
+              {createStep === 1 ? 'New Customer Session' : 'Session Summary'}
+            </DialogTitle>
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className={`size-1.5 rounded-full ${createStep === 1 ? 'bg-primary' : 'bg-green-500'}`} />
+              Step {createStep} of 2 {createStep === 2 && '— please confirm below'}
+            </div>
+          </DialogHeader>
+
+          {creationError && (
+            <div className="flex items-center gap-2 text-sm font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{creationError}</span>
+            </div>
+          )}
+
+          {createStep === 1 ? (
+            <div className="space-y-5">
+              {/* 1. Select Client */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">1. Who is the customer? *</Label>
+                {selectedCustomer ? (
+                  <div className="rounded-md border border-primary/30 bg-primary/10 p-3 flex items-center justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground truncate">{selectedCustomer.name}</span>
+                        {selectedCustomer.isVip && <Star className="size-3 text-amber-500 fill-amber-500 shrink-0" />}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">{selectedCustomer.phone}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant="secondary" className="text-[10px] font-medium">{selectedCustomer.loyaltyPoints || 0} Pts</Badge>
+                      <Button size="icon" variant="ghost" className="size-7" onClick={() => setSelectedCustomer(null)} title="Change client">
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 italic">No customer selected yet.</p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setPickerMode('list'); setClientSearchQuery(''); setShowClientPicker(true); }}
+                  className="w-full gap-2 text-[13px] font-medium border-primary/30 hover:bg-primary/10"
+                >
+                  <Users className="size-4 text-primary" />
+                  {selectedCustomer ? 'Change Customer' : 'Choose Customer'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setPickerMode('new'); setClientSearchQuery(''); setShowClientPicker(true); }}
+                  className="gap-1.5 text-[13px] font-medium border border-primary/40 hover:bg-primary/10 w-full"
+                >
+                  <UserPlus className="size-3.5 text-primary" />
+                  + Register New Customer
+                </Button>
+              </div>
+
+              {/* 2. Pick Services */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">2. Which services? *</Label>
+                <div className="flex gap-1 overflow-x-auto pb-1">
+                  <Button size="xs" variant={serviceCategory === 'all' ? 'default' : 'outline'} onClick={() => setServiceCategory('all')} className="text-xs">
+                    All
+                  </Button>
+                  {categories.map((cat) => (
+                    <Button key={cat} size="xs" variant={serviceCategory === cat ? 'default' : 'outline'} onClick={() => setServiceCategory(cat)} className="text-xs">
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[190px] overflow-y-auto pr-1">
+                  {filteredServices.map((srv) => (
+                    <button
+                      key={srv.id}
+                      type="button"
+                      onClick={() => addServiceToBuilder(srv)}
+                      className="bg-background border border-border hover:border-primary hover:bg-primary/5 p-2 rounded-md text-left cursor-pointer transition-colors"
+                    >
+                      <div className="font-semibold text-sm text-foreground truncate">{srv.name}</div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-[10px] text-muted-foreground">{srv.durationMinutes}m</span>
+                        <span className="font-medium text-sm text-foreground">{srv.priceEtb} ETB</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedServices.length > 0 && (
+                  <div className="rounded-md border-2 border-primary/50 bg-primary/5 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-foreground">Selected Services ({selectedServices.length})</Label>
+                      <span className="text-sm font-bold text-primary">{cartTotal} ETB</span>
+                    </div>
+                    {selectedServices.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-background px-3 py-2.5 text-sm shadow-sm">
+                        <span className="font-bold text-foreground truncate max-w-[140px]">{item.serviceName}</span>
+                        <div className="flex items-center gap-1.5 flex-1 justify-end">
+                          <Select value={item.staffId} onValueChange={(v) => assignStaffToBuilder(idx, v)} items={toSelectItems(staffForService(availableServices.find((s) => s.id === item.serviceId) as Service).map((st) => ({ value: st.id, label: st.name })))}>
+                            <SelectTrigger className="h-7 text-xs font-semibold py-0 px-2 w-[140px] border-primary/40">
+                              <SelectValue placeholder="Staff" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {staffForService(availableServices.find((s) => s.id === item.serviceId) as Service).map((st) => (
+                                <SelectItem key={st.id} value={st.id} className="text-sm font-medium">{st.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className="w-16 text-right font-bold shrink-0">{item.priceEtb} ETB</span>
+                          <button type="button" onClick={() => removeServiceFromBuilder(idx)} className="text-destructive hover:opacity-80 shrink-0">
+                            <X className="size-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="sm:justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Total: <span className="font-semibold text-foreground">{cartTotal} ETB</span>
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={!selectedCustomer || selectedServices.length === 0}
+                  onClick={() => { setCreateStep(2); setCreationError(null); }}
+                >
+                  Continue to Summary →
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Users className="size-4 text-primary shrink-0" />
+                    <span className="text-sm font-bold text-foreground truncate">
+                      {selectedCustomer?.name}
+                      {selectedCustomer?.isVip && <Star className="size-3.5 text-amber-500 fill-amber-500 inline ml-1 -mt-0.5" />}
+                    </span>
+                  </div>
+                  <Badge variant="secondary" className="text-[11px] font-semibold shrink-0">{selectedCustomer?.loyaltyPoints || 0} Pts</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground font-mono truncate">{selectedCustomer?.phone}</p>
+              </div>
+
+              <div className="rounded-xl border border-border overflow-hidden">
+                <div className="bg-muted/60 px-4 py-2 flex items-center justify-between">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-foreground">Services ({selectedServices.length})</Label>
+                  <span className="text-sm font-bold text-primary">{cartTotal} ETB</span>
+                </div>
+                {selectedServices.map((item, idx) => (
+                  <div key={idx} className={`flex items-center justify-between gap-2 px-4 py-3 text-sm ${idx % 2 ? 'bg-muted/30' : 'bg-background'}`}>
+                    <div className="min-w-0">
+                      <p className="font-bold text-foreground truncate">{item.serviceName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">{item.staffName || 'No staff'}</span> • {availableServices.find((s) => s.id === item.serviceId)?.durationMinutes ?? 0} min
+                      </p>
+                    </div>
+                    <span className="font-bold shrink-0">{item.priceEtb} ETB</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border-2 border-primary/40 bg-primary/5 px-4 py-3">
+                <p className="text-sm font-bold text-foreground uppercase tracking-wide">Total Net</p>
+                <p className="text-xl font-bold text-foreground">{cartTotal} ETB</p>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCreateStep(1)} disabled={isCreating}>
+                  ← Back
+                </Button>
+                <Button onClick={createSession} disabled={isCreating} className="gap-1.5 font-medium" size="lg">
+                  <ShoppingCart className="size-4" />
+                  {isCreating ? 'Creating...' : 'Confirm Queue'}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Client Picker Modal: Search + Full-Width List + Inline New Client Form */}
       <Dialog open={showClientPicker} onOpenChange={(o) => !o && setShowClientPicker(false)}>
         <DialogContent className="sm:max-w-xl">
@@ -1826,32 +1949,6 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="rcpEmail" className="text-sm font-medium">Email Address (Optional)</Label>
-                <div className="relative">
-                  <Mail className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    id="rcpEmail"
-                    type="email"
-                    placeholder="client@gmail.com"
-                    value={custEmail}
-                    onChange={(e) => setCustEmail(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="rcpNotes" className="text-sm font-medium">Preferences & Notes (Optional)</Label>
-                <Input
-                  id="rcpNotes"
-                  placeholder="e.g. Preferred hair stylist, sensitive scalp..."
-                  value={custNotes}
-                  onChange={(e) => setCustNotes(e.target.value)}
-                  className=""
-                />
-              </div>
-
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
@@ -1888,6 +1985,17 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
           onClose={() => setInvoiceToPrint(null)}
         />
       )}
+
+      {/* Unified Payment Checkout Modal */}
+      <PaymentCheckoutModal
+        open={!!payModal}
+        onOpenChange={(o) => !o && setPayModal(null)}
+        target={payModal ? toPaymentTarget(payModal) : null}
+        onSuccess={async () => {
+          if (payModal && !paidIds.includes(payModal.id)) setPaidIds((prev) => [...prev, payModal.id]);
+          await onRefresh?.();
+        }}
+      />
     </div>
   );
 };

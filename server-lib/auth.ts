@@ -7,7 +7,7 @@
  */
 import crypto from 'node:crypto';
 
-export type UserRole = 'super_admin' | 'tenant_manager' | 'receptionist' | 'staff';
+export type UserRole = 'super_admin' | 'owner' | 'manager' | 'reception' | 'staff';
 
 export interface AuthUser {
   id: string;

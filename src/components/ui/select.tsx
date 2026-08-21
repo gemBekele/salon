@@ -6,6 +6,14 @@ import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
 
+export function toSelectItems<T>(
+  entries: Array<{ value: T; label: React.ReactNode }>
+): Record<string, React.ReactNode> {
+  const map: Record<string, React.ReactNode> = {}
+  for (const { value, label } of entries) map[String(value)] = label
+  return map
+}
+
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
     <SelectPrimitive.Group

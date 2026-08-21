@@ -1,5 +1,41 @@
 import type { DbPool } from './db';
 import { hashPassword, defaultPinForPhone } from './auth';
+import { uid } from './core';
+
+/**
+ * Represents a login account with the new role vocabulary:
+ * super_admin | owner | manager | reception | staff
+ */
+const USERS_SEED: [string, string | null, string, string, string, string][] = [
+  ['user_super', null, 'Platform Super Admin', 'admin@serenity.et', 'Admin123!', 'super_admin'],
+  ['user_gech_owner', 'cmp_gech_01', 'Gech Salon Owner', 'owner@gechsalon.et', 'Owner123!', 'owner'],
+  ['user_gech_admin', 'cmp_gech_01', 'Gech Salon Manager', 'admin@gechsalon.et', 'Manager123!', 'manager'],
+  ['user_gech_liya', 'cmp_gech_01', 'Liya Gebremedhin', 'liya@gechsalon.et', 'Staff123!', 'reception'],
+  ['user_gech_samuel', 'cmp_gech_01', 'Samuel Desta', 'samuel@gechsalon.et', 'Staff123!', 'reception'],
+  ['user_gech_bereket', 'cmp_gech_01', 'Bereket Shimelis', 'bereket@gechsalon.et', 'Staff123!', 'staff'],
+  ['user_gech_hana', 'cmp_gech_01', 'Hana Abera', 'hana@gechsalon.et', 'Staff123!', 'staff'],
+  ['user_gech_meron', 'cmp_gech_01', 'Meron Tadesse', 'meron@gechsalon.et', 'Staff123!', 'staff'],
+  ['user_gech_alma', 'cmp_gech_01', 'Alma Getahun', 'alma@gechsalon.et', 'Staff123!', 'staff'],
+  ['user_gech_fikir', 'cmp_gech_01', 'Fikir Worku', 'fikir@gechsalon.et', 'Staff123!', 'staff'],
+  ['user_gech_yonatan', 'cmp_gech_01', 'Yonatan Alemayehu', 'yonatan@gechsalon.et', 'Staff123!', 'staff'],
+  ['user_gech_nathan', 'cmp_gech_01', 'Nathan Tesfaye', 'nathan@gechsalon.et', 'Staff123!', 'staff'],
+];
+
+/**
+ * Seeds the platform user accounts, skipping any that already exist.
+ * Runs on every seed pass (unlike the reference data) so fresh installs and
+ * upgraded installs both converge on the same account + role set.
+ */
+export async function ensureUsers(pool: DbPool): Promise<void> {
+  for (const [id, companyId, name, email, password, role] of USERS_SEED) {
+    await pool.query(
+      `INSERT INTO users (id, company_id, name, email, password_hash, role, is_active)
+       VALUES (?,?,?,?,?,?,TRUE) ON CONFLICT (id) DO NOTHING`,
+      [id, companyId, name, email, hashPassword(password), role]
+    );
+  }
+  console.log('[seed] ensured user accounts (owner@gechsalon.et / Owner123!, admin@gechsalon.et / Manager123!, staff / Staff123!).');
+}
 
 /**
  * Seeds reference data (subscription plans, companies, seed entity rows) plus
@@ -16,6 +52,10 @@ export async function ensureSeeded(pool: DbPool): Promise<void> {
     console.log('[seed] done.');
   }
   await ensureStaffPins(pool);
+  await ensureUsers(pool);
+  await ensureBanks(pool);
+  await ensureBundles(pool);
+  await ensureInventorySellingPrices(pool);
 }
 
 /**
@@ -32,6 +72,61 @@ export async function ensureStaffPins(pool: DbPool): Promise<void> {
       [hashPassword(defaultPin), r.id]
     );
     console.log(`[seed] generated default PIN for ${r.id} (${defaultPin}) — staff must change on first login.`);
+  }
+}
+
+/**
+ * Backfill the configured bank list for any company that has none. Idempotent.
+ */
+export async function ensureBanks(pool: DbPool): Promise<void> {
+  const [companyRows] = (await pool.query(`SELECT id FROM companies`)) as any;
+  for (const company of companyRows) {
+    const [existing] = (await pool.query(`SELECT COUNT(*) AS c FROM banks WHERE company_id = ?`, [company.id])) as any;
+    if (Number(existing[0]?.c) > 0) continue;
+    await insertMany(pool, 'banks', ['id', 'company_id', 'name', 'code', 'is_active'], [
+      [`bank_cbe_${company.id.slice(-4)}`, company.id, 'CBE Birr', 'cbe_birr', 1],
+      [`bank_telebirr_${company.id.slice(-4)}`, company.id, 'Telebirr', 'telebirr', 1],
+      [`bank_awash_${company.id.slice(-4)}`, company.id, 'Awash Bank', 'awash', 1],
+      [`bank_dashen_${company.id.slice(-4)}`, company.id, 'Dashen Bank', 'dashen', 1],
+      [`bank_abyssinia_${company.id.slice(-4)}`, company.id, 'Bank of Abyssinia', 'abyssinia', 1],
+      [`bank_oromia_${company.id.slice(-4)}`, company.id, 'Oromia Bank', 'oromia', 1],
+    ]);
+    console.log(`[seed] backfilled ${6} banks for ${company.id}`);
+  }
+}
+
+/**
+ * Backfill a demo bundle for companies that have none. Idempotent.
+ */
+export async function ensureBundles(pool: DbPool): Promise<void> {
+  const [companyRows] = (await pool.query(`SELECT id FROM companies`)) as any;
+  for (const company of companyRows) {
+    const [existing] = (await pool.query(`SELECT COUNT(*) AS c FROM service_bundles WHERE company_id = ?`, [company.id])) as any;
+    if (Number(existing[0]?.c) > 0) continue;
+    const [services] = (await pool.query(`SELECT id, name, price_etb FROM services WHERE company_id = ? ORDER BY "created_at" LIMIT 3`, [company.id])) as any;
+    if (!services.length) continue;
+    const [branch] = (await pool.query(`SELECT id FROM branches WHERE company_id = ? LIMIT 1`, [company.id])) as any;
+    const branchId = branch[0]?.id || null;
+    const bundleId = `bnd_demo_${company.id.slice(-4)}`;
+    await pool.query(`INSERT INTO service_bundles (id, company_id, branch_id, business_unit_id, name, description, is_active) VALUES (?,?,?,?,?,?,TRUE)`,
+      [bundleId, company.id, branchId, null, 'Demo Bundle', 'Sample bundle created automatically']);
+    for (const svc of services) {
+      await pool.query(`INSERT INTO service_bundle_items (id, bundle_id, service_id, price_etb) VALUES (?,?,?,?)`,
+        [uid('bndi'), bundleId, svc.id, Math.round(Number(svc.price_etb) * 0.85)]);
+    }
+    console.log(`[seed] created demo bundle for ${company.id}`);
+  }
+}
+
+/**
+ * Backfill a selling price (unit cost + 50% markup) for inventory items that
+ * are missing one, so reception retail can sell them. Idempotent.
+ */
+export async function ensureInventorySellingPrices(pool: DbPool): Promise<void> {
+  const [rows] = (await pool.query(`SELECT id, unit_cost_etb, selling_price_etb FROM inventory_items WHERE selling_price_etb IS NULL`)) as any;
+  for (const r of rows) {
+    const price = Number(r.selling_price_etb ?? 0) || Math.round(Number(r.unit_cost_etb || 0) * 1.5);
+    await pool.query(`UPDATE inventory_items SET selling_price_etb = ? WHERE id = ?`, [price, r.id]);
   }
 }
 
@@ -60,6 +155,16 @@ async function seedReferences(pool: DbPool) {
     ['cmp_gech_01', 'Gech Beauty Salon', 'gech-beauty-salon', 'plan_growth', 'active', 'ETB', 'Africa/Addis_Ababa', '+251 91 456 7890', 'info@gechsalon.et', '2024-06-01 00:00:00'],
   ]);
 
+  // 2b. Banks (configurable payment channels)
+  await insertMany(pool, 'banks', ['id', 'company_id', 'name', 'code', 'is_active'], [
+    ['bank_cbe', 'cmp_gech_01', 'CBE Birr', 'cbe_birr', 1],
+    ['bank_telebirr', 'cmp_gech_01', 'Telebirr', 'telebirr', 1],
+    ['bank_awash', 'cmp_gech_01', 'Awash Bank', 'awash', 1],
+    ['bank_dashen', 'cmp_gech_01', 'Dashen Bank', 'dashen', 1],
+    ['bank_abyssinia', 'cmp_gech_01', 'Bank of Abyssinia', 'abyssinia', 1],
+    ['bank_oromia', 'cmp_gech_01', 'Oromia Bank', 'oromia', 1],
+  ]);
+
   // 3. Branches — Female Salon & Men's Grooming in Hawassa
   await insertMany(pool, 'branches', ['id', 'company_id', 'name', 'city', 'address', 'phone', 'is_main_branch', 'status'], [
     ['br_female_01', 'cmp_gech_01', 'Gech Female Beauty Salon', 'Hawassa', 'Megersa Condo, 2nd Floor, Hawassa', '+251 91 456 7890', 1, 'active'],
@@ -83,12 +188,12 @@ async function seedReferences(pool: DbPool) {
     ['stf_meron_02', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Meron Tadesse', '+251 91 222 3344', 'meron@gechsalon.et', 'hairstylist', '["Habesha Braids","Cornrows","Twist Outs"]', 30, 'available'],
     ['stf_alma_03', 'cmp_gech_01', 'br_female_01', 'bu_female_nails', 'Alma Getahun', '+251 91 333 4455', 'alma@gechsalon.et', 'esthetician', '["Gel Nails","French Manicure","Nail Art"]', 25, 'available'],
     ['stf_fikir_04', 'cmp_gech_01', 'br_female_01', 'bu_female_skin', 'Fikir Worku', '+251 92 444 5566', 'fikir@gechsalon.et', 'esthetician', '["HydraFacial","Chemical Peel","Acne Treatment"]', 30, 'available'],
-    ['stf_reception_05', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Liya Gebremedhin', '+251 93 555 6677', 'liya@gechsalon.et', 'receptionist', '["POS Operations","Customer Care","Appointments"]', 0, 'available'],
+    ['stf_reception_05', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Liya Gebremedhin', '+251 93 555 6677', 'liya@gechsalon.et', 'reception', '["POS Operations","Customer Care","Appointments"]', 0, 'available'],
     // Men's Grooming Staff
     ['stf_bereket_06', 'cmp_gech_01', 'br_mens_01', 'bu_mens_hair', 'Bereket Shimelis', '+251 91 666 7788', 'bereket@gechsalon.et', 'barber', '["Fade Cut","Classic Taper","Flat Top"]', 30, 'available'],
     ['stf_yonatan_07', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Yonatan Alemayehu', '+251 91 777 8899', 'yonatan@gechsalon.et', 'barber', '["Beard Sculpting","Hot Towel Shave","Razor Lineup"]', 28, 'available'],
     ['stf_nathan_08', 'cmp_gech_01', 'br_mens_01', 'bu_mens_facial', 'Nathan Tesfaye', '+251 92 888 9900', 'nathan@gechsalon.et', 'esthetician', '["Men Facial","Deep Cleanse","Anti-Acne"]', 25, 'available'],
-    ['stf_mens_rec_09', 'cmp_gech_01', 'br_mens_01', 'bu_mens_hair', 'Samuel Desta', '+251 93 999 0011', 'samuel@gechsalon.et', 'receptionist', '["POS Operations","Queue Management","SMS Receipts"]', 0, 'available'],
+    ['stf_mens_rec_09', 'cmp_gech_01', 'br_mens_01', 'bu_mens_hair', 'Samuel Desta', '+251 93 999 0011', 'samuel@gechsalon.et', 'reception', '["POS Operations","Queue Management","SMS Receipts"]', 0, 'available'],
   ]);
 
   // 6. Services — Amharic Service Catalog
@@ -192,23 +297,61 @@ async function seedReferences(pool: DbPool) {
     ['srv_amh_90', 'cmp_gech_01', 'bu_female_hair', 'Small Water', 'Extra', 30, 30, 'percentage', 25, 1],
     ['srv_amh_91', 'cmp_gech_01', 'bu_female_hair', 'Medium Water', 'Extra', 40, 30, 'percentage', 25, 1],
     ['srv_amh_92', 'cmp_gech_01', 'bu_female_hair', 'Big Water', 'Extra', 60, 30, 'percentage', 25, 1],
+    // Men's Grooming Lounge — Haircut & Styling
+    ['srv_mens_01', 'cmp_gech_01', 'bu_mens_hair', 'የፀጉር መቁረጥ', 'ፀጉር', 300, 30, 'percentage', 25, 1],
+    ['srv_mens_02', 'cmp_gech_01', 'bu_mens_hair', 'ፍሬድ መቁረጥ', 'ፀጉር', 400, 45, 'percentage', 25, 1],
+    ['srv_mens_03', 'cmp_gech_01', 'bu_mens_hair', 'ፀጉር ማጠብ ከመቁረጥ ጋር', 'ፀጉር', 450, 60, 'percentage', 25, 1],
+    ['srv_mens_04', 'cmp_gech_01', 'bu_mens_hair', 'የፀጉር ቀለም መቀባት', 'ፀጉር', 2000, 90, 'percentage', 25, 1],
+    ['srv_mens_05', 'cmp_gech_01', 'bu_mens_hair', 'የፀጉር ቅርፅ ማስተካከያ', 'ፀጉር', 150, 30, 'percentage', 25, 1],
+    ['srv_mens_06', 'cmp_gech_01', 'bu_mens_hair', 'ደረቅ ፀጉር ቅርፅ', 'ፀጉር', 100, 20, 'percentage', 25, 1],
+    // Men's Grooming Lounge — Beard & Shave
+    ['srv_mens_07', 'cmp_gech_01', 'bu_mens_grooming', 'ጺም መከርከም', 'ጺም', 150, 20, 'percentage', 25, 1],
+    ['srv_mens_08', 'cmp_gech_01', 'bu_mens_grooming', 'ሙሉ ምላጭ', 'ጺም', 250, 30, 'percentage', 25, 1],
+    ['srv_mens_09', 'cmp_gech_01', 'bu_mens_grooming', 'ጺም ቅርፅ ማስተካከያ', 'ጺም', 200, 25, 'percentage', 25, 1],
+    ['srv_mens_10', 'cmp_gech_01', 'bu_mens_grooming', 'የውሃ ፎጣ ሽብስ', 'ጺም', 100, 15, 'percentage', 25, 1],
+    ['srv_mens_11', 'cmp_gech_01', 'bu_mens_grooming', 'ጺም ቀለም መቀባት', 'ጺም', 300, 30, 'percentage', 25, 1],
+    ['srv_mens_12', 'cmp_gech_01', 'bu_mens_grooming', 'ላይኛ ጺም መከርከም', 'ጺም', 100, 15, 'percentage', 25, 1],
+    // Men's Grooming Lounge — Facial & Skincare
+    ['srv_mens_13', 'cmp_gech_01', 'bu_mens_facial', 'የወንዶች ገጽ ንፅህና', 'ገጽ', 600, 45, 'percentage', 25, 1],
+    ['srv_mens_14', 'cmp_gech_01', 'bu_mens_facial', 'ጥልቅ ገጽ መፋቅ', 'ገጽ', 500, 40, 'percentage', 25, 1],
+    ['srv_mens_15', 'cmp_gech_01', 'bu_mens_facial', 'የገጽ ቀዳዳ ህክምና', 'ገጽ', 450, 35, 'percentage', 25, 1],
+    ['srv_mens_16', 'cmp_gech_01', 'bu_mens_facial', 'እንቁላል መፋቅ', 'ገጽ', 450, 40, 'percentage', 25, 1],
+    ['srv_mens_17', 'cmp_gech_01', 'bu_mens_facial', 'የገጽ ቅባት', 'ገጽ', 400, 35, 'percentage', 25, 1],
+  ]);
+
+  // 6b. Service bundles (per-sub-service prices define the bundle total)
+  await insertMany(pool, 'service_bundles', ['id', 'company_id', 'branch_id', 'business_unit_id', 'name', 'description', 'is_active'], [
+    ['bnd_spa_day', 'cmp_gech_01', 'br_female_01', 'bu_female_skin', 'Moroccan Spa Day', 'Full spa package: Moroccan bath + massage + hair wash', 1],
+    ['bnd_color_treat', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Color & Treatment', 'Hair color with treatment wash', 1],
+  ]);
+  await insertMany(pool, 'service_bundle_items', ['id', 'bundle_id', 'service_id', 'price_etb'], [
+    ['bndi_spa_01', 'bnd_spa_day', 'srv_amh_75', 1800],
+    ['bndi_spa_02', 'bnd_spa_day', 'srv_amh_80', 900],
+    ['bndi_spa_03', 'bnd_spa_day', 'srv_amh_01', 120],
+    ['bndi_col_01', 'bnd_color_treat', 'srv_amh_28', 3800],
+    ['bndi_col_02', 'bnd_color_treat', 'srv_amh_02', 90],
   ]);
 
   // 7. InventoryItems
-  await insertMany(pool, 'inventory_items', ['id', 'company_id', 'branch_id', 'business_unit_id', 'name', 'sku', 'unit', 'current_stock', 'reorder_level', 'unit_cost_etb', 'last_restocked_at'], [
+  await insertMany(pool, 'inventory_items', ['id', 'company_id', 'branch_id', 'business_unit_id', 'name', 'sku', 'unit', 'current_stock', 'reorder_level', 'unit_cost_etb', 'selling_price_etb', 'last_restocked_at'], [
     // Female Salon
-    ['inv_hair_color', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Professional Hair Color Kit', 'COL-PRF-500', 'pcs', 20, 5, 850, '2026-08-01'],
-    ['inv_keratin', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Keratin Treatment Serum', 'KRT-SRM-200', 'btl', 12, 3, 1200, '2026-08-03'],
-    ['inv_hair_ext', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Brazilian Hair Extension Bundle', 'EXT-BRA-100', 'pcs', 8, 2, 2500, '2026-07-28'],
-    ['inv_gel_polish', 'cmp_gech_01', 'br_female_01', 'bu_female_nails', 'Gel Nail Polish Collection', 'NLP-GEL-30', 'set', 6, 2, 450, '2026-08-05'],
-    ['inv_nail_remover', 'cmp_gech_01', 'br_female_01', 'bu_female_nails', 'Acetone-Free Remover', 'NLR-ACT-500', 'ml', 800, 200, 8, '2026-08-02'],
-    ['inv_facial_kit', 'cmp_gech_01', 'br_female_01', 'bu_female_skin', 'HydraFacial Treatment Kit', 'FCL-HYD-10', 'pcs', 15, 5, 350, '2026-08-04'],
+    ['inv_hair_color', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Professional Hair Color Kit', 'COL-PRF-500', 'pcs', 20, 5, 850, 1200, '2026-08-01'],
+    ['inv_keratin', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Keratin Treatment Serum', 'KRT-SRM-200', 'btl', 12, 3, 1200, 1800, '2026-08-03'],
+    ['inv_hair_ext', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Brazilian Hair Extension Bundle', 'EXT-BRA-100', 'pcs', 8, 2, 2500, 3200, '2026-07-28'],
+    ['inv_gel_polish', 'cmp_gech_01', 'br_female_01', 'bu_female_nails', 'Gel Nail Polish Collection', 'NLP-GEL-30', 'set', 6, 2, 450, 750, '2026-08-05'],
+    ['inv_nail_remover', 'cmp_gech_01', 'br_female_01', 'bu_female_nails', 'Acetone-Free Remover', 'NLR-ACT-500', 'ml', 800, 200, 8, 20, '2026-08-02'],
+    ['inv_facial_kit', 'cmp_gech_01', 'br_female_01', 'bu_female_skin', 'HydraFacial Treatment Kit', 'FCL-HYD-10', 'pcs', 15, 5, 350, 600, '2026-08-04'],
+    // Retail-only products (sold by reception, not tied to a service)
+    ['inv_retail_shampoo', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Argan Oil Shampoo 400ml', 'RT-SHP-AR-400', 'btl', 40, 10, 320, 550, '2026-08-06'],
+    ['inv_retail_serum', 'cmp_gech_01', 'br_female_01', 'bu_female_hair', 'Hair Repair Serum 100ml', 'RT-SRM-HR-100', 'btl', 25, 6, 260, 480, '2026-08-06'],
+    ['inv_retail_beard_oil', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Beard & Mustache Oil 50ml', 'RT-BO-50', 'btl', 20, 5, 380, 650, '2026-08-06'],
+    ['inv_retail_comb', 'cmp_gech_01', 'br_mens_01', 'bu_mens_hair', 'Barber Comb (Wooden)', 'RT-CMB-WD', 'pcs', 60, 15, 60, 150, '2026-08-06'],
     // Men's Grooming
-    ['inv_pomade', 'cmp_gech_01', 'br_mens_01', 'bu_mens_hair', 'Premium Hold Pomade', 'POM-PRM-150', 'pcs', 30, 10, 180, '2026-08-03'],
-    ['inv_shaving_cream', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Classic Shaving Cream', 'SHV-CLS-200', 'pcs', 25, 8, 95, '2026-08-01'],
-    ['inv_hot_towel', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Hot Towel Wraps (Disposable)', 'TWL-HT-100', 'pcs', 100, 30, 15, '2026-08-05'],
-    ['inv_aftershave', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Aftershave Balm', 'SHV-AFT-150', 'pcs', 18, 5, 120, '2026-08-02'],
-    ['inv_mens_facial_kit', 'cmp_gech_01', 'br_mens_01', 'bu_mens_facial', 'Men Deep Cleanse Facial Kit', 'FCL-MEN-10', 'pcs', 10, 3, 280, '2026-08-04'],
+    ['inv_pomade', 'cmp_gech_01', 'br_mens_01', 'bu_mens_hair', 'Premium Hold Pomade', 'POM-PRM-150', 'pcs', 30, 10, 180, 350, '2026-08-03'],
+    ['inv_shaving_cream', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Classic Shaving Cream', 'SHV-CLS-200', 'pcs', 25, 8, 95, 220, '2026-08-01'],
+    ['inv_hot_towel', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Hot Towel Wraps (Disposable)', 'TWL-HT-100', 'pcs', 100, 30, 15, 30, '2026-08-05'],
+    ['inv_aftershave', 'cmp_gech_01', 'br_mens_01', 'bu_mens_grooming', 'Aftershave Balm', 'SHV-AFT-150', 'pcs', 18, 5, 120, 280, '2026-08-02'],
+    ['inv_mens_facial_kit', 'cmp_gech_01', 'br_mens_01', 'bu_mens_facial', 'Men Deep Cleanse Facial Kit', 'FCL-MEN-10', 'pcs', 10, 3, 280, 520, '2026-08-04'],
   ]);
 
   // 8. ServiceInventoryRequirements
@@ -325,18 +468,11 @@ async function seedReferences(pool: DbPool) {
 }
 
 async function seedUsers(pool: DbPool) {
-  await insertMany(pool, 'users', ['id', 'company_id', 'name', 'email', 'password_hash', 'role'], [
-    ['user_super', null, 'Platform Super Admin', 'admin@serenity.et', hashPassword('Admin123!'), 'super_admin'],
-    ['user_gech_admin', 'cmp_gech_01', 'Gech Salon Admin', 'admin@gechsalon.et', hashPassword('Manager123!'), 'tenant_manager'],
-    ['user_gech_liya', 'cmp_gech_01', 'Liya Gebremedhin', 'liya@gechsalon.et', hashPassword('Staff123!'), 'receptionist'],
-    ['user_gech_samuel', 'cmp_gech_01', 'Samuel Desta', 'samuel@gechsalon.et', hashPassword('Staff123!'), 'receptionist'],
-    ['user_gech_bereket', 'cmp_gech_01', 'Bereket Shimelis', 'bereket@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-    ['user_gech_hana', 'cmp_gech_01', 'Hana Abera', 'hana@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-    ['user_gech_meron', 'cmp_gech_01', 'Meron Tadesse', 'meron@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-    ['user_gech_alma', 'cmp_gech_01', 'Alma Getahun', 'alma@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-    ['user_gech_fikir', 'cmp_gech_01', 'Fikir Worku', 'fikir@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-    ['user_gech_yonatan', 'cmp_gech_01', 'Yonatan Alemayehu', 'yonatan@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-    ['user_gech_nathan', 'cmp_gech_01', 'Nathan Tesfaye', 'nathan@gechsalon.et', hashPassword('Staff123!'), 'staff'],
-  ]);
-  console.log('[seed] created user accounts (admin@gechsalon.et / Manager123!, staff / Staff123!).');
+  await insertMany(
+    pool,
+    'users',
+    ['id', 'company_id', 'name', 'email', 'password_hash', 'role'],
+    USERS_SEED.map(([id, companyId, name, email, password, role]) => [id, companyId, name, email, hashPassword(password), role])
+  );
+  console.log('[seed] created user accounts (owner@gechsalon.et / Owner123!, admin@gechsalon.et / Manager123!, staff / Staff123!).');
 }

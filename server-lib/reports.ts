@@ -15,17 +15,18 @@ function resolveCompanyId(req: Request): string | null {
   return user.companyId;
 }
 
-function whereClauses(req: Request) {
+function whereClauses(req: Request, table = '') {
   const companyId = resolveCompanyId(req);
   const branchId = typeof req.query.branchId === 'string' ? req.query.branchId : null;
   const conditions: string[] = [];
   const values: any[] = [];
+  const q = (col: string) => (table ? `${table}.${col}` : col);
   if (companyId) {
-    conditions.push('company_id = ?');
+    conditions.push(`${q('company_id')} = ?`);
     values.push(companyId);
   }
   if (branchId) {
-    conditions.push('branch_id = ?');
+    conditions.push(`${q('branch_id')} = ?`);
     values.push(branchId);
   }
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values };
@@ -125,6 +126,35 @@ export function createReportsRouter(pool: DbPool): Router {
     res.json(rows);
   });
 
+  // Payment channel breakdown (split-payment aware, sourced from the ledger).
+  // A single payable may span multiple cash/bank lines; only the payments rows
+  // capture the true split.
+  router.get('/payments', async (req, res) => {
+    const { where, values } = whereClauses(req, 'p');
+    const from = typeof req.query.from === 'string' ? req.query.from : null;
+    const to = typeof req.query.to === 'string' ? req.query.to : null;
+    let dateFilter = '';
+    const dateValues = [...values];
+    if (from) { dateFilter += ' AND DATE(p.created_at) >= ?'; dateValues.push(from); }
+    if (to) { dateFilter += ' AND DATE(p.created_at) <= ?'; dateValues.push(to); }
+    const [rows] = (await pool.query(
+      `SELECT method, COALESCE(NULLIF(p.bank_name, ''), NULLIF(b.name, ''), 'Cash') AS channel,
+        DATE(p.created_at) AS d,
+        ROUND(SUM(p.amount_etb),2) AS amount, COUNT(*) AS lines
+       FROM payments p LEFT JOIN banks b ON b.id = p.bank_id
+       ${where}${dateFilter}
+       GROUP BY method, channel, DATE(p.created_at) ORDER BY d ASC, channel ASC`,
+      dateValues
+    )) as any;
+    res.json(rows.map((r: any) => ({
+      method: r.method,
+      channel: r.channel === 'Cash' && r.method === 'bank' ? 'Other Bank' : r.channel,
+      date: r.d,
+      amount: parseNumber(r.amount, 0),
+      lines: parseNumber(r.lines, 0),
+    })));
+  });
+
   // Expenses by category
   router.get('/expenses', async (req, res) => {
     const { where, values } = whereClauses(req);
@@ -138,10 +168,25 @@ export function createReportsRouter(pool: DbPool): Router {
   // CSV export of completed visits
   router.get('/export/visits.csv', async (req, res) => {
     const { where, values } = whereClauses(req);
+    const serviceFilter: string[] = [];
+    const serviceValues: any[] = [...values];
+    const staffId = typeof req.query.staffId === 'string' ? req.query.staffId : null;
+    const category = typeof req.query.serviceCategory === 'string' ? req.query.serviceCategory : null;
+    const onlyCompleted = req.query.completed === 'true';
+    if (staffId) {
+      serviceFilter.push('EXISTS (SELECT 1 FROM visit_session_services vss WHERE vss.visit_session_id = visit_sessions.id AND vss.staff_id = ?)');
+      serviceValues.push(staffId);
+    }
+    if (category) {
+      serviceFilter.push('EXISTS (SELECT 1 FROM visit_session_services vss JOIN services svc ON svc.id = vss.service_id WHERE vss.visit_session_id = visit_sessions.id AND svc.category = ?)');
+      serviceValues.push(category);
+    }
+    if (onlyCompleted) serviceFilter.push("status='completed'");
+    const whereAll = where + (serviceFilter.length ? `${where ? ' AND ' : 'WHERE '}${serviceFilter.join(' AND ')}` : '');
     const [rows] = (await pool.query(
       `SELECT queue_number, customer_name, status, subtotal_etb, discount_etb, net_total_etb, payment_method, started_at, completed_at
-       FROM visit_sessions ${where} ORDER BY started_at DESC`,
-      values
+       FROM visit_sessions ${whereAll} ORDER BY started_at DESC`,
+      serviceValues
     )) as any;
     csvResponse(res, 'visits_report.csv', rows, [
       'Queue',

@@ -22,7 +22,7 @@ export function scopedCompanyId(user: AuthUser, requested?: string): string | nu
 export function canAccessCompany(user: AuthUser, companyId: unknown): boolean {
   if (!user) return true;
   if (!companyId) return true;
-  if (['super_admin', 'tenant_manager', 'receptionist', 'staff'].includes(user.role)) return true;
+  if (['super_admin', 'owner', 'manager', 'reception', 'staff'].includes(user.role)) return true;
   return user.companyId === companyId;
 }
 

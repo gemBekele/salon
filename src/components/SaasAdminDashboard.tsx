@@ -20,6 +20,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  toSelectItems,
 } from './ui/select';
 import {
   Table,
@@ -45,7 +46,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 }) => {
   const [showNewCompanyModal, setShowNewCompanyModal] = useState(false);
   const [companyName, setCompanyName] = useState('');
-  const [companyPhone, setCompanyPhone] = useState('');
+  const [companyPhone, setCompanyPhone] = useState('+251 ');
   const [companyEmail, setCompanyEmail] = useState('');
   const [planId, setPlanId] = useState(subscriptionPlans[1]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +73,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       status: 'active',
       currency: 'ETB',
       timezone: 'Africa/Addis_Ababa',
-      phone: companyPhone || '+251 91 000 0000',
+      phone: companyPhone.trim().length > 4 ? companyPhone : '+251 91 000 0000',
       email: companyEmail || `admin@${companyName.toLowerCase().replace(/\s+/g, '')}.et`,
       createdAt: new Date().toISOString().split('T')[0],
     };
@@ -80,7 +81,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     onAddCompany(newCmp);
     setShowNewCompanyModal(false);
     setCompanyName('');
-    setCompanyPhone('');
+    setCompanyPhone('+251 ');
     setCompanyEmail('');
   };
 
@@ -328,7 +329,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
               <div>
                 <label className="block kpi-label mb-1.5">Subscription Plan Tier</label>
-                <Select value={planId} onValueChange={(v) => setPlanId(v)}>
+                <Select value={planId} onValueChange={(v) => setPlanId(v)} items={toSelectItems(subscriptionPlans.map((p) => ({ value: p.id, label: `${p.name} (${p.monthlyFeeEtb.toLocaleString()} ETB/mo)` })))}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>

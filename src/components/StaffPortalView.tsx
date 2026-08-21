@@ -55,10 +55,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  toSelectItems,
 } from './ui/select';
 import { PinPad } from './PinPad';
-import { apiFetch, API_BASE, readApiError } from '../lib/api';
-import { getStaffQueue } from '../lib/queue';
+import { apiFetch, readApiError } from '../lib/api';
+import { groupStaffQueue } from '../lib/queue';
 import { cn } from '../lib/utils';
 
 interface StaffPortalViewProps {
@@ -128,7 +129,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [custName, setCustName] = useState('');
-  const [custPhone, setCustPhone] = useState('');
+  const [custPhone, setCustPhone] = useState('+251 ');
   const [selectedServices, setSelectedServices] = useState<Service[]>([]);
   const [sessionNotes, setSessionNotes] = useState('');
   const [serviceCategory, setServiceCategory] = useState<string>('all');
@@ -184,10 +185,10 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     [availableServices, serviceCategory, serviceQuery]
   );
 
-  // Per-service queue for the active staff member
-  const staffQueue = activeStaff ? getStaffQueue(activeStaff.id, visitSessions, customers) : [];
+  // Per-service queue for the active staff member, grouped by customer
+  const staffQueue = activeStaff ? groupStaffQueue(activeStaff.id, visitSessions, customers) : [];
   const queuedSessions = staffQueue.filter((q) => q.available);
-  const inProgressSessions = staffQueue.filter((q) => q.service.status === 'in_progress');
+  const inProgressSessions = staffQueue.filter((q) => q.inProgress);
 
   // Ledger Calculations
   const staffCommissions = commissionLogs.filter((c) => c.staffId === activeStaff.id);
@@ -269,7 +270,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   // Register New Customer from Staff Station
   const handleCreateNewCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!custName || !custPhone || !onAddCustomer) return;
+    if (!custName || !custPhone || custPhone.trim().length <= 4 || !onAddCustomer) return;
 
     const newCust: Customer = {
       id: `cust_${Date.now()}`,
@@ -287,7 +288,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     setSelectedCustomer(newCust);
     setShowNewCustomerModal(false);
     setCustName('');
-    setCustPhone('');
+    setCustPhone('+251 ');
   };
 
   // Append Extra Service to existing ongoing session
@@ -336,9 +337,8 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
     setSwitching(true);
     setSwitchError(null);
     try {
-      const res = await fetch(API_BASE + '/api/staff/verify-pin', {
+      const res = await apiFetch('/api/staff/verify-pin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ staffId: switchTarget.id, pin }),
       });
       if (!res.ok) {
@@ -355,6 +355,20 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   };
 
   const cartTotal = selectedServices.reduce((acc, s) => acc + s.priceEtb, 0);
+
+  // Map each customer to their most recent queue ticket number so the client
+  // picker can be driven by the queue number (tablet walk-ins may not have a name).
+  const queueNumberByCustomer = useMemo(() => {
+    const m: Record<string, string> = {};
+    const sorted = [...visitSessions].sort((a, b) =>
+      String(b.startedAt || b.createdAt || '').localeCompare(String(a.startedAt || a.createdAt || ''))
+    );
+    for (const s of sorted) {
+      if (s.customerId && !m[s.customerId]) m[s.customerId] = s.queueNumber;
+    }
+    return m;
+  }, [visitSessions]);
+  const queueForCustomer = (c: Customer) => queueNumberByCustomer[c.id] || '';
 
   if (!activeStaff) {
     return (
@@ -423,12 +437,27 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                 <CardContent>
                   {selectedCustomer ? (
                     <div className="flex items-center gap-4 rounded-md border border-primary bg-primary/5 p-4">
-                      <div className="w-12 h-12 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg">
-                        {selectedCustomer.name.charAt(0)}
+                      <div className="w-12 h-12 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg font-mono">
+                        {(() => {
+                          const q = queueForCustomer(selectedCustomer);
+                          return q ? q.replace(/^Q-/i, '') : selectedCustomer.phone.replace(/\D/g, '').slice(-4);
+                        })()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-lg font-semibold text-foreground truncate">{selectedCustomer.name}</p>
-                        <p className="text-sm text-muted-foreground">{selectedCustomer.phone}</p>
+                        {(() => {
+                          const q = queueForCustomer(selectedCustomer);
+                          return q ? (
+                            <>
+                              <p className="text-lg font-semibold text-foreground truncate font-mono">{q}</p>
+                              <p className="text-sm text-muted-foreground">{selectedCustomer.phone}{selectedCustomer.isVip ? ' · ★ VIP' : ''}</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-lg font-semibold text-foreground truncate font-mono">{selectedCustomer.phone}</p>
+                              <p className="text-sm text-muted-foreground">{selectedCustomer.isVip ? '★ VIP' : 'No queue ticket yet'}</p>
+                            </>
+                          );
+                        })()}
                       </div>
                       <Button variant="outline" size="sm" onClick={() => setSelectedCustomer(null)}>
                         Change
@@ -445,14 +474,23 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                         <SelectValue placeholder="Choose a client..." />
                       </SelectTrigger>
                       <SelectContent className="max-h-72 min-w-[320px]">
-                        {customers.map((c) => (
-                          <SelectItem key={c.id} value={c.id} className="py-1.5">
-                            <div className="flex flex-col text-left">
-                              <span className="font-semibold">{c.name}</span>
-                              <span className="text-muted-foreground text-sm">{c.phone}{c.isVip ? ' ⭐' : ''}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
+                        {customers.map((c) => {
+                          const q = queueForCustomer(c);
+                          return (
+                            <SelectItem key={c.id} value={c.id} className="py-1.5">
+                              <div className="flex flex-col text-left">
+                                <span className={`font-semibold ${q ? 'font-mono' : ''}`}>{q || c.phone}</span>
+                                <span className="text-muted-foreground text-sm">
+                                  {q
+                                    ? `${c.phone}${c.isVip ? ' ⭐' : ''}`
+                                    : c.isVip
+                                    ? '⭐ VIP — no queue ticket yet'
+                                    : 'No queue ticket yet'}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   )}
@@ -652,70 +690,80 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                     </p>
                   ) : (
                     staffQueue.map((item) => {
-                      const inProgress = item.service.status === 'in_progress';
                       return (
                         <div
-                          key={item.service.id}
+                          key={item.session.id}
                           className={`rounded-md border p-2.5 space-y-2 ${
-                            inProgress ? 'border-amber-300 bg-amber-500/5' :
+                            item.inProgress ? 'border-amber-300 bg-amber-500/5' :
                             item.available ? 'border-emerald-300 bg-emerald-500/5' : 'border-border opacity-70'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm font-mono text-muted-foreground w-5">{item.position}</span>
+                              <span className="text-base font-bold font-mono text-foreground">{item.session.queueNumber}</span>
+                              <span className="text-xs font-mono text-muted-foreground">#{item.position}</span>
                               {item.isVip && <Star className="size-3.5 text-amber-500 fill-amber-500 shrink-0" />}
-                              <div className="min-w-0">
-                                <p className="font-semibold text-foreground text-sm truncate">{item.session.customerName}</p>
-                                <p className="text-sm text-muted-foreground truncate">
-                                  {item.service.serviceName}
-                                </p>
-                              </div>
                             </div>
-                            {inProgress ? (
-                              <Badge variant="warning" className="text-[10px] uppercase">In Progress</Badge>
-                            ) : item.available ? (
-                              <Badge variant="success" className="text-[10px] uppercase">Ready</Badge>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground">busy elsewhere</span>
-                            )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {item.inProgress ? (
+                                <Badge variant="warning" className="text-[10px] uppercase">In Progress</Badge>
+                              ) : item.available ? (
+                                <Badge variant="success" className="text-[10px] uppercase">Ready</Badge>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">busy elsewhere</span>
+                              )}
+                            </div>
                           </div>
+                          <p className="font-semibold text-foreground text-sm">{item.session.customerName}</p>
 
-                          {onUpdateServiceStatus && (
-                            <div className="flex items-center gap-2">
-                              {item.available && (
-                                <Button
-                                  size="sm"
-                                  className="flex-1 gap-1.5"
-                                  disabled={pendingAction !== null}
-                                  onClick={() => runPending(`start-${item.service.id}`, () => onUpdateServiceStatus(item.service.id, 'in_progress'))}
-                                >
-                                  {pendingAction === `start-${item.service.id}` ? (
-                                    <Loader2 className="size-4 animate-spin" />
-                                  ) : (
-                                    <PlayCircle className="size-4" />
+                          <div className="space-y-1.5">
+                            {item.services.map((svc) => {
+                              const inProgress = svc.status === 'in_progress';
+                              return (
+                                <div key={svc.id} className="rounded-md border border-border bg-background p-2 space-y-1.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-semibold text-foreground truncate">{svc.serviceName}</span>
+                                    <span className="text-[10px] font-semibold text-muted-foreground shrink-0">{svc.priceEtb} ETB</span>
+                                  </div>
+                                  {onUpdateServiceStatus && (
+                                    <div className="flex items-center gap-2">
+                                      {svc.status === 'pending' && (
+                                        <Button
+                                          size="sm"
+                                          className="flex-1 gap-1.5"
+                                          disabled={pendingAction !== null || !item.available}
+                                          onClick={() => runPending(`start-${svc.id}`, () => onUpdateServiceStatus(svc.id, 'in_progress'))}
+                                        >
+                                          {pendingAction === `start-${svc.id}` ? (
+                                            <Loader2 className="size-4 animate-spin" />
+                                          ) : (
+                                            <PlayCircle className="size-4" />
+                                          )}
+                                          {pendingAction === `start-${svc.id}` ? 'Starting...' : 'Start'}
+                                        </Button>
+                                      )}
+                                      {inProgress && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="flex-1 gap-1.5"
+                                          disabled={pendingAction !== null}
+                                          onClick={() => runPending(`complete-${svc.id}`, () => onUpdateServiceStatus(svc.id, 'completed'))}
+                                        >
+                                          {pendingAction === `complete-${svc.id}` ? (
+                                            <Loader2 className="size-4 animate-spin" />
+                                          ) : (
+                                            <CheckCircle className="size-4" />
+                                          )}
+                                          {pendingAction === `complete-${svc.id}` ? 'Completing...' : 'Complete'}
+                                        </Button>
+                                      )}
+                                    </div>
                                   )}
-                                  {pendingAction === `start-${item.service.id}` ? 'Starting...' : 'Start'}
-                                </Button>
-                              )}
-                              {inProgress && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="flex-1 gap-1.5"
-                                  disabled={pendingAction !== null}
-                                  onClick={() => runPending(`complete-${item.service.id}`, () => onUpdateServiceStatus(item.service.id, 'completed'))}
-                                >
-                                  {pendingAction === `complete-${item.service.id}` ? (
-                                    <Loader2 className="size-4 animate-spin" />
-                                  ) : (
-                                    <CheckCircle className="size-4" />
-                                  )}
-                                  {pendingAction === `complete-${item.service.id}` ? 'Completing...' : 'Complete'}
-                                </Button>
-                              )}
-                            </div>
-                          )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })

@@ -82,6 +82,54 @@ export function nextAvailable(
   return getStaffQueue(staffId, visitSessions, customers).find((i) => i.available) || null;
 }
 
+/** A customer grouped in a staff queue: one row per person, with all their services. */
+export interface GroupedQueueItem {
+  session: VisitSession;
+  isVip: boolean;
+  /** 1-based position in this staff's queue. */
+  position: number;
+  /** Services for this customer assigned to the staff. */
+  services: SessionServiceItem[];
+  /** The customer can be served right now (any service ready & not busy elsewhere). */
+  available: boolean;
+  /** At least one of this customer's services is in progress. */
+  inProgress: boolean;
+}
+
+/**
+ * Group one staff's queue by customer / session, so a person with several
+ * services appears once with all their services stacked underneath. The board
+ * and TV then show people (queue numbers) instead of individual services.
+ */
+export function groupStaffQueue(
+  staffId: string,
+  visitSessions: VisitSession[],
+  customers: Customer[]
+): GroupedQueueItem[] {
+  const flat = getStaffQueue(staffId, visitSessions, customers);
+  const groups = new Map<string, GroupedQueueItem>();
+  for (const item of flat) {
+    const g = groups.get(item.session.id);
+    if (g) {
+      g.services.push(item.service);
+      g.available = g.available || item.available;
+      g.inProgress = g.inProgress || item.service.status === 'in_progress';
+    } else {
+      groups.set(item.session.id, {
+        session: item.session,
+        isVip: item.isVip,
+        position: 0,
+        services: [item.service],
+        available: item.available,
+        inProgress: item.service.status === 'in_progress',
+      });
+    }
+  }
+  const ordered = [...groups.values()];
+  ordered.forEach((g, idx) => (g.position = idx + 1));
+  return ordered;
+}
+
 /** Suggest the staff with the shortest queue for a service's business unit. */
 export function suggestStaff(
   candidates: { id: string; name: string; businessUnitId: string; role: string }[],
@@ -90,7 +138,7 @@ export function suggestStaff(
   customers: Customer[]
 ): { id: string; name: string } | null {
   const inUnit = candidates.filter(
-    (s) => s.businessUnitId === businessUnitId && s.role !== 'receptionist'
+    (s) => s.businessUnitId === businessUnitId && !['receptionist', 'reception'].includes(s.role)
   );
   if (inUnit.length === 0) return null;
   let best = inUnit[0];

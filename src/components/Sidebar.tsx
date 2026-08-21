@@ -3,9 +3,7 @@ import {
   PanelLeftOpen,
   ChevronLeft,
   ChevronRight,
-  Globe,
   LogOut,
-  Bot,
 } from 'lucide-react';
 import { PersonaRole, Company, Branch } from '../types';
 import { Button } from './ui/button';
@@ -26,8 +24,6 @@ interface SidebarProps {
   setSelectedBranch: (br: Branch) => void;
   currentUser: { name?: string; role: string; companyId: string | null } | null;
   onLogout: () => void;
-  onOpenAiAssistant: () => void;
-  onViewWebsite?: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
@@ -42,8 +38,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setSelectedBranch,
   currentUser,
   onLogout,
-  onOpenAiAssistant,
-  onViewWebsite,
   collapsed,
   onToggleCollapsed,
 }) => {
@@ -55,9 +49,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const roleLabel =
     currentUser?.role === 'super_admin'
       ? 'Super Admin'
-      : currentUser?.role === 'tenant_manager'
+      : currentUser?.role === 'owner'
+      ? 'Owner'
+      : currentUser?.role === 'manager'
       ? 'Manager'
-      : currentUser?.role === 'receptionist'
+      : currentUser?.role === 'reception'
       ? 'Receptionist'
       : 'Staff';
 
@@ -160,34 +156,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer */}
       <div className={`${collapsed ? 'px-2' : 'px-3'} pt-3 border-t border-border shrink-0 space-y-1`}>
-        <Button
-          variant="outline"
-          title={collapsed ? 'AI Assistant' : undefined}
-          className={`${collapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'} h-9 rounded-lg font-medium text-sm`}
-          onClick={() => {
-            onOpenAiAssistant();
-            setOpen(false);
-          }}
-        >
-          <Bot className="size-4 shrink-0" />
-          {!collapsed && 'AI Assistant'}
-        </Button>
-
-        {onViewWebsite && (
-          <Button
-            variant="outline"
-            title={collapsed ? 'Public Website' : undefined}
-            className={`${collapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'} h-9 rounded-lg font-medium text-sm`}
-            onClick={() => {
-              onViewWebsite();
-              setOpen(false);
-            }}
-          >
-            <Globe className="size-4 shrink-0" />
-            {!collapsed && 'Public Website'}
-          </Button>
-        )}
-
         <div className={`flex items-center ${collapsed ? 'justify-center gap-2' : 'gap-2.5 mx-1'} mt-3 py-2.5 border-t border-border`}>
           <div className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-medium text-sm shrink-0">
             {userInitial}

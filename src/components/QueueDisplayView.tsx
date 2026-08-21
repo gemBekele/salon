@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tv, Star, Users } from 'lucide-react';
 import { Company, Branch, VisitSession, BusinessUnit, Staff, Customer } from '../types';
-import { getStaffQueue } from '../lib/queue';
+import { groupStaffQueue } from '../lib/queue';
 
 interface QueueDisplayViewProps {
   company: Company;
@@ -36,17 +36,8 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
     return () => clearInterval(poll);
   }, [onRefresh]);
 
-  const branchStaff = staffList.filter((s) => s.branchId === branch.id && s.role !== 'receptionist');
+  const branchStaff = staffList.filter((s) => s.branchId === branch.id && !['receptionist', 'reception'].includes(s.role));
   const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const maskPhone = (phone: string): string => {
-    const digits = (phone || '').replace(/\D/g, '');
-    if (digits.length < 7) return '****';
-    if (digits.startsWith('251') && digits.length >= 12) {
-      return `+${digits.slice(0, 6)}***${digits.slice(-3)}`;
-    }
-    return `${digits.slice(0, 3)}***${digits.slice(-3)}`;
-  };
 
   const unitNameFor = (staff: Staff): string => {
     const bu = (businessUnits || []).find((u) => u.id === staff.businessUnitId);
@@ -55,9 +46,9 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
 
   const staffBoards = branchStaff
     .map((staff) => {
-      const queue = getStaffQueue(staff.id, visitSessions, customers);
-      const serving = queue.find((q) => q.service.status === 'in_progress');
-      const next = queue.filter((q) => q.available);
+      const queue = groupStaffQueue(staff.id, visitSessions, customers);
+      const serving = queue.find((q) => q.inProgress);
+      const next = queue.filter((q) => !q.inProgress && q.available);
       return { staff, serving, next, count: queue.length };
     })
     .filter((b) => b.serving || b.next.length > 0);
@@ -100,9 +91,12 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
                     <div className="rounded-lg bg-amber-500/10 border-2 border-amber-500/30 px-4 py-4 flex flex-col items-center gap-1.5">
                       <div className="flex items-center gap-2">
                         {serving.isVip && <Star className="size-5 text-amber-400 fill-amber-400" />}
-                        <span className="text-2xl font-bold font-mono tracking-wide">{maskPhone(serving.session.customerPhone)}</span>
+                        <span className="text-2xl font-bold font-mono tracking-wide">{serving.session.queueNumber}</span>
                       </div>
-                      <p className="text-sm font-semibold text-white/70">{serving.service.serviceName}</p>
+                      <p className="text-sm font-semibold text-white/70">{serving.session.customerName}</p>
+                      {serving.services.length > 0 && (
+                        <p className="text-xs font-medium text-white/40">{serving.services.map((s) => s.serviceName).join(' + ')}</p>
+                      )}
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 px-3 py-1 text-sm font-bold text-emerald-300">
                         Go to {unitNameFor(staff)}
                       </span>
@@ -120,11 +114,11 @@ export const QueueDisplayView: React.FC<QueueDisplayViewProps> = ({
                   ) : (
                     <ul className="space-y-2">
                       {next.slice(0, 3).map((q) => (
-                        <li key={q.service.id} className="flex items-center justify-center gap-3 rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+                        <li key={q.session.id} className="flex items-center justify-center gap-3 rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
                           <span className="text-sm font-bold text-white/40">#{q.position}</span>
                           {q.isVip && <Star className="size-4 text-amber-400 fill-amber-400" />}
-                          <span className="text-lg font-bold font-mono tracking-wide">{maskPhone(q.session.customerPhone)}</span>
-                          <span className="text-xs font-semibold text-white/40">· {q.service.serviceName}</span>
+                          <span className="text-lg font-bold font-mono tracking-wide">{q.session.queueNumber}</span>
+                          <span className="text-xs font-semibold text-white/40">· {q.session.customerName}</span>
                         </li>
                       ))}
                       {next.length > 3 && (

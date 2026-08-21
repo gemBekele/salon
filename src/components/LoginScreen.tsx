@@ -126,7 +126,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
             <div className="text-center">
               <Button type="button" variant="ghost" size="sm" onClick={onReturnToWebsite} className="text-muted-foreground hover:text-foreground font-semibold text-sm gap-1.5">
                 <ArrowLeft className="size-3.5" />
-                Back to Public Website
+                Register as a Customer (no login required)
               </Button>
             </div>
           )}

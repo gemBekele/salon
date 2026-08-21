@@ -1,5 +1,5 @@
 import React, { Suspense, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useApp } from '../lib/AppContext';
@@ -24,13 +24,12 @@ function personaFromPath(pathname: string): PersonaRole {
 
 export function AppLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
   const {
     user,
     companies, selectedCompany, setSelectedCompany,
     branches, selectedBranch, setSelectedBranch,
     dbError, setDbError,
-    fetchDbState, handleLogout, setIsAiModalOpen,
+    fetchDbState, handleLogout,
   } = useApp();
 
   const persona = personaFromPath(location.pathname);
@@ -42,7 +41,7 @@ export function AppLayout() {
     setSidebarCollapsed((prev) => !prev);
   };
 
-  const [adminTab, setAdminTab] = useState<AdminTab>('branches');
+  const [adminTab, setAdminTab] = useState<AdminTab>('overview');
 
   return (
     <AdminTabContext.Provider value={{ adminTab, setAdminTab }}>
@@ -58,8 +57,6 @@ export function AppLayout() {
           setSelectedBranch={setSelectedBranch}
           currentUser={user}
           onLogout={handleLogout}
-          onOpenAiAssistant={() => setIsAiModalOpen(true)}
-          onViewWebsite={() => navigate('/')}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={toggleSidebarCollapsed}
         />

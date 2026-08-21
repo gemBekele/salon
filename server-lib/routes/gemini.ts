@@ -9,7 +9,7 @@ import { validate } from '../validate';
  */
 export function createGeminiRouter(aiClient: GoogleGenAI | null, model: string): Router {
   const router = Router();
-  router.use(authenticate, requireRoles('super_admin', 'tenant_manager'));
+  router.use(authenticate, requireRoles('super_admin', 'owner', 'manager'));
 
   router.post('/', asyncHandler(async (req, res) => {
     const errs = validate(req.body, { prompt: { required: true, type: 'string' } });

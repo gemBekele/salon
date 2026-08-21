@@ -19,13 +19,13 @@ describe('Auth utilities', () => {
   });
 
   it('should sign and verify JWT tokens', () => {
-    const user = { id: 'u1', companyId: 'c1', name: 'Test', email: 'test@test.com', role: 'tenant_manager' as const };
+    const user = { id: 'u1', companyId: 'c1', name: 'Test', email: 'test@test.com', role: 'manager' as const };
     const token = signToken(user);
     expect(token.split('.')).toHaveLength(3);
     const decoded = verifyToken(token);
     expect(decoded.id).toBe('u1');
     expect(decoded.email).toBe('test@test.com');
-    expect(decoded.role).toBe('tenant_manager');
+    expect(decoded.role).toBe('manager');
     expect(decoded.companyId).toBe('c1');
   });
 

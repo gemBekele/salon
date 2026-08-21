@@ -41,7 +41,7 @@ export function AppointmentBookingModal({
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('10:00 AM');
   const [customerName, setCustomerName] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('+251 ');
   const [customerEmail, setCustomerEmail] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
@@ -69,7 +69,7 @@ export function AppointmentBookingModal({
       return;
     }
     if (step === 4) {
-      if (!customerName.trim() || !customerPhone.trim()) {
+      if (!customerName.trim() || customerPhone.trim().length <= 4) {
         showToast('info', 'Please enter your name and phone number');
         return;
       }
