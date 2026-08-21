@@ -99,6 +99,85 @@ export function createReportsRouter(pool: DbPool): Router {
     });
   });
 
+    // Payment summary for the reception desk — today's collections by channel
+  // (cash / bank), discounts given, and the outstanding credit balance owed.
+  router.get('/payment-summary', async (req, res) => {
+    const companyId = resolveCompanyId(req);
+    const branchId = typeof req.query.branchId === 'string' && req.query.branchId ? String(req.query.branchId) : null;
+    const dateParam = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? String(req.query.date) : null;
+    const dayExpr = dateParam ? '?' : 'CURRENT_DATE';
+
+    const ledConds: string[] = [`DATE(created_at) = ${dayExpr}`];
+    const ledVals: any[] = dateParam ? [dateParam] : [];
+    if (companyId) { ledConds.unshift('company_id = ?'); ledVals.unshift(companyId); }
+    if (branchId) { ledConds.unshift('branch_id = ?'); ledVals.unshift(branchId); }
+    const [[led]] = (await pool.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN method = 'cash' THEN amount_etb - cashback_etb END), 0) AS cash,
+         COALESCE(SUM(CASE WHEN method = 'bank' THEN amount_etb - cashback_etb END), 0) AS bank
+       FROM payments WHERE ${ledConds.join(' AND ')}`,
+      ledVals
+    )) as any;
+
+    // Discounts given on sessions/retail completed the same day.
+    const doneConds = (dateCol: string): { conds: string[]; vals: any[] } => {
+      const conds: string[] = [`DATE(${dateCol}) = ${dayExpr}`];
+      const vals: any[] = dateParam ? [dateParam] : [];
+      if (companyId) { conds.unshift('company_id = ?'); vals.unshift(companyId); }
+      if (branchId) { conds.unshift('branch_id = ?'); vals.unshift(branchId); }
+      return { conds, vals };
+    };
+
+    const vDone = doneConds('completed_at');
+    const [[vDisc]] = (await pool.query(
+      `SELECT COALESCE(SUM(discount_etb), 0) AS discounts FROM visit_sessions WHERE status = 'completed' AND ${vDone.conds.join(' AND ')}`,
+      vDone.vals
+    )) as any;
+
+    const mDone = doneConds('paid_at');
+    const [[mDisc]] = (await pool.query(
+      `SELECT COALESCE(SUM(discount_etb), 0) AS discounts FROM material_sales WHERE status = 'completed' AND ${mDone.conds.join(' AND ')}`,
+      mDone.vals
+    )) as any;
+
+    // Outstanding credit = completed work not yet paid for (all-time balance).
+    const debtConds: string[] = [];
+    const debtVals: any[] = [];
+    if (companyId) { debtConds.push('company_id = ?'); debtVals.push(companyId); }
+    if (branchId) { debtConds.push('branch_id = ?'); debtVals.push(branchId); }
+    const debtWhere = debtConds.length ? `AND ${debtConds.join(' AND ')}` : '';
+
+    const [[vDebt]] = (await pool.query(
+      `SELECT COALESCE(SUM(net_total_etb), 0) AS amt, COUNT(*) AS cnt FROM visit_sessions WHERE status = 'completed' AND is_paid = FALSE ${debtWhere}`,
+      debtVals
+    )) as any;
+    const [[mDebt]] = (await pool.query(
+      `SELECT COALESCE(SUM(net_total_etb), 0) AS amt FROM material_sales WHERE status = 'completed' AND is_paid = FALSE ${debtWhere}`,
+      debtVals
+    )) as any;
+
+    const r2 = (n: any) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    const cashEtb = r2(led.cash);
+    const bankEtb = r2(led.bank);
+    const visitDiscountsEtb = r2(vDisc.discounts);
+    const retailDiscountsEtb = r2(mDisc.discounts);
+    const outstandingVisitsEtb = r2(vDebt.amt);
+    const outstandingRetailEtb = r2(mDebt.amt);
+
+    res.json({
+      cashEtb,
+      bankEtb,
+      totalCollectedEtb: r2(cashEtb + bankEtb),
+      visitDiscountsEtb,
+      retailDiscountsEtb,
+      discountsEtb: r2(visitDiscountsEtb + retailDiscountsEtb),
+      outstandingVisitsEtb,
+      outstandingVisitCount: parseNumber(vDebt.cnt, 0),
+      outstandingRetailEtb,
+      outstandingTotalEtb: r2(outstandingVisitsEtb + outstandingRetailEtb),
+    });
+  });
+
   // Daily revenue trend
   router.get('/revenue', async (req, res) => {
     const { where, values } = whereClauses(req);

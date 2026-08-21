@@ -28,6 +28,7 @@ import {
   Pencil,
   Minus,
   LogOut,
+  Banknote,
 } from 'lucide-react';
 import {
   BarChart,
@@ -221,6 +222,34 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   const branchId = branch?.id;
   const activeCompanyId = company?.id || 'cmp_gech_01';
   const fallbackBranchId = branch?.id || (staffList.length > 0 ? staffList[0].branchId : 'br_female_01');
+
+  // Inventory record editing/deletion is manager/admin-only (server enforces mgmtOnly).
+  // Reception may still restock/use stock via the adjust-stock endpoint.
+  const canManageInventory = ['super_admin', 'owner', 'manager'].includes(currentUser?.role || '');
+
+  // ---- Today's payment summary (cash / bank / discounts / outstanding) ----
+  interface PaymentSummary {
+    cashEtb: number;
+    bankEtb: number;
+    totalCollectedEtb: number;
+    discountsEtb: number;
+    outstandingVisitsEtb: number;
+    outstandingVisitCount: number;
+    outstandingRetailEtb: number;
+    outstandingTotalEtb: number;
+  }
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
+  useEffect(() => {
+    if (!activeCompanyId) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ companyId: activeCompanyId });
+    if (branchId) params.set('branchId', branchId);
+    apiFetch(`/api/reports/payment-summary?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (!cancelled && data) setPaymentSummary(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeCompanyId, branchId, lastUpdatedAt]);
 
   // ---- Daily Filtered Data ----
   const branchStaff = useMemo(
@@ -766,6 +795,31 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
         ))}
       </div>
 
+      {/* Today's Payment Summary */}
+      <Card className="border-border bg-card overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
+            <Banknote className="size-4 text-primary" />
+            <h3 className="text-sm font-bold tracking-tight text-foreground">Payment Summary — Today</h3>
+            {branch && <span className="text-[11px] font-semibold text-muted-foreground truncate">{branch.name}</span>}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border-t border-border">
+            {[
+              { label: 'Cash / Birr', value: paymentSummary ? `${paymentSummary.cashEtb.toLocaleString()} ETB` : null, tone: 'text-emerald-600 dark:text-emerald-400' },
+              { label: 'Bank Transfer', value: paymentSummary ? `${paymentSummary.bankEtb.toLocaleString()} ETB` : null, tone: 'text-sky-600 dark:text-sky-400' },
+              { label: 'Discounts Given', value: paymentSummary ? `${paymentSummary.discountsEtb.toLocaleString()} ETB` : null, tone: 'text-amber-600 dark:text-amber-400' },
+              { label: 'Total Collected', value: paymentSummary ? `${paymentSummary.totalCollectedEtb.toLocaleString()} ETB` : null, tone: 'text-primary' },
+              { label: 'Outstanding / Credit', value: paymentSummary ? `${paymentSummary.outstandingTotalEtb.toLocaleString()} ETB${paymentSummary.outstandingVisitCount > 0 ? ` (${paymentSummary.outstandingVisitCount})` : ''}` : null, tone: 'text-destructive' },
+            ].map(({ label, value, tone }) => (
+              <div key={label} className="bg-card px-3.5 py-3">
+                <p className="kpi-label mb-1.5">{label}</p>
+                <p className={`kpi-value text-lg tabular-nums ${paymentSummary ? tone : 'text-muted-foreground'}`}>{value ?? '—'}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* FULL WIDTH Main Tabs */}
       <div className="w-full">
         <Tabs value={viewTab} onValueChange={(v) => setViewTab(v as 'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses')} className="w-full">
@@ -1109,9 +1163,11 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="secondary" className="text-[11px] font-mono">{branchInventory.length} items</Badge>
-                    <Button size="sm" onClick={openAddInventory} className="gap-1.5 text-sm font-medium">
-                      <Plus className="size-3.5" /> Add Item
-                    </Button>
+                    {canManageInventory && (
+                      <Button size="sm" onClick={openAddInventory} className="gap-1.5 text-sm font-medium">
+                        <Plus className="size-3.5" /> Add Item
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -1119,7 +1175,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                   <div className="py-12 text-center text-muted-foreground space-y-2">
                     <Package className="size-8 mx-auto opacity-40" />
                     <p className="text-sm font-semibold">No inventory items found for this branch.</p>
-                    <Button variant="outline" size="sm" onClick={openAddInventory}>+ Add First Item</Button>
+                    {canManageInventory && <Button variant="outline" size="sm" onClick={openAddInventory}>+ Add First Item</Button>}
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-md border border-border">
@@ -1166,12 +1222,16 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                                   <Button size="sm" variant="outline" className="h-9 gap-1 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => { setAdjustItem(item); setAdjustQty(1); setAdjustMode('use'); }} disabled={item.currentStock <= 0}>
                                     <Minus className="size-3" /> Use
                                   </Button>
-                                  <Button size="icon" variant="ghost" className="size-8" title="Edit item" onClick={() => openEditInventory(item)}>
-                                    <Pencil className="size-3.5" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" title="Delete item" onClick={() => setConfirmDeleteItem(item)}>
-                                    <Trash2 className="size-3.5" />
-                                  </Button>
+                                  {canManageInventory && (
+                                    <>
+                                      <Button size="icon" variant="ghost" className="size-8" title="Edit item" onClick={() => openEditInventory(item)}>
+                                        <Pencil className="size-3.5" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" title="Delete item" onClick={() => setConfirmDeleteItem(item)}>
+                                        <Trash2 className="size-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

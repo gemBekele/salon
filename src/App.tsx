@@ -355,10 +355,12 @@ export default function App() {
               ) : <Navigate to="/staff" replace />
             } />
             <Route path="/admin" element={
-              <TenantAdminView company={selectedCompany} branches={branches} businessUnits={businessUnits} staffList={staffList} services={services} inventoryItems={inventoryItems} commissionLogs={commissionLogs} commissionRules={commissionRules} expenses={expenses} visitSessions={visitSessions} auditLogs={auditLogs} users={users} selectedBranch={selectedBranch}
-                onAddBranch={handleAddBranch} onAddStaff={handleAddStaff} onAddService={handleAddService} onAddInventoryItem={handleAddInventoryItem} onUpdateInventoryStock={handleUpdateInventoryStock} onSaveCommissionRule={handleSaveCommissionRule} onAddExpense={handleAddExpense} onAddAuditLog={handleAddAuditLog}
-                onUpdateBranch={handleUpdateBranch} onDeleteBranch={handleDeleteBranch} onUpdateStaff={handleUpdateStaff} onDeleteStaff={handleDeleteStaff} onUpdateService={handleUpdateService} onDeleteService={handleDeleteService} onUpdateInventoryItem={handleUpdateInventoryItem} onDeleteInventoryItem={handleDeleteInventoryItem} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onRefresh={fetchDbState}
-              />
+              user && ['super_admin', 'owner', 'manager'].includes(user.role) ? (
+                <TenantAdminView company={selectedCompany} branches={branches} businessUnits={businessUnits} staffList={staffList} services={services} inventoryItems={inventoryItems} commissionLogs={commissionLogs} commissionRules={commissionRules} expenses={expenses} visitSessions={visitSessions} auditLogs={auditLogs} users={users} selectedBranch={selectedBranch}
+                  onAddBranch={handleAddBranch} onAddStaff={handleAddStaff} onAddService={handleAddService} onAddInventoryItem={handleAddInventoryItem} onUpdateInventoryStock={handleUpdateInventoryStock} onSaveCommissionRule={handleSaveCommissionRule} onAddExpense={handleAddExpense} onAddAuditLog={handleAddAuditLog}
+                  onUpdateBranch={handleUpdateBranch} onDeleteBranch={handleDeleteBranch} onUpdateStaff={handleUpdateStaff} onDeleteStaff={handleDeleteStaff} onUpdateService={handleUpdateService} onDeleteService={handleDeleteService} onUpdateInventoryItem={handleUpdateInventoryItem} onDeleteInventoryItem={handleDeleteInventoryItem} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onRefresh={fetchDbState}
+                />
+              ) : <Navigate to="/pos" replace />
             } />
             <Route path="/pos" element={
               <ReceptionistPos company={selectedCompany} branch={selectedBranch} businessUnit={selectedBusinessUnit} staffList={staffList} services={services} customers={customers} visitSessions={visitSessions} commissionLogs={commissionLogs} inventoryItems={inventoryItems} expenses={expenses} currentUser={user}

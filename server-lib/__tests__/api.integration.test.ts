@@ -555,6 +555,63 @@ const available = await pgAvailable();
       expect(Number(cash?.amount || 0)).toBeGreaterThanOrEqual(160);
       expect(Number(bank?.amount || 0)).toBeGreaterThanOrEqual(240);
     });
+
+    it('payment summary reports today cash/bank totals and outstanding credit', async () => {
+      const auth = () => ({ Authorization: `Bearer ${receptionToken}` });
+
+      // Baseline before the new checkout.
+      const before = await request(app)
+        .get('/api/reports/payment-summary?branchId=br_female_01')
+        .set(auth());
+      expect(before.status).toBe(200);
+      expect(typeof before.body.cashEtb).toBe('number');
+      expect(typeof before.body.outstandingTotalEtb).toBe('number');
+
+      // Complete + pay a session fully in cash.
+      const cust = await request(app)
+        .post('/api/customers')
+        .set(auth())
+        .send({ companyId: 'cmp_gech_01', name: 'Summary Cash', phone: '+251 90 000 0505' });
+      const session = await request(app)
+        .post('/api/visit-sessions')
+        .set(auth())
+        .send({
+          companyId: 'cmp_gech_01',
+          branchId: 'br_female_01',
+          businessUnitId: 'bu_female_hair',
+          customerId: cust.body.id,
+          customerName: 'Summary Cash',
+          customerPhone: '+251 90 000 0505',
+          services: [{
+            serviceId: 'srv_amh_41',
+            serviceName: 'Hair Treatment',
+            staffId: 'stf_meron_02',
+            staffName: 'Meron Tadesse',
+            priceEtb: 250,
+            durationMinutes: 30,
+          }],
+        });
+      const checkout = await request(app)
+        .post('/api/payments/checkout')
+        .set(auth())
+        .send({ payableType: 'visit', payableId: session.body.id, discountEtb: 50, payments: [{ method: 'cash', amountEtb: 200 }] });
+      expect(checkout.status).toBe(200);
+
+      const after = await request(app)
+        .get('/api/reports/payment-summary?branchId=br_female_01')
+        .set(auth());
+      expect(after.status).toBe(200);
+      expect(after.body.totalCollectedEtb).toBeCloseTo(before.body.totalCollectedEtb + 200, 2);
+      expect(after.body.discountsEtb).toBeGreaterThanOrEqual(50);
+      expect(after.body.outstandingVisitCount).toBeGreaterThanOrEqual(0);
+      expect(after.body.outstandingTotalEtb).toBeCloseTo(
+        after.body.outstandingVisitsEtb + after.body.outstandingRetailEtb, 2
+      );
+
+      // Unauthenticated access is rejected.
+      const anon = await request(app).get('/api/reports/payment-summary');
+      expect(anon.status).toBe(401);
+    });
   });
 
   describe('queue numbering, reassign guard and role rework', () => {
