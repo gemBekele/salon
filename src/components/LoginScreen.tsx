@@ -215,7 +215,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                     <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Quick Demo Manager Credentials
                     </CardDescription>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
                         { label: 'Salon Admin', email: 'admin@gechsalon.et', pw: 'Manager123!' },
                         { label: 'Receptionist', email: 'liya@gechsalon.et', pw: 'Staff123!' },

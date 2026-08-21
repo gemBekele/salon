@@ -383,9 +383,9 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 bg-card border border-border rounded-md p-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-card border border-border rounded-md p-4">
         <span className="text-lg font-semibold tracking-tight text-foreground">{activeStaff.name}</span>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Queue: <span className="font-semibold text-foreground">{queuedSessions.length + inProgressSessions.length}</span>

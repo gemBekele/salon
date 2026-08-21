@@ -78,6 +78,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* Prevent iOS Safari auto-zoom when focusing form controls on small screens */
+  @media (max-width: 640px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 @layer components {

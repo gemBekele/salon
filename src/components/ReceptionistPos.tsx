@@ -693,7 +693,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               <Scissors className="size-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-lg font-semibold tracking-tight text-foreground">Receptionist Front Desk Kiosk</h1>
                 <Badge variant="outline" className="text-[10px] font-mono border-border text-muted-foreground">
                   Today's View
@@ -707,7 +707,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
             <Button
               size="xs"
               variant={showAllDates ? 'secondary' : 'outline'}
@@ -727,7 +727,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                 title="Sign out of the reception desk"
               >
                 <LogOut className="size-4" />
-                {currentUser?.name ? `Sign Out (${currentUser.name})` : 'Sign Out'}
+                Sign Out{currentUser?.name && <span className="hidden md:inline">&nbsp;({currentUser.name})</span>}
               </Button>
             )}
           </div>
