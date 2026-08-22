@@ -93,7 +93,7 @@ export function createAdminRouter(pool: DbPool): Router {
 
     const jsonArr = (rows: any, parser: (r: any) => any) => (rows as any[]).map(parser);
 
-    return res.json({
+    const payload: Record<string, any> = {
       subscriptionPlans: jsonArr(subRows, (r) => ({
         id: r.id, name: r.name, maxBranches: r.max_branches, maxBusinessUnits: r.max_business_units,
         maxStaff: r.max_staff, monthlyFeeEtb: Number(r.monthly_fee_etb),
@@ -181,7 +181,15 @@ export function createAdminRouter(pool: DbPool): Router {
         id: r.id, companyId: r.company_id, name: r.name, email: r.email, role: r.role,
         isActive: Boolean(r.is_active), lastLoginAt: r.last_login_at || undefined, createdAt: r.created_at,
       })),
-    });
+    };
+    // In sections mode, omit unrequested keys entirely — returning them as []
+    // would make the client wipe real state with empty arrays.
+    if (wanted) {
+      for (const k of Object.keys(payload)) {
+        if (!wanted.has(k)) delete payload[k];
+      }
+    }
+    return res.json(payload);
   }));
 
   router.use('/users', ...mgmtOnly);

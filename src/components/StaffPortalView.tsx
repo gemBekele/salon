@@ -160,14 +160,14 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   const [checkoutSession, setCheckoutSession] = useState<VisitSession | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('telebirr');
 
-  // Filtered Services for Active Staff
-  const staffBranchId = activeStaff.branchId || branch?.id;
+  // Filtered Services for Active Staff (safe before the !activeStaff guard)
+  const staffBranchId = activeStaff?.branchId || branch?.id;
   const availableServices = useMemo(
     () =>
       services.filter((s) =>
-        activeStaff.businessUnitId ? s.businessUnitId === activeStaff.businessUnitId : true
+        activeStaff?.businessUnitId ? s.businessUnitId === activeStaff.businessUnitId : true
       ),
-    [services, activeStaff.businessUnitId]
+    [services, activeStaff?.businessUnitId]
   );
 
   const categories = useMemo(
@@ -192,7 +192,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   const inProgressSessions = staffQueue.filter((q) => q.inProgress);
 
   // Ledger Calculations
-  const staffCommissions = commissionLogs.filter((c) => c.staffId === activeStaff.id);
+  const staffCommissions = commissionLogs.filter((c) => c.staffId === activeStaff?.id);
   const totalEarnedCommissions = staffCommissions.reduce((acc, c) => acc + c.commissionAmountEtb, 0);
   const unpaidCommissions = staffCommissions
     .filter((c) => c.payoutStatus === 'unpaid')

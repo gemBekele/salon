@@ -59,7 +59,7 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
-  const res = await fetch(API_BASE + String(input), { ...init, headers, credentials: 'include' });
+  const res = await fetch(API_BASE + String(input), { ...init, headers, credentials: 'include', cache: 'no-store' });
 
   if (res.status === 401) {
     clearToken();

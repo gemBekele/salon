@@ -51,6 +51,13 @@ export function createApp(pool: DbPool, opts: AppOptions): express.Express {
   app.use(corsMiddleware);
   app.use(requestLogger);
 
+  // API responses must never be cached — browsers otherwise replay 304s with
+  // empty bodies for XHR GETs, which the client cannot parse.
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    next();
+  });
+
   // Receipt proof images (client-compressed uploads, served back to the app).
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
