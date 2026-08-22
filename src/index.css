@@ -88,6 +88,15 @@
 }
 
 @layer components {
+  /* Invisible-scrollbar scroll containers (kiosk/builder panels) */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Page-level title: strong, restrained, medium weight */
   .page-title {
     @apply text-2xl font-semibold tracking-tight text-foreground;

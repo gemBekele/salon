@@ -21,46 +21,75 @@ export function createAdminRouter(pool: DbPool): Router {
     const scope = companyId ? 'WHERE company_id = ?' : '';
     const params = companyId ? [companyId] : [];
 
-    const [subRows] = await pool.query('SELECT * FROM subscription_plans');
-    const [cmpRows] = await pool.query('SELECT * FROM companies');
-    const [brRows] = await pool.query(`SELECT * FROM branches ${scope}`, params);
-    const [buRows] = await pool.query(`SELECT * FROM business_units ${scope}`, params);
-    const [stfRows] = await pool.query(`SELECT * FROM staff ${scope}`, params);
-    const [srvRows] = await pool.query(
+    // Lightweight mode: ?sections=visitSessions,customers returns only those
+    // slices. Hot paths (start/complete/payment + polling) use this so
+    // mutations stay fast instead of reloading the entire workspace.
+    const wanted = typeof req.query.sections === 'string' && req.query.sections.trim()
+      ? new Set(req.query.sections.split(',').map((s) => s.trim()).filter(Boolean))
+      : null;
+    const full = !wanted;
+    const want = (key: string) => full || wanted!.has(key);
+
+    const [subRows] = want('subscriptionPlans') ? await pool.query('SELECT * FROM subscription_plans') : [[]];
+    const [cmpRows] = want('companies') ? await pool.query('SELECT * FROM companies') : [[]];
+    const [brRows] = want('branches') ? await pool.query(`SELECT * FROM branches ${scope}`, params) : [[]];
+    const [buRows] = want('businessUnits') ? await pool.query(`SELECT * FROM business_units ${scope}`, params) : [[]];
+    const [stfRows] = want('staffList') ? await pool.query(`SELECT * FROM staff ${scope}`, params) : [[]];
+    const [srvRows] = want('services') ? await pool.query(
       companyId
         ? `SELECT * FROM services WHERE company_id = ? AND is_active = TRUE`
         : 'SELECT * FROM services WHERE is_active = TRUE',
       companyId ? [companyId] : []
-    );
-    const [reqRows] = await pool.query(
+    ) : [[]];
+    const [reqRows] = want('services') ? await pool.query(
       companyId
         ? `SELECT sir.* FROM service_inventory_requirements sir JOIN services s ON sir.service_id = s.id WHERE s.company_id = ?`
         : 'SELECT * FROM service_inventory_requirements',
       companyId ? [companyId] : []
-    );
-    const [invRows] = await pool.query(`SELECT * FROM inventory_items ${scope}`, params);
-    const [custRows] = await pool.query(`SELECT * FROM customers ${scope}`, params);
-    const [vstRows] = await pool.query(
+    ) : [[]];
+    const [invRows] = want('inventoryItems') ? await pool.query(`SELECT * FROM inventory_items ${scope}`, params) : [[]];
+    const [custRows] = want('customers') ? await pool.query(`SELECT * FROM customers ${scope}`, params) : [[]];
+    const [vstRows] = want('visitSessions') ? await pool.query(
       companyId
         ? `SELECT * FROM visit_sessions WHERE company_id = ? ${typeof req.query.startDate === 'string' ? 'AND started_at >= ?' : ''} ${typeof req.query.endDate === 'string' ? 'AND started_at <= ?' : ''}`
         : `SELECT * FROM visit_sessions ${typeof req.query.startDate === 'string' ? 'WHERE started_at >= ?' : ''} ${typeof req.query.endDate === 'string' ? (typeof req.query.startDate === 'string' ? 'AND' : 'WHERE') + ' started_at <= ?' : ''}`,
       [...(companyId ? [companyId] : []), ...(typeof req.query.startDate === 'string' ? [req.query.startDate] : []), ...(typeof req.query.endDate === 'string' ? [req.query.endDate + ' 23:59:59'] : [])]
-    );
-    const [sessionSrvRows] = await pool.query(
+    ) : [[]];
+    const [sessionSrvRows] = want('visitSessions') ? await pool.query(
       companyId
         ? `SELECT vss.* FROM visit_session_services vss JOIN visit_sessions vs ON vss.visit_session_id = vs.id WHERE vs.company_id = ?`
         : 'SELECT * FROM visit_session_services',
       companyId ? [companyId] : []
-    );
-    const [ruleRows] = await pool.query(`SELECT * FROM commission_rules ${scope}`, params);
-    const [logRows] = await pool.query(`SELECT * FROM commission_logs ${scope}`, params);
-    const [expRows] = await pool.query(`SELECT * FROM expenses ${scope} ORDER BY date DESC`, params);
-    const [smsRows] = await pool.query(`SELECT * FROM sms_logs ${scope} ORDER BY created_at DESC`, params);
-    const [auditRows] = await pool.query(`SELECT * FROM audit_logs ${scope} ORDER BY timestamp DESC`, params);
-    const [userRows] = await pool.query(
+    ) : [[]];
+    const [ruleRows] = want('commissionRules') ? await pool.query(`SELECT * FROM commission_rules ${scope}`, params) : [[]];
+    const [logRows] = want('commissionLogs') ? await pool.query(`SELECT * FROM commission_logs ${scope}`, params) : [[]];
+    const [expRows] = want('expenses') ? await pool.query(`SELECT * FROM expenses ${scope} ORDER BY date DESC`, params) : [[]];
+    // Display-only activity feeds are capped to keep the payload small.
+    const [smsRows] = want('smsLogs') ? await pool.query(
+      `SELECT * FROM sms_logs ${companyId ? 'WHERE company_id = ?' : ''} ORDER BY created_at DESC LIMIT 200`,
+      companyId ? [companyId] : []
+    ) : [[]];
+    const [auditRows] = want('auditLogs') ? await pool.query(
+      `SELECT * FROM audit_logs ${companyId ? 'WHERE company_id = ?' : ''} ORDER BY timestamp DESC LIMIT 300`,
+      companyId ? [companyId] : []
+    ) : [[]];
+    const [userRows] = want('users') ? await pool.query(
       companyId ? `SELECT * FROM users WHERE company_id = ?` : `SELECT * FROM users`,
       companyId ? [companyId] : []
-    );
+    ) : [[]];
+
+    // Group session services / inventory requirements once (O(n)) instead of
+    // filtering per row (O(n*m)).
+    const servicesBySession = new Map<string, any[]>();
+    for (const s of sessionSrvRows as any[]) {
+      const list = servicesBySession.get(s.visit_session_id);
+      if (list) list.push(s); else servicesBySession.set(s.visit_session_id, [s]);
+    }
+    const reqByService = new Map<string, any[]>();
+    for (const q of reqRows as any[]) {
+      const list = reqByService.get(q.service_id);
+      if (list) list.push(q); else reqByService.set(q.service_id, [q]);
+    }
 
     const jsonArr = (rows: any, parser: (r: any) => any) => (rows as any[]).map(parser);
 
@@ -92,7 +121,7 @@ export function createAdminRouter(pool: DbPool): Router {
         id: r.id, companyId: r.company_id, businessUnitId: r.business_unit_id, name: r.name, category: r.category,
         priceEtb: Number(r.price_etb), durationMinutes: r.duration_minutes, commissionType: r.commission_type,
         commissionValue: Number(r.commission_value), isActive: Boolean(r.is_active),
-        requiredInventory: (reqRows as any[]).filter((q) => q.service_id === r.id).map((q) => ({
+        requiredInventory: (reqByService.get(r.id) || []).map((q) => ({
           inventoryItemId: q.inventory_item_id, quantityUsed: Number(q.quantity_used),
         })),
       })),
@@ -115,7 +144,7 @@ export function createAdminRouter(pool: DbPool): Router {
         paymentMethod: r.payment_method || undefined, paymentReference: r.payment_reference || undefined,
         isPaid: Boolean(r.is_paid), startedAt: r.started_at, completedAt: r.completed_at || undefined,
         notes: r.notes || undefined, createdAt: r.created_at || r.started_at,
-        services: (sessionSrvRows as any[]).filter((s) => s.visit_session_id === r.id).map((s) => ({
+        services: (servicesBySession.get(r.id) || []).map((s) => ({
           id: s.id, serviceId: s.service_id, serviceName: s.service_name, staffId: s.staff_id, staffName: s.staff_name,
           priceEtb: Number(s.price_etb), durationMinutes: s.duration_minutes,
           commissionEarnedEtb: Number(s.commission_earned_etb), status: s.status, createdAt: s.created_at,

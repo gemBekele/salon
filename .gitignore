@@ -8,3 +8,6 @@ coverage/
 !.env.example
 
 *.err
+
+dist.tar.gz
+dist.zip

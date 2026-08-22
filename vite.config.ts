@@ -3,10 +3,14 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const isProd = mode === 'production';
   return {
     base: process.env.VITE_BASE || '/',
     plugins: [react(), tailwindcss()],
+    // Always bundle the PRODUCTION React build, regardless of the ambient
+    // NODE_ENV on the machine running the build.
+    define: isProd ? { 'process.env.NODE_ENV': JSON.stringify('production') } : undefined,
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

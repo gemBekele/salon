@@ -12,11 +12,18 @@ export function ErrorBoundary({ children, fallbackLabel }: ErrorBoundaryProps) {
 
   useEffect(() => {
     const handler = (event: ErrorEvent) => {
-      setError(event.error || new Error('Unknown error'));
+      setError(event.error || new Error(event.message || 'Unknown error'));
       event.preventDefault();
     };
+    const rejection = (event: PromiseRejectionEvent) => {
+      setError(event.reason instanceof Error ? event.reason : new Error(String(event.reason)));
+    };
     window.addEventListener('error', handler);
-    return () => window.removeEventListener('error', handler);
+    window.addEventListener('unhandledrejection', rejection);
+    return () => {
+      window.removeEventListener('error', handler);
+      window.removeEventListener('unhandledrejection', rejection);
+    };
   }, []);
 
   const handleReset = useCallback(() => {
@@ -34,6 +41,12 @@ export function ErrorBoundary({ children, fallbackLabel }: ErrorBoundaryProps) {
         <p className="text-sm text-gray-500 mb-4 max-w-md">
           {error.message || 'An unexpected error occurred.'}
         </p>
+        {error.stack && (
+          <details className="mb-4 max-w-2xl w-full text-left">
+            <summary className="text-xs font-semibold text-gray-400 cursor-pointer select-none">Technical details</summary>
+            <pre className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md overflow-auto max-h-48 text-[10px] leading-relaxed text-gray-600 whitespace-pre-wrap">{error.stack}</pre>
+          </details>
+        )}
         <button
           onClick={handleReset}
           className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors"

@@ -723,7 +723,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">Receptionist Front Desk Kiosk</h1>
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">Front Desk</h1>
                 <Badge variant="outline" className="text-[10px] font-mono border-border text-muted-foreground">
                   Today's View
                 </Badge>
@@ -766,11 +766,11 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
       {/* Daily KPI Row — Clickable filters */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border border-border">
         {[
-          { label: 'Queue Today', value: queuedCount, status: 'queued', dot: 'bg-sky-500' },
-          { label: 'In Progress', value: inProgressCount, status: 'in_progress', dot: 'bg-amber-500' },
-          { label: 'Done Today', value: completedToday, status: 'completed', dot: 'bg-emerald-500' },
-          { label: 'Unpaid Today', value: `${pendingCount} (${pendingUnpaidAmount} ETB)`, status: 'pending', dot: 'bg-rose-500' },
-          { label: 'Today Sales', value: `${todayRevenue.toLocaleString()} ETB`, status: 'all', dot: 'bg-primary' },
+          { label: 'Waiting', value: queuedCount, status: 'queued', dot: 'bg-sky-500' },
+          { label: 'Being Served', value: inProgressCount, status: 'in_progress', dot: 'bg-amber-500' },
+          { label: 'Finished', value: completedToday, status: 'completed', dot: 'bg-emerald-500' },
+          { label: 'Not Paid Yet', value: `${pendingCount} (${pendingUnpaidAmount} ETB)`, status: 'pending', dot: 'bg-rose-500' },
+          { label: 'Money In Today', value: `${todayRevenue.toLocaleString()} ETB`, status: 'all', dot: 'bg-primary' },
         ].map(({ label, value, status, dot }) => (
           <button
             key={status}
@@ -795,42 +795,17 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
         ))}
       </div>
 
-      {/* Today's Payment Summary */}
-      <Card className="border-border bg-card overflow-hidden">
-        <CardContent className="p-0">
-          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
-            <Banknote className="size-4 text-primary" />
-            <h3 className="text-sm font-bold tracking-tight text-foreground">Payment Summary — Today</h3>
-            {branch && <span className="text-[11px] font-semibold text-muted-foreground truncate">{branch.name}</span>}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border-t border-border">
-            {[
-              { label: 'Cash / Birr', value: paymentSummary ? `${paymentSummary.cashEtb.toLocaleString()} ETB` : null, tone: 'text-emerald-600 dark:text-emerald-400' },
-              { label: 'Bank Transfer', value: paymentSummary ? `${paymentSummary.bankEtb.toLocaleString()} ETB` : null, tone: 'text-sky-600 dark:text-sky-400' },
-              { label: 'Discounts Given', value: paymentSummary ? `${paymentSummary.discountsEtb.toLocaleString()} ETB` : null, tone: 'text-amber-600 dark:text-amber-400' },
-              { label: 'Total Collected', value: paymentSummary ? `${paymentSummary.totalCollectedEtb.toLocaleString()} ETB` : null, tone: 'text-primary' },
-              { label: 'Outstanding / Credit', value: paymentSummary ? `${paymentSummary.outstandingTotalEtb.toLocaleString()} ETB${paymentSummary.outstandingVisitCount > 0 ? ` (${paymentSummary.outstandingVisitCount})` : ''}` : null, tone: 'text-destructive' },
-            ].map(({ label, value, tone }) => (
-              <div key={label} className="bg-card px-3.5 py-3">
-                <p className="kpi-label mb-1.5">{label}</p>
-                <p className={`kpi-value text-lg tabular-nums ${paymentSummary ? tone : 'text-muted-foreground'}`}>{value ?? '—'}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* FULL WIDTH Main Tabs */}
       <div className="w-full">
         <Tabs value={viewTab} onValueChange={(v) => setViewTab(v as 'sessions' | 'board' | 'analytics' | 'inventory' | 'expenses')} className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2">
             <TabsList variant="line" className="h-9">
-              <TabsTrigger value="sessions" className="gap-1.5 text-[13px] font-medium"><Clock className="size-4" />Today's Sessions ({todayBranchSessions.length})</TabsTrigger>
-              <TabsTrigger value="board" className="gap-1.5 text-[13px] font-medium"><LayoutDashboard className="size-4" />Staff Queue Board</TabsTrigger>
-              <TabsTrigger value="inventory" className="gap-1.5 text-[13px] font-medium"><Package className="size-4" />Inventory {lowStockCount > 0 && <Badge variant="destructive" className="text-[9px] px-1.5">{lowStockCount}</Badge>}</TabsTrigger>
-              <TabsTrigger value="retail" className="gap-1.5 text-[13px] font-medium"><ShoppingCart className="size-4" />Retail Sales</TabsTrigger>
-              <TabsTrigger value="expenses" className="gap-1.5 text-[13px] font-medium"><ReceiptText className="size-4" />Expenses</TabsTrigger>
-              <TabsTrigger value="analytics" className="gap-1.5 text-[13px] font-medium"><BarChart3 className="size-4" />Daily Analytics</TabsTrigger>
+              <TabsTrigger value="sessions" className="gap-1.5 text-[13px] font-medium"><Clock className="size-4" />Customers ({todayBranchSessions.length})</TabsTrigger>
+              <TabsTrigger value="board" className="gap-1.5 text-[13px] font-medium"><LayoutDashboard className="size-4" />Staff Board</TabsTrigger>
+              <TabsTrigger value="inventory" className="gap-1.5 text-[13px] font-medium"><Package className="size-4" />Stock {lowStockCount > 0 && <Badge variant="destructive" className="text-[9px] px-1.5">{lowStockCount}</Badge>}</TabsTrigger>
+              <TabsTrigger value="retail" className="gap-1.5 text-[13px] font-medium"><ShoppingCart className="size-4" />Shop Sales</TabsTrigger>
+              <TabsTrigger value="expenses" className="gap-1.5 text-[13px] font-medium"><ReceiptText className="size-4" />Money Out</TabsTrigger>
+              <TabsTrigger value="analytics" className="gap-1.5 text-[13px] font-medium"><BarChart3 className="size-4" />Daily Report</TabsTrigger>
             </TabsList>
 
             <Button size="sm" onClick={() => { setShowCreateModal(true); setCreateStep(1); setCreationError(null); }} className="gap-1 text-sm font-medium">
@@ -1348,28 +1323,53 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
           {/* TAB 3: DAILY ANALYTICS (FULL WIDTH) */}
           <TabsContent value="analytics" className="mt-4 space-y-4">
+            {/* Payment Summary — Today */}
+            <Card className="border-border bg-card overflow-hidden">
+              <CardContent className="p-0">
+                <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
+                  <Banknote className="size-4 text-primary" />
+                  <h3 className="text-sm font-bold tracking-tight text-foreground">Payment Summary — Today</h3>
+                  {branch && <span className="text-[11px] font-semibold text-muted-foreground truncate">{branch.name}</span>}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border-t border-border">
+                  {[
+                    { label: 'Cash', value: paymentSummary ? `${paymentSummary.cashEtb.toLocaleString()} ETB` : null, tone: 'text-emerald-600 dark:text-emerald-400' },
+                    { label: 'Bank Transfer', value: paymentSummary ? `${paymentSummary.bankEtb.toLocaleString()} ETB` : null, tone: 'text-sky-600 dark:text-sky-400' },
+                    { label: 'Discounts Given', value: paymentSummary ? `${paymentSummary.discountsEtb.toLocaleString()} ETB` : null, tone: 'text-amber-600 dark:text-amber-400' },
+                    { label: 'Total Collected', value: paymentSummary ? `${paymentSummary.totalCollectedEtb.toLocaleString()} ETB` : null, tone: 'text-primary' },
+                    { label: 'Still Owed (Credit)', value: paymentSummary ? `${paymentSummary.outstandingTotalEtb.toLocaleString()} ETB${paymentSummary.outstandingVisitCount > 0 ? ` (${paymentSummary.outstandingVisitCount})` : ''}` : null, tone: 'text-destructive' },
+                  ].map(({ label, value, tone }) => (
+                    <div key={label} className="bg-card px-3.5 py-3">
+                      <p className="kpi-label mb-1.5">{label}</p>
+                      <p className={`kpi-value text-lg tabular-nums ${paymentSummary ? tone : 'text-muted-foreground'}`}>{value ?? '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="border-border ">
                 <CardContent className="p-4 space-y-1">
-                  <span className="kpi-label">Gross Daily Sales</span>
+                  <span className="kpi-label">Money In Today</span>
                   <p className="kpi-value">{todayRevenue.toLocaleString()} ETB</p>
-                  <p className="text-[11px] text-muted-foreground">Collected from completed payments today</p>
+                  <p className="text-[11px] text-muted-foreground">Everything customers paid today</p>
                 </CardContent>
               </Card>
 
               <Card className="border-border ">
                 <CardContent className="p-4 space-y-1">
-                  <span className="kpi-label">Completed Sessions Today</span>
+                  <span className="kpi-label">Customers Finished Today</span>
                   <p className="kpi-value">{completedToday}</p>
-                  <p className="text-[11px] text-muted-foreground">Total client visit checkouts completed</p>
+                  <p className="text-[11px] text-muted-foreground">Visits completed and checked out</p>
                 </CardContent>
               </Card>
 
               <Card className="border-border ">
                 <CardContent className="p-4 space-y-1">
-                  <span className="kpi-label">Unpaid Receivable Today</span>
+                  <span className="kpi-label">Not Paid Yet Today</span>
                   <p className="kpi-value text-destructive">{pendingUnpaidAmount.toLocaleString()} ETB</p>
-                  <p className="text-[11px] text-muted-foreground">{pendingCount} completed sessions awaiting payment</p>
+                  <p className="text-[11px] text-muted-foreground">{pendingCount} finished visits still waiting for payment</p>
                 </CardContent>
               </Card>
             </div>
@@ -1379,7 +1379,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               <Card className="lg:col-span-8 border-border ">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-foreground">Hourly Sales Revenue Today (ETB)</h3>
+                    <h3 className="text-sm font-medium text-foreground">Money In — Hour by Hour</h3>
                     <Badge variant="outline" className="text-[10px]">Today Only</Badge>
                   </div>
                   <div className="h-56 w-full pt-2">
@@ -1399,7 +1399,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               {/* Payment Methods Distribution */}
               <Card className="lg:col-span-4 border-border ">
                 <CardContent className="p-4 space-y-3">
-                  <h3 className="text-sm font-medium text-foreground">Today's Payment Methods</h3>
+                  <h3 className="text-sm font-medium text-foreground">How Customers Paid</h3>
                   {paymentMethodPieData.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-10">No payments recorded today yet</p>
                   ) : (
@@ -1432,16 +1432,16 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
             {/* Today's Staff Performance Table */}
             <Card className="border-border ">
               <CardContent className="p-4 space-y-3">
-                <h3 className="text-sm font-medium text-foreground">Today's Staff Performance & Commission</h3>
+                <h3 className="text-sm font-medium text-foreground">Who Did What Today</h3>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
                         <TableHead className="">Staff Member</TableHead>
                         <TableHead className="">Role</TableHead>
-                        <TableHead className="text-center">Services Rendered Today</TableHead>
-                        <TableHead className="text-right">Revenue Generated Today</TableHead>
-                        <TableHead className="text-right">Commission Accrued</TableHead>
+                        <TableHead className="text-center">Services Done</TableHead>
+                        <TableHead className="text-right">Money Brought In</TableHead>
+                        <TableHead className="text-right">Their Cut (Commission)</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1690,8 +1690,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
       <Dialog open={showCreateModal} onOpenChange={(o) => {
         if (!o && !isCreating) { setShowCreateModal(false); setCreateStep(1); setCreationError(null); }
       }}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl w-[calc(100vw-1rem)] h-[min(94dvh,840px)] p-3 sm:p-4 gap-2 [display:flex] [flex-direction:column] overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base font-medium">
               <ShoppingCart className="size-5 text-primary" />
               {createStep === 1 ? 'New Customer Session' : 'Session Summary'}
@@ -1710,9 +1710,9 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
           )}
 
           {createStep === 1 ? (
-            <div className="space-y-5">
+            <div className="flex-1 min-h-0 flex flex-col gap-3">
               {/* 1. Select Client */}
-              <div className="space-y-2">
+              <div className="shrink-0 space-y-2">
                 <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">1. Who is the customer? *</Label>
                 {selectedCustomer ? (
                   <div className="rounded-md border border-primary/30 bg-primary/10 p-3 flex items-center justify-between gap-2 text-sm">
@@ -1755,9 +1755,9 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               </div>
 
               {/* 2. Pick Services */}
-              <div className="space-y-2">
+              <div className="flex-1 min-h-0 flex flex-col gap-2">
                 <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">2. Which services? *</Label>
-                <div className="flex gap-1 overflow-x-auto pb-1">
+                <div className="flex shrink-0 gap-1 overflow-x-auto pb-1">
                   <Button size="xs" variant={serviceCategory === 'all' ? 'default' : 'outline'} onClick={() => setServiceCategory('all')} className="text-xs">
                     All
                   </Button>
@@ -1768,25 +1768,27 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[190px] overflow-y-auto pr-1">
-                  {filteredServices.map((srv) => (
-                    <button
-                      key={srv.id}
-                      type="button"
-                      onClick={() => addServiceToBuilder(srv)}
-                      className="bg-background border border-border hover:border-primary hover:bg-primary/5 p-2 rounded-md text-left cursor-pointer transition-colors"
-                    >
-                      <div className="font-semibold text-sm text-foreground truncate">{srv.name}</div>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[10px] text-muted-foreground">{srv.durationMinutes}m</span>
-                        <span className="font-medium text-sm text-foreground">{srv.priceEtb} ETB</span>
-                      </div>
-                    </button>
-                  ))}
+                <div className="no-scrollbar flex-1 min-h-0 overflow-y-auto">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 content-start">
+                    {filteredServices.map((srv) => (
+                      <button
+                        key={srv.id}
+                        type="button"
+                        onClick={() => addServiceToBuilder(srv)}
+                        className="bg-background border border-border hover:border-primary hover:bg-primary/5 p-3 rounded-md text-left cursor-pointer transition-colors active:scale-[0.98]"
+                      >
+                        <div className="font-semibold text-sm text-foreground truncate">{srv.name}</div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-[10px] text-muted-foreground">{srv.durationMinutes}m</span>
+                          <span className="font-semibold text-sm text-foreground">{srv.priceEtb} ETB</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {selectedServices.length > 0 && (
-                  <div className="rounded-md border-2 border-primary/50 bg-primary/5 p-3 space-y-2">
+                  <div className="shrink-0 rounded-md border-2 border-primary/50 bg-primary/5 p-3 space-y-2 max-h-[28vh] overflow-y-auto no-scrollbar">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-bold uppercase tracking-wider text-foreground">Selected Services ({selectedServices.length})</Label>
                       <span className="text-sm font-bold text-primary">{cartTotal} ETB</span>
@@ -1816,7 +1818,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                 )}
               </div>
 
-              <DialogFooter className="sm:justify-between gap-2">
+              <DialogFooter className="sm:justify-between gap-2 shrink-0 -mx-3 -mb-3 px-4 pt-3 sm:-mx-4 sm:-mb-4 border-t border-border">
                 <p className="text-sm text-muted-foreground">
                   Total: <span className="font-semibold text-foreground">{cartTotal} ETB</span>
                 </p>
@@ -1831,8 +1833,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               </DialogFooter>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
+            <div className="flex-1 min-h-0 flex flex-col gap-3">
+              <div className="shrink-0 rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Users className="size-4 text-primary shrink-0" />
@@ -1846,11 +1848,12 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                 <p className="text-xs text-muted-foreground font-mono truncate">{selectedCustomer?.phone}</p>
               </div>
 
-              <div className="rounded-xl border border-border overflow-hidden">
-                <div className="bg-muted/60 px-4 py-2 flex items-center justify-between">
+              <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-border overflow-hidden">
+                <div className="shrink-0 bg-muted/60 px-4 py-2 flex items-center justify-between">
                   <Label className="text-xs font-bold uppercase tracking-wider text-foreground">Services ({selectedServices.length})</Label>
                   <span className="text-sm font-bold text-primary">{cartTotal} ETB</span>
                 </div>
+                <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
                 {selectedServices.map((item, idx) => (
                   <div key={idx} className={`flex items-center justify-between gap-2 px-4 py-3 text-sm ${idx % 2 ? 'bg-muted/30' : 'bg-background'}`}>
                     <div className="min-w-0">
@@ -1862,14 +1865,15 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                     <span className="font-bold shrink-0">{item.priceEtb} ETB</span>
                   </div>
                 ))}
+                </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-xl border-2 border-primary/40 bg-primary/5 px-4 py-3">
+              <div className="shrink-0 flex items-center justify-between rounded-xl border-2 border-primary/40 bg-primary/5 px-4 py-3">
                 <p className="text-sm font-bold text-foreground uppercase tracking-wide">Total Net</p>
                 <p className="text-xl font-bold text-foreground">{cartTotal} ETB</p>
               </div>
 
-              <DialogFooter className="gap-2">
+              <DialogFooter className="gap-2 shrink-0 -mx-3 -mb-3 px-4 pt-3 sm:-mx-4 sm:-mb-4 border-t border-border">
                 <Button variant="outline" size="sm" onClick={() => setCreateStep(1)} disabled={isCreating}>
                   ← Back
                 </Button>
@@ -1885,8 +1889,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
       {/* Client Picker Modal: Search + Full-Width List + Inline New Client Form */}
       <Dialog open={showClientPicker} onOpenChange={(o) => !o && setShowClientPicker(false)}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-xl h-[min(90dvh,720px)] [display:flex] [flex-direction:column] overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base font-medium">
               {pickerMode === 'list' ? <Users className="size-5 text-primary" /> : <UserPlus className="size-5 text-primary" />}
               {pickerMode === 'list' ? 'Select Client' : 'Register New Client'}
@@ -1898,7 +1902,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <Button
               size="sm"
               variant={pickerMode === 'list' ? 'default' : 'outline'}
@@ -1918,8 +1922,8 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
           </div>
 
           {pickerMode === 'list' ? (
-            <div className="space-y-2">
-              <div className="relative">
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
+              <div className="relative shrink-0">
                 <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
                   autoFocus
@@ -1930,7 +1934,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
                 />
               </div>
 
-              <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              <div className="no-scrollbar flex-1 min-h-0 overflow-y-auto space-y-1.5">
                 {filteredPickerCustomers.length === 0 ? (
                   <div className="py-10 text-center text-muted-foreground space-y-2">
                     <Users className="size-8 mx-auto opacity-40" />
@@ -1977,7 +1981,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               </div>
             </div>
           ) : (
-            <form onSubmit={handleCreateNewCustomer} className="space-y-4 py-1">
+            <form onSubmit={handleCreateNewCustomer} className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-4 py-1">
               <div className="space-y-1.5">
                 <Label htmlFor="rcpName" className="text-sm font-medium">Full Name *</Label>
                 <div className="relative">

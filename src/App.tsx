@@ -82,9 +82,12 @@ export default function App() {
   // login screen links to (no auth required).
 
   // ── fetchDbState ──
-  const fetchDbState = useCallback(async () => {
+  // Pass a subset of section names (e.g. ['visitSessions']) for a fast partial
+  // refresh; omitted keys keep their current values. Full fetch when omitted.
+  const fetchDbState = useCallback(async (sections?: string[]) => {
     try {
-      const res = await apiFetch('/api/db-state');
+      const qs = sections?.length ? `?sections=${encodeURIComponent(sections.join(','))}` : '';
+      const res = await apiFetch(`/api/db-state${qs}`);
       if (!res.ok) { setDbError(`Could not load workspace data (${res.status}).`); return; }
       const data = await res.json();
       if (data.companies?.length) {
@@ -144,6 +147,23 @@ export default function App() {
     return () => window.removeEventListener('auth:expired', onExpired);
   }, []);
 
+  // Light polls only refresh sessions; reconcile the full workspace when the
+  // user comes back to the tab (throttled to once a minute).
+  useEffect(() => {
+    let last = 0;
+    const reconcile = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - last > 60_000) { last = now; fetchDbState(); }
+    };
+    window.addEventListener('focus', reconcile);
+    document.addEventListener('visibilitychange', reconcile);
+    return () => {
+      window.removeEventListener('focus', reconcile);
+      document.removeEventListener('visibilitychange', reconcile);
+    };
+  }, [fetchDbState]);
+
   // ── Handlers ──
   const handleLogin = (u: AuthUser, pin?: string) => {
     setUser(u);
@@ -167,7 +187,7 @@ export default function App() {
   const handleAddStaff = async (s: Staff) => { try { await apiOk(await apiFetch('/api/staff', { method: 'POST', body: JSON.stringify(s) })); await fetchDbState(); showToast('success', 'Staff created'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
   const handleAddService = async (s: Service) => { try { await apiOk(await apiFetch('/api/services', { method: 'POST', body: JSON.stringify(s) })); await fetchDbState(); showToast('success', 'Service created'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
   const handleAddInventoryItem = async (i: InventoryItem) => { try { await apiOk(await apiFetch('/api/inventory-items', { method: 'POST', body: JSON.stringify(i) })); await fetchDbState(); showToast('success', 'Inventory item created'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
-  const handleUpdateInventoryStock = async (id: string, qty: number) => { try { await apiOk(await apiFetch('/api/inventory-items/adjust-stock', { method: 'POST', body: JSON.stringify({ id, addedStock: qty }) })); await fetchDbState(); showToast('success', 'Stock updated'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
+  const handleUpdateInventoryStock = async (id: string, qty: number) => { try { await apiOk(await apiFetch('/api/inventory-items/adjust-stock', { method: 'POST', body: JSON.stringify({ id, addedStock: qty }) })); showToast('success', 'Stock updated'); fetchDbState(['inventoryItems']); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
   const handleAddCustomer = async (c: Customer) => {
     setCustomers((prev) => [c, ...prev]);
     try {
@@ -178,8 +198,8 @@ export default function App() {
         showToast('error', msg);
         throw new Error(msg);
       }
-      await fetchDbState();
       showToast('success', 'Customer registered');
+      fetchDbState(['customers']);
     } catch (e: any) {
       setCustomers((prev) => prev.filter((item) => item.id !== c.id));
       const msg = e instanceof ApiError ? e.message : (e.message || 'Failed to register customer');
@@ -197,8 +217,8 @@ export default function App() {
         showToast('error', msg);
         throw new Error(msg);
       }
-      await fetchDbState();
       showToast('success', 'Visit session created');
+      fetchDbState(['visitSessions']);
     } catch (e: any) {
       setVisitSessions((prev) => prev.filter((item) => item.id !== s.id));
       const msg = e instanceof ApiError ? e.message : (e.message || 'Failed to create visit session');
@@ -206,30 +226,50 @@ export default function App() {
       throw new Error(msg);
     }
   };
-  const handleUpdateSessionServices = async (id: string, svc: any) => { try { await apiOk(await apiFetch('/api/visit-sessions/services', { method: 'PATCH', body: JSON.stringify({ sessionId: id, service: svc }) })); await fetchDbState(); showToast('success', 'Service added'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
+  const handleUpdateSessionServices = async (id: string, svc: any) => { try { await apiOk(await apiFetch('/api/visit-sessions/services', { method: 'PATCH', body: JSON.stringify({ sessionId: id, service: svc }) })); showToast('success', 'Service added'); fetchDbState(['visitSessions']); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
   const handleUpdateServiceStatus = async (serviceId: string, status: 'in_progress' | 'completed') => {
+    // Optimistic: patch locally so Start/Complete feels instant, then
+    // reconcile with a light sessions-only refresh in the background.
+    setVisitSessions((prev) => prev.map((s) => {
+      if (!s.services.some((v) => v.id === serviceId)) return s;
+      const services = s.services.map((v) => (v.id === serviceId ? { ...v, status } : v));
+      const allDone = services.every((v) => v.status === 'completed');
+      const anyStarted = services.some((v) => v.status !== 'pending');
+      return {
+        ...s,
+        services,
+        status: status === 'completed' && allDone ? 'completed' : anyStarted ? 'in_progress' : s.status,
+        startedAt: s.startedAt || new Date().toISOString(),
+        completedAt: status === 'completed' && allDone ? (s.completedAt || new Date().toISOString()) : s.completedAt,
+      } as VisitSession;
+    }));
     try {
       const res = await apiFetch(`/api/visit-sessions/services/${serviceId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
       if (!res.ok) {
         const msg = await readApiError(res);
         showToast('error', msg);
+        fetchDbState(['visitSessions']);
         return;
       }
-      await fetchDbState();
       showToast('success', status === 'in_progress' ? 'Service started' : 'Service completed');
+      fetchDbState(['visitSessions']);
     } catch (e) {
       showToast('error', e instanceof ApiError ? e.message : 'Failed');
     }
   };
-  const handleCancelSession = async (sessionId: string, reason?: string) => { try { await apiOk(await apiFetch(`/api/visit-sessions/${sessionId}`, { method: 'DELETE', body: JSON.stringify({ reason }) })); await fetchDbState(); showToast('success', 'Client removed from queue'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
-  const handleRemoveSessionService = async (sessionId: string, serviceId: string) => { try { await apiOk(await apiFetch(`/api/visit-sessions/${sessionId}/services/${serviceId}`, { method: 'DELETE' })); await fetchDbState(); showToast('success', 'Service removed'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
+  const handleCancelSession = async (sessionId: string, reason?: string) => { try { await apiOk(await apiFetch(`/api/visit-sessions/${sessionId}`, { method: 'DELETE', body: JSON.stringify({ reason }) })); showToast('success', 'Client removed from queue'); fetchDbState(['visitSessions']); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
+  const handleRemoveSessionService = async (sessionId: string, serviceId: string) => { try { await apiOk(await apiFetch(`/api/visit-sessions/${sessionId}/services/${serviceId}`, { method: 'DELETE' })); showToast('success', 'Service removed'); fetchDbState(['visitSessions']); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
   const handleUpdateSessionStatus = async (id: string, status: 'queued' | 'in_progress' | 'completed' | 'cancelled') => {
     setVisitSessions((prev) => prev.map((s) => s.id === id ? { ...s, status } : s));
     try { const res = await apiFetch('/api/visit-sessions/status', { method: 'PATCH', body: JSON.stringify({ id, status }) }); if (res.ok) showToast('success', `Status: ${status}`); } catch { /* optimistic */ }
   };
   const handleCheckoutSession = async (id: string, method: PaymentMethod, ref: string) => {
     setVisitSessions((prev) => prev.map((s) => s.id === id ? { ...s, isPaid: true, paymentMethod: method, paymentReference: ref } : s));
-    try { await apiOk(await apiFetch('/api/visit-sessions/checkout', { method: 'POST', body: JSON.stringify({ sessionId: id, paymentMethod: method, reference: ref, completedAt: new Date().toISOString() }) })); await fetchDbState(); showToast('success', 'Checkout completed'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); }
+    try {
+      await apiOk(await apiFetch('/api/visit-sessions/checkout', { method: 'POST', body: JSON.stringify({ sessionId: id, paymentMethod: method, reference: ref, completedAt: new Date().toISOString() }) }));
+      showToast('success', 'Checkout completed');
+      fetchDbState(['visitSessions', 'customers', 'inventoryItems', 'commissionLogs']);
+    } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); }
   };
   const handleSaveCommissionRule = async (r: CommissionRule) => { try { await apiOk(await apiFetch('/api/commission-rules', { method: 'POST', body: JSON.stringify(r) })); await fetchDbState(); showToast('success', 'Commission rule saved'); } catch (e) { showToast('error', e instanceof ApiError ? e.message : 'Failed'); } };
   const handleAddExpense = async (e: ExpenseRecord) => { try { await apiOk(await apiFetch('/api/expenses', { method: 'POST', body: JSON.stringify(e) })); await fetchDbState(); showToast('success', 'Expense created'); } catch (e2) { showToast('error', e2 instanceof ApiError ? e2.message : 'Failed'); } };
@@ -289,6 +329,7 @@ export default function App() {
 
   return (
     <AppProvider value={ctx}>
+      <ErrorBoundary fallbackLabel="The app hit an unexpected error">
       <Routes>
         {/* ── Public: Website landing page ── */}
         <Route path="/" element={
@@ -364,14 +405,14 @@ export default function App() {
             } />
             <Route path="/pos" element={
               <ReceptionistPos company={selectedCompany} branch={selectedBranch} businessUnit={selectedBusinessUnit} staffList={staffList} services={services} customers={customers} visitSessions={visitSessions} commissionLogs={commissionLogs} inventoryItems={inventoryItems} expenses={expenses} currentUser={user}
-                onCreateVisitSession={handleCreateVisitSession} onCheckoutSession={handleCheckoutSession} onAddCustomer={handleAddCustomer} onUpdateSessionStatus={handleUpdateSessionStatus} onRefresh={fetchDbState}
+                onCreateVisitSession={handleCreateVisitSession} onCheckoutSession={handleCheckoutSession} onAddCustomer={handleAddCustomer} onUpdateSessionStatus={handleUpdateSessionStatus} onRefresh={() => fetchDbState(['visitSessions', 'customers', 'inventoryItems', 'commissionLogs'])}
                 onCancelSession={handleCancelSession} onRemoveSessionService={handleRemoveSessionService}
                 onAddInventoryItem={handleAddInventoryItem} onUpdateInventoryItem={handleUpdateInventoryItem} onDeleteInventoryItem={handleDeleteInventoryItem} onUpdateInventoryStock={handleUpdateInventoryStock} onAddExpense={handleAddExpense} onLogout={handleLogout}
               />
             } />
             <Route path="/staff" element={
               <StaffPortalView company={selectedCompany} branch={selectedBranch} staffList={staffList} loggedInStaffId={user?.role === 'staff' ? user.id : undefined} services={services} customers={customers} inventoryItems={inventoryItems} commissionLogs={commissionLogs} visitSessions={visitSessions} branches={branches} businessUnits={businessUnits}
-                onCreateVisitSession={handleCreateVisitSession} onUpdateSessionStatus={handleUpdateSessionStatus} onAddCustomer={handleAddCustomer} onUpdateSessionServices={handleUpdateSessionServices} onCheckoutSession={handleCheckoutSession} onRefresh={fetchDbState} onLogout={handleLogout}
+                onCreateVisitSession={handleCreateVisitSession} onUpdateSessionStatus={handleUpdateSessionStatus} onAddCustomer={handleAddCustomer} onUpdateSessionServices={handleUpdateSessionServices} onCheckoutSession={handleCheckoutSession} onRefresh={() => fetchDbState(['visitSessions', 'commissionLogs'])} onLogout={handleLogout}
                 onUpdateServiceStatus={handleUpdateServiceStatus}
               />
             } />
@@ -388,6 +429,7 @@ export default function App() {
             : <Navigate to="/login" replace />
         } />
       </Routes>
+      </ErrorBoundary>
 
       {/* ── Overlays ── */}
       <Suspense fallback={null}>
@@ -438,7 +480,7 @@ function TabletPage(props: { company: Company; branch: Branch; services: Service
 }
 
 /** Wraps TV fullscreen display with routing. */
-function TvPage(props: { fetchDbState: () => Promise<void>; visitSessions: VisitSession[]; businessUnits: BusinessUnit[]; companies: Company[]; branches: Branch[]; selectedCompany: Company | null; selectedBranch: Branch | null; staffList: Staff[]; customers: Customer[] }) {
+  function TvPage(props: { fetchDbState: (sections?: string[]) => Promise<void>; visitSessions: VisitSession[]; businessUnits: BusinessUnit[]; companies: Company[]; branches: Branch[]; selectedCompany: Company | null; selectedBranch: Branch | null; staffList: Staff[]; customers: Customer[] }) {
   const navigate = useNavigate();
   const company = props.selectedCompany || props.companies?.[0] || { id: 'comp_1', name: 'Gech Beauty Salon', code: 'GECH-HW', city: 'Hawassa', currency: 'ETB', createdAt: new Date().toISOString() };
   const branch = props.selectedBranch || props.branches?.[0] || { id: 'br_1', companyId: company.id, name: 'Hawassa Central Branch', code: 'HW-01', city: 'Hawassa', createdAt: new Date().toISOString() };
@@ -451,7 +493,7 @@ function TvPage(props: { fetchDbState: () => Promise<void>; visitSessions: Visit
       staffList={props.staffList}
       customers={props.customers}
       onExitTvMode={() => navigate('/pos')}
-      onRefresh={props.fetchDbState}
+      onRefresh={() => props.fetchDbState(['visitSessions'])}
     />
   );
 }

@@ -118,13 +118,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
   const allStaff = groups.flatMap((g) => g.staff);
 
   return (
-    <div className="min-h-screen flex bg-background font-sans selection:bg-primary selection:text-primary-foreground">
-      {/* Login panel — centered */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-[#fafafa] dark:bg-[#09090b]">
-        <div className="w-full max-w-md space-y-4">
+    <div className="fixed inset-0 overflow-hidden flex bg-background font-sans selection:bg-primary selection:text-primary-foreground">
+      {/* Login panel — fills the viewport exactly, never scrolls */}
+      <div className="flex-1 h-full flex items-center justify-center p-3 sm:p-6 bg-[#fafafa] dark:bg-[#09090b]">
+        <div className="w-full max-w-md h-full max-h-[820px] flex flex-col justify-center gap-2.5">
           {onReturnToWebsite && (
-            <div className="text-center">
-              <Button type="button" variant="ghost" size="sm" onClick={onReturnToWebsite} className="text-muted-foreground hover:text-foreground font-semibold text-sm gap-1.5">
+            <div className="text-center shrink-0">
+              <Button type="button" variant="ghost" size="sm" onClick={onReturnToWebsite} className="text-muted-foreground hover:text-foreground font-semibold text-xs sm:text-sm gap-1.5">
                 <ArrowLeft className="size-3.5" />
                 Register as a Customer (no login required)
               </Button>
@@ -132,16 +132,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
           )}
 
           {/* Brand */}
-          <div className="text-center mb-2">
-            <div className="w-14 h-14 mx-auto rounded-md bg-primary flex items-center justify-center text-primary-foreground">
-              <Scissors className="w-7 h-7" />
+          <div className="text-center shrink-0">
+            <div className="w-11 h-11 mx-auto rounded-md bg-primary flex items-center justify-center text-primary-foreground">
+              <Scissors className="w-5 h-5" />
             </div>
-            <h1 className="mt-3 text-xl font-semibold tracking-tight text-foreground">Gech Beauty Salon</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Hawassa Salon ERP & POS</p>
+            <h1 className="mt-1.5 text-lg font-semibold tracking-tight text-foreground">Gech Beauty Salon</h1>
+            <p className="text-xs text-muted-foreground">Hawassa Salon ERP &amp; POS</p>
           </div>
 
-          <Card className="border-border bg-card rounded-md overflow-hidden">
-            <CardHeader className="pb-3 bg-muted/30 border-b border-border">
+          <Card className="border-border bg-card rounded-md overflow-hidden flex flex-col min-h-0">
+            <CardHeader className="pb-2.5 pt-3 bg-muted/30 border-b border-border shrink-0">
               <Tabs
                 value={mode}
                 onValueChange={(v) => {
@@ -152,11 +152,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                 }}
               >
                 <TabsList className="w-full p-1 bg-muted rounded-md">
-                  <TabsTrigger value="staff" className="flex-1 gap-2 text-sm font-semibold rounded-md">
+                  <TabsTrigger value="staff" className="flex-1 gap-1.5 text-[13px] font-semibold rounded-md">
                     <Users className="size-4" />
-                    Staff Quick PIN
+                    Staff PIN
                   </TabsTrigger>
-                  <TabsTrigger value="manager" className="flex-1 gap-2 text-sm font-semibold rounded-md">
+                  <TabsTrigger value="manager" className="flex-1 gap-1.5 text-[13px] font-semibold rounded-md">
                     <ShieldCheck className="size-4" />
                     Manager / Admin
                   </TabsTrigger>
@@ -164,10 +164,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
               </Tabs>
             </CardHeader>
 
-            <CardContent className="pt-6 pb-6 px-6">
+            <CardContent className="pt-3 pb-3 px-4 flex-1 min-h-0 flex flex-col">
               {mode === 'manager' ? (
-                <form onSubmit={handleManagerSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
+                <form onSubmit={handleManagerSubmit} className="space-y-3">
+                  <div className="space-y-1">
                     <Label htmlFor="email" className="kpi-label">Email Address</Label>
                     <div className="relative">
                       <Mail className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -183,7 +183,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label htmlFor="password" className="kpi-label">Password</Label>
                     <div className="relative">
                       <Lock className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -211,11 +211,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                     {loading ? 'Authenticating...' : 'Sign In to Dashboard'}
                   </Button>
 
-                  <div className="pt-3 space-y-2 border-t border-border">
+                  <div className="pt-2 space-y-1.5 border-t border-border">
                     <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Quick Demo Manager Credentials
                     </CardDescription>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       {[
                         { label: 'Salon Admin', email: 'admin@gechsalon.et', pw: 'Manager123!' },
                         { label: 'Receptionist', email: 'liya@gechsalon.et', pw: 'Staff123!' },
@@ -226,14 +226,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                           key={acc.email}
                           type="button"
                           variant="outline"
-                          className="h-auto flex-col items-start py-2 px-3 text-left border-border hover:border-primary/50 hover:bg-primary/5 rounded-md transition-colors"
+                          className="h-auto flex-col items-start py-1.5 px-2.5 text-left border-border hover:border-primary/50 hover:bg-primary/5 rounded-md transition-colors min-w-0"
                           onClick={() => {
                             setEmail(acc.email);
                             setPassword(acc.pw);
                             setError('');
                           }}
                         >
-                          <span className="text-sm font-semibold text-foreground">{acc.label}</span>
+                          <span className="text-xs font-semibold text-foreground">{acc.label}</span>
                           <span className="text-[10px] text-muted-foreground font-mono truncate w-full">{acc.email}</span>
                         </Button>
                       ))}
@@ -241,12 +241,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                   </div>
                 </form>
               ) : selectedStaff ? (
-                <div className="space-y-3">
+                <div className="flex flex-col min-h-0 flex-1 gap-2 justify-center overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="text-muted-foreground hover:text-foreground text-sm font-semibold"
+                    className="text-muted-foreground hover:text-foreground text-xs font-semibold self-start shrink-0 -ml-2"
                     onClick={() => {
                       setSelectedStaff(null);
                       setPinError(null);
@@ -256,13 +256,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                     Back to Staff List
                   </Button>
 
-                  <div className="text-center py-2 space-y-2">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-muted text-foreground flex items-center justify-center border-2 border-border">
-                      <span className="text-2xl font-semibold">{selectedStaff.name.charAt(0)}</span>
+                  <div className="text-center py-1 space-y-1.5 shrink-0">
+                    <div className="w-14 h-14 mx-auto rounded-full bg-muted text-foreground flex items-center justify-center border-2 border-border">
+                      <span className="text-xl font-semibold">{selectedStaff.name.charAt(0)}</span>
                     </div>
                     <div>
-                      <p className="font-semibold text-foreground text-lg">{selectedStaff.name}</p>
-                      <p className="text-sm text-muted-foreground font-medium">{selectedStaff.branchName}</p>
+                      <p className="font-semibold text-foreground text-base leading-tight">{selectedStaff.name}</p>
+                      <p className="text-xs text-muted-foreground font-medium">{selectedStaff.branchName}</p>
                     </div>
                   </div>
 
@@ -274,32 +274,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                   />
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="text-center space-y-1">
-                    <h3 className="text-sm font-semibold text-foreground">Select Your Staff Name</h3>
-                    <p className="text-sm text-muted-foreground">
+                <div className="flex flex-col min-h-0 flex-1 gap-2.5">
+                  <div className="text-center space-y-0.5 shrink-0">
+                    <h3 className="text-sm font-semibold text-foreground">Select Your Name</h3>
+                    <p className="text-xs text-muted-foreground">
                       {optionsLoading
                         ? 'Fetching active staff list...'
                         : allStaff.length === 0
                         ? 'No active staff registered.'
-                        : 'Tap your profile to enter your 4-digit PIN'}
+                        : 'Tap your profile, then enter your 4-digit PIN'}
                     </p>
                   </div>
 
                   {optionsLoading ? (
-                    <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                    <div className="flex flex-col items-center justify-center py-10 space-y-2">
                       <Loader2 className="size-7 animate-spin text-primary" />
                       <span className="text-sm text-muted-foreground font-medium">Loading employee list...</span>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2.5 max-h-[340px] overflow-y-auto pr-1">
+                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(104px,1fr))] auto-rows-min gap-2 content-start flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1">
                       {allStaff.map((st) => (
                         <Button
                           key={st.id}
                           type="button"
                           variant="outline"
                           className={cn(
-                            'flex items-center gap-3 rounded-md border-border bg-card px-3.5 py-3 text-left transition-colors cursor-pointer h-auto justify-start',
+                            'flex flex-col items-center justify-center gap-1.5 rounded-md border-border bg-card px-2 py-3 text-center h-auto min-h-[84px] w-full transition-colors cursor-pointer',
                             'hover:border-primary hover:bg-primary/5 active:scale-95'
                           )}
                           onClick={() => {
@@ -307,13 +307,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                             setPinError(null);
                           }}
                         >
-                          <div className="w-10 h-10 shrink-0 rounded-md bg-muted text-foreground flex items-center justify-center font-semibold text-sm border border-border">
+                          <div className="w-10 h-10 shrink-0 rounded-md bg-muted text-foreground flex items-center justify-center font-semibold text-base border border-border">
                             {st.name.charAt(0)}
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">{st.name}</p>
-                            <p className="text-[10px] text-muted-foreground truncate">{st.branchName}</p>
-                          </div>
+                          <span className="text-xs font-semibold text-foreground leading-tight line-clamp-2 break-words">{st.name}</span>
                         </Button>
                       ))}
                     </div>
@@ -324,7 +321,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
           </Card>
 
           {onLaunchTv && (
-            <div className="pt-1">
+            <div className="pt-0.5 shrink-0">
               {showTvPinPrompt ? (
                 <Card className="border-border rounded-md">
                   <CardContent className="p-4 space-y-3">

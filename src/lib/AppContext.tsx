@@ -53,7 +53,7 @@ export interface AppState {
   setIsBookingModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setBookingServiceId: React.Dispatch<React.SetStateAction<string | null>>;
 
-  fetchDbState: () => Promise<void>;
+  fetchDbState: (sections?: string[]) => Promise<void>;
   handleLogin: (u: AuthUser, pin?: string) => void;
   handleLogout: () => Promise<void>;
 
