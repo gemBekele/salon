@@ -1,18 +1,26 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
-import { mgmtOnly, asyncHandler } from '../middleware';
+import { mgmtOnly, deskOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound, createAuditLogger } from '../core';
+
+/** Fallback daily cap for reception-recorded expenses when a branch has no limit set. */
+const RECEPTION_DAILY_EXPENSE_LIMIT = Number(process.env.EXPENSE_RECEPTION_DAILY_LIMIT || 2000);
 
 /**
  * Financial & ledger routes: expenses, commission rules + payout status,
  * audit log writes/export and SMS log writes.
+ *
+ * Access policy:
+ *  - Commission rules/payouts, audit logs, SMS logs, feedback → management only.
+ *  - Expenses: recording is open to the front desk (reception included) with a
+ *    per-branch daily cap for reception; editing/deleting stays management-only.
  */
 export function createFinanceRouter(pool: DbPool): Router {
   const router = Router();
   const insertAudit = createAuditLogger(pool);
 
-  router.use(['/commission-rules', '/commission-logs', '/expenses', '/audit-logs', '/audit', '/sms-logs', '/feedback'], ...mgmtOnly);
+  router.use(['/commission-rules', '/commission-logs', '/audit-logs', '/audit', '/sms-logs', '/feedback'], ...mgmtOnly);
 
   // ==========================================================
   // Commission rules
@@ -145,7 +153,7 @@ export function createFinanceRouter(pool: DbPool): Router {
   // ==========================================================
   // Expenses
   // ==========================================================
-  router.post('/expenses', asyncHandler(async (req, res) => {
+  router.post('/expenses', ...deskOnly, asyncHandler(async (req, res) => {
     if (!canAccessCompany(req.user!, req.body.companyId)) return res.status(403).json({ error: 'Company not found' });
     const errs = validate(req.body, {
       companyId: { required: true },
@@ -160,23 +168,22 @@ export function createFinanceRouter(pool: DbPool): Router {
     const b = req.body;
     const id = uid('exp');
 
-    // Enforce the branch daily expense limit (set by salon admin) for receptionist-recorded expenses
+    // Enforce the branch daily expense limit for reception-recorded expenses.
+    // Falls back to the platform default when the branch has no limit configured.
     if (req.user && req.user.role === 'reception') {
       const [brRows] = (await pool.query(`SELECT daily_expense_limit_etb FROM branches WHERE id = ?`, [b.branchId])) as any;
       const br = brRows[0];
-      const limit = br ? Number(br.daily_expense_limit_etb || 0) : 0;
-      if (limit > 0) {
-        const today = new Date().toISOString().slice(0, 10);
-        const [expRows] = (await pool.query(
-          `SELECT COALESCE(SUM(amount_etb), 0) AS total FROM expenses WHERE company_id = ? AND branch_id = ? AND date = ?`,
-          [b.companyId, b.branchId, today]
-        )) as any;
-        const spent = Number(expRows[0]?.total || 0);
-        if (spent + Number(b.amountEtb) > limit) {
-          return res.status(400).json({
-            error: `Daily expense limit exceeded. Branch limit is ${limit} ETB, ${spent.toFixed(2)} ETB already recorded today (${b.amountEtb} ETB would exceed it).`,
-          });
-        }
+      const branchLimit = br && Number(br.daily_expense_limit_etb) > 0 ? Number(br.daily_expense_limit_etb) : RECEPTION_DAILY_EXPENSE_LIMIT;
+      const today = new Date().toISOString().slice(0, 10);
+      const [expRows] = (await pool.query(
+        `SELECT COALESCE(SUM(amount_etb), 0) AS total FROM expenses WHERE company_id = ? AND branch_id = ? AND date = ?`,
+        [b.companyId, b.branchId, today]
+      )) as any;
+      const spent = Number(expRows[0]?.total || 0);
+      if (spent + Number(b.amountEtb) > branchLimit) {
+        return res.status(400).json({
+          error: `Daily expense limit exceeded. Branch limit is ${branchLimit} ETB, ${spent.toFixed(2)} ETB already recorded today (${b.amountEtb} ETB would exceed it).`,
+        });
       }
     }
 
@@ -189,7 +196,7 @@ export function createFinanceRouter(pool: DbPool): Router {
     res.json({ success: true, id });
   }));
 
-  router.put('/expenses/:id', asyncHandler(async (req, res) => {
+  router.put('/expenses/:id', ...mgmtOnly, asyncHandler(async (req, res) => {
     const [rows] = (await pool.query(`SELECT company_id FROM expenses WHERE id = ?`, [req.params.id])) as any;
     const exp = rows[0];
     if (!exp) return notFound('Expense not found');
@@ -209,7 +216,7 @@ export function createFinanceRouter(pool: DbPool): Router {
     res.json({ success: true });
   }));
 
-  router.delete('/expenses/:id', asyncHandler(async (req, res) => {
+  router.delete('/expenses/:id', ...mgmtOnly, asyncHandler(async (req, res) => {
     const [rows] = (await pool.query(`SELECT company_id, description FROM expenses WHERE id = ?`, [req.params.id])) as any;
     const exp = rows[0];
     if (!exp) return notFound('Expense not found');

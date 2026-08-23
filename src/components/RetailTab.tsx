@@ -175,7 +175,7 @@ export const RetailTab: React.FC<RetailTabProps> = ({
                   <div key={item.id} className="rounded-md border border-border p-3 flex flex-col justify-between gap-2">
                     <div>
                       <p className="text-sm font-medium text-foreground/90 leading-tight">{item.name}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">{item.sku} · {item.currentStock} {item.unit || 'units'}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{item.currentStock} {item.unit || 'units'} in stock</p>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-foreground">{Number(item.sellingPriceEtb).toLocaleString()} ETB</span>

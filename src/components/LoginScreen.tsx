@@ -217,10 +217,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                     </CardDescription>
                     <div className="grid grid-cols-2 gap-1.5">
                       {[
-                        { label: 'Salon Admin', email: 'admin@gechsalon.et', pw: 'Manager123!' },
+                        { label: 'Salon Manager', email: 'admin@gechsalon.et', pw: 'Manager123!' },
                         { label: 'Receptionist', email: 'liya@gechsalon.et', pw: 'Staff123!' },
-                        { label: 'Super Admin', email: 'admin@serenity.et', pw: 'Admin123!' },
-                        { label: 'Staff Member', email: 'bereket@gechsalon.et', pw: 'Staff123!' },
                       ].map((acc) => (
                         <Button
                           key={acc.email}

@@ -178,3 +178,24 @@ export const posOnly: RequestHandler[] = [
   requireRoles('super_admin', 'owner', 'manager', 'reception', 'staff'),
   rateLimit(180, 60_000),
 ];
+
+/**
+ * Front-desk write access: everyone who may work the till EXCEPT PIN-issued
+ * staff sessions (staff portal only). Used for customers, visit sessions,
+ * retail sales, checkout and stock adjustments.
+ */
+export const deskOnly: RequestHandler[] = [
+  authenticate,
+  requireRoles('super_admin', 'owner', 'manager', 'reception'),
+  rateLimit(180, 60_000),
+];
+
+/**
+ * Financial-report read tiers. Staff get nothing; reception is restricted to
+ * today's data by the report routes themselves; management sees everything.
+ */
+export const reportsRead: RequestHandler[] = [
+  authenticate,
+  requireRoles('super_admin', 'owner', 'manager', 'reception'),
+  rateLimit(120, 60_000),
+];

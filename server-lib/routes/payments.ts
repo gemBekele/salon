@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
 import type { SmsService } from '../sms';
-import { authenticate, mgmtOnly, asyncHandler } from '../middleware';
+import { authenticate, mgmtOnly, deskOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound, createAuditLogger } from '../core';
 import { createPaymentService } from '../payments';
@@ -81,7 +81,7 @@ export function createPaymentsRouter(pool: DbPool, sms: SmsService): Router {
   // ==========================================================
   // Receipt image upload (client-compressed, stored on server)
   // ==========================================================
-  router.post('/upload', asyncHandler(async (req, res) => {
+  router.post('/upload', ...deskOnly, asyncHandler(async (req, res) => {
     const data = typeof req.body?.data === 'string' ? req.body.data : null;
     const path = await payments.saveReceipt(data, req.body?.filename);
     res.json({ success: true, path });
@@ -90,7 +90,7 @@ export function createPaymentsRouter(pool: DbPool, sms: SmsService): Router {
   // ==========================================================
   // Unified checkout (visit | material_sale | group)
   // ==========================================================
-  router.post('/checkout', asyncHandler(async (req, res) => {
+  router.post('/checkout', ...deskOnly, asyncHandler(async (req, res) => {
     const errs = validate(req.body, {
       payableType: { required: true, enum: ['visit', 'material_sale', 'group'] },
       payableId: { required: true },
@@ -107,7 +107,15 @@ export function createPaymentsRouter(pool: DbPool, sms: SmsService): Router {
     const type = typeof req.query.payableType === 'string' && req.query.payableType ? String(req.query.payableType) : null;
     const id = typeof req.query.payableId === 'string' && req.query.payableId ? String(req.query.payableId) : null;
     if (type && id) {
+      // Payment history for one payable — front-desk readable.
+      if (!['super_admin', 'owner', 'manager', 'reception'].includes(req.user!.role)) {
+        return res.status(403).json({ error: 'You do not have permission to perform this action' });
+      }
       return res.json(await payments.listPayments(req.user!, type, id));
+    }
+    // Broad ledger — management only.
+    if (!['super_admin', 'owner', 'manager'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'You do not have permission to perform this action' });
     }
     const companyId = typeof req.query.companyId === 'string' ? req.query.companyId : null;
     const branchId = typeof req.query.branchId === 'string' ? req.query.branchId : null;

@@ -40,7 +40,7 @@ import {
   SubscriptionPlan,
   User,
 } from './types';
-import { apiFetch, clearToken, apiOk, ApiError, readApiError } from './lib/api';
+import { apiFetch, clearToken, getToken, apiOk, ApiError, readApiError } from './lib/api';
 
 export default function App() {
   // ── Auth ──
@@ -85,6 +85,7 @@ export default function App() {
   // Pass a subset of section names (e.g. ['visitSessions']) for a fast partial
   // refresh; omitted keys keep their current values. Full fetch when omitted.
   const fetchDbState = useCallback(async (sections?: string[]) => {
+    if (!getToken()) return;
     try {
       const qs = sections?.length ? `?sections=${encodeURIComponent(sections.join(','))}` : '';
       const res = await apiFetch(`/api/db-state${qs}`);
@@ -404,17 +405,21 @@ export default function App() {
               ) : <Navigate to="/pos" replace />
             } />
             <Route path="/pos" element={
+              user?.role === 'staff' ? <Navigate to="/staff" replace /> : (
               <ReceptionistPos company={selectedCompany} branch={selectedBranch} businessUnit={selectedBusinessUnit} staffList={staffList} services={services} customers={customers} visitSessions={visitSessions} commissionLogs={commissionLogs} inventoryItems={inventoryItems} expenses={expenses} currentUser={user}
                 onCreateVisitSession={handleCreateVisitSession} onCheckoutSession={handleCheckoutSession} onAddCustomer={handleAddCustomer} onUpdateSessionStatus={handleUpdateSessionStatus} onRefresh={() => fetchDbState(['visitSessions', 'customers', 'inventoryItems', 'commissionLogs'])}
                 onCancelSession={handleCancelSession} onRemoveSessionService={handleRemoveSessionService}
                 onAddInventoryItem={handleAddInventoryItem} onUpdateInventoryItem={handleUpdateInventoryItem} onDeleteInventoryItem={handleDeleteInventoryItem} onUpdateInventoryStock={handleUpdateInventoryStock} onAddExpense={handleAddExpense} onLogout={handleLogout}
               />
+              )
             } />
             <Route path="/staff" element={
+              user && user.role !== 'staff' ? <Navigate to="/admin" replace /> : (
               <StaffPortalView company={selectedCompany} branch={selectedBranch} staffList={staffList} loggedInStaffId={user?.role === 'staff' ? user.id : undefined} services={services} customers={customers} inventoryItems={inventoryItems} commissionLogs={commissionLogs} visitSessions={visitSessions} branches={branches} businessUnits={businessUnits}
                 onCreateVisitSession={handleCreateVisitSession} onUpdateSessionStatus={handleUpdateSessionStatus} onAddCustomer={handleAddCustomer} onUpdateSessionServices={handleUpdateSessionServices} onCheckoutSession={handleCheckoutSession} onRefresh={() => fetchDbState(['visitSessions', 'commissionLogs'])} onLogout={handleLogout}
                 onUpdateServiceStatus={handleUpdateServiceStatus}
               />
+              )
             } />
             <Route path="/architect" element={
               <ArchitectBlueprintView sections={mockArchitectureSections} />

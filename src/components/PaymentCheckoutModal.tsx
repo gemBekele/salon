@@ -265,7 +265,7 @@ export function PaymentCheckoutModal({ open, onOpenChange, target, onSuccess }: 
           )}
 
           {(method === 'bank' || method === 'mixed') && (
-            <div className="rounded-md border border-border p-3 space-y-2">
+            <div className="rounded-md border border-border p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Select
                 value={bankId}
                 onValueChange={(v) => {

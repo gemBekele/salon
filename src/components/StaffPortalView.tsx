@@ -449,7 +449,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         variant="outline"
-                        className="h-12 font-semibold"
+                        className="h-12 font-bold"
                         disabled={!selectedCustomer || selectedServices.length === 0 || pendingAction !== null}
                         onClick={() => handleCreateSession(false)}
                       >
@@ -457,7 +457,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                         Add to Queue
                       </Button>
                       <Button
-                        className="h-12 font-semibold gap-1.5"
+                        className="h-12 font-bold gap-1.5"
                         disabled={!selectedCustomer || selectedServices.length === 0 || pendingAction !== null}
                         onClick={() => handleCreateSession(true)}
                       >
@@ -540,7 +540,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                                       {svc.status === 'pending' && (
                                         <Button
                                           size="sm"
-                                          className="flex-1 gap-1.5"
+                                          className="flex-1 gap-1.5 font-bold"
                                           disabled={pendingAction !== null || !item.available}
                                           onClick={() => runPending(`start-${svc.id}`, () => onUpdateServiceStatus(svc.id, 'in_progress'))}
                                         >
@@ -556,7 +556,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                                         <Button
                                           size="sm"
                                           variant="outline"
-                                          className="flex-1 gap-1.5"
+                                          className="flex-1 gap-1.5 font-bold"
                                           disabled={pendingAction !== null}
                                           onClick={() => runPending(`complete-${svc.id}`, () => onUpdateServiceStatus(svc.id, 'completed'))}
                                         >
@@ -619,7 +619,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                           if (c) setSelectedCustomer(c);
                         }}
                       >
-                        <SelectTrigger className="w-full h-11 text-sm">
+                        <SelectTrigger className="w-full h-11 text-sm font-semibold">
                           <SelectValue placeholder="Choose a client..." />
                         </SelectTrigger>
                         <SelectContent className="max-h-60 min-w-[300px]">
@@ -658,11 +658,11 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                     />
                   </div>
                   <div className="flex gap-1.5 flex-wrap">
-                    <Button type="button" size="sm" variant={serviceCategory === 'all' ? 'default' : 'outline'} onClick={() => setServiceCategory('all')}>
+                    <Button type="button" size="sm" className="font-bold" variant={serviceCategory === 'all' ? 'default' : 'outline'} onClick={() => setServiceCategory('all')}>
                       All
                     </Button>
                     {categories.map((cat) => (
-                      <Button key={cat} type="button" size="sm" variant={serviceCategory === cat ? 'default' : 'outline'} onClick={() => setServiceCategory(cat)}>
+                      <Button key={cat} type="button" size="sm" className="font-bold" variant={serviceCategory === cat ? 'default' : 'outline'} onClick={() => setServiceCategory(cat)}>
                         {cat}
                       </Button>
                     ))}
@@ -724,7 +724,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-11 px-3 font-semibold"
+                        className="h-11 px-3 font-bold"
                         disabled={!selectedCustomer || selectedServices.length === 0 || pendingAction !== null}
                         onClick={() => handleCreateSession(false)}
                       >
@@ -732,7 +732,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                       </Button>
                       <Button
                         size="sm"
-                        className="h-11 px-4 font-semibold gap-1.5"
+                        className="h-11 px-4 font-bold gap-1.5"
                         disabled={!selectedCustomer || selectedServices.length === 0 || pendingAction !== null}
                         onClick={() => handleCreateSession(true)}
                       >
@@ -894,7 +894,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
 
           <form onSubmit={handleCreateNewCustomer} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="newCustName">Client Full Name</Label>
+              <Label htmlFor="newCustName" className="font-semibold">Client Full Name</Label>
               <Input
                 id="newCustName"
                 required
@@ -904,7 +904,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="newCustPhone">Phone Number (+251 format)</Label>
+              <Label htmlFor="newCustPhone" className="font-semibold">Phone Number (+251 format)</Label>
               <Input
                 id="newCustPhone"
                 required
@@ -1019,7 +1019,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Select Payment Method</Label>
+            <Label className="font-semibold">Select Payment Method</Label>
             <div className="grid grid-cols-2 gap-2">
               {(
                 [

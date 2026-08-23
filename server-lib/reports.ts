@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import type { DbPool } from './db';
-import { authenticate } from './middleware';
+import { authenticate, asyncHandler } from './middleware';
 
 /**
  * Company resolution: super admins may view any tenant (or all), other roles
@@ -13,6 +13,48 @@ function resolveCompanyId(req: Request): string | null {
     return typeof q === 'string' && q ? q : null;
   }
   return user.companyId;
+}
+
+/**
+ * Report read tiers:
+ *  - staff (PIN sessions): no report access at all.
+ *  - reception: today's data only — any explicit range beyond today is rejected.
+ *  - owner/manager/super_admin: full history.
+ */
+function guardReportAccess(req: Request, res: Response): boolean {
+  const role = req.user!.role || 'staff';
+  if (!['super_admin', 'owner', 'manager', 'reception'].includes(role)) {
+    res.status(403).json({ error: 'You do not have permission to perform this action' });
+    return false;
+  }
+  if (role === 'reception') {
+    const today = new Date().toISOString().slice(0, 10);
+    const rawFrom = typeof req.query.from === 'string' ? req.query.from.slice(0, 10) : null;
+    const rawTo = typeof req.query.to === 'string' ? req.query.to.slice(0, 10) : null;
+    const rawDate = typeof req.query.date === 'string' ? req.query.date.slice(0, 10) : null;
+    // Missing ranges are pinned to today; explicit non-today ranges are rejected.
+    if ((rawFrom && rawFrom !== today) || (rawTo && rawTo !== today)) {
+      res.status(403).json({ error: 'Reception access is limited to today\'s reports' });
+      return false;
+    }
+    if (rawDate && rawDate !== today) {
+      res.status(403).json({ error: 'Reception access is limited to today\'s reports' });
+      return false;
+    }
+    req.query.from = rawFrom || today;
+    req.query.to = rawTo || today;
+    if (rawDate) req.query.date = today;
+  }
+  return true;
+}
+
+/** Management-only guard for CSV exports and other sensitive reads. */
+function guardMgmtReport(req: Request, res: Response): boolean {
+  if (!['super_admin', 'owner', 'manager'].includes(req.user!.role || 'staff')) {
+    res.status(403).json({ error: 'You do not have permission to perform this action' });
+    return false;
+  }
+  return true;
 }
 
 function whereClauses(req: Request, table = '') {
@@ -30,6 +72,11 @@ function whereClauses(req: Request, table = '') {
     values.push(branchId);
   }
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values };
+}
+
+/** Compose `WHERE a AND b` safely even when the tenant scope is empty (super_admin). */
+function scopedWhere(where: string, extra: string): string {
+  return where ? `${where} AND ${extra}` : `WHERE ${extra}`;
 }
 
 function parseNumber(v: any, d: number) {
@@ -51,7 +98,8 @@ export function createReportsRouter(pool: DbPool): Router {
   router.use(authenticate);
 
   // Summary KPIs
-  router.get('/summary', async (req, res) => {
+  router.get('/summary', asyncHandler(async (req, res) => {
+    if (!guardReportAccess(req, res)) return;
     const { where, values } = whereClauses(req);
     const from = typeof req.query.from === 'string' ? req.query.from : null;
     const to = typeof req.query.to === 'string' ? req.query.to : null;
@@ -67,7 +115,7 @@ export function createReportsRouter(pool: DbPool): Router {
     }
 
     const [[revRows]] = (await pool.query(
-      `SELECT COALESCE(SUM(net_total_etb),0) AS revenue, COUNT(*) AS visits FROM visit_sessions ${where} AND status='completed'${dateFilter}`,
+      `SELECT COALESCE(SUM(net_total_etb),0) AS revenue, COUNT(*) AS visits FROM visit_sessions ${scopedWhere(where, "status='completed'")}${dateFilter}`,
       dateValues
     )) as any;
     const [[commRows]] = (await pool.query(
@@ -79,7 +127,7 @@ export function createReportsRouter(pool: DbPool): Router {
       values
     )) as any;
     const [[stockRows]] = (await pool.query(
-      `SELECT COUNT(*) AS lowStock FROM inventory_items ${where} AND current_stock <= reorder_level`,
+      `SELECT COUNT(*) AS lowStock FROM inventory_items ${scopedWhere(where, 'current_stock <= reorder_level')}`,
       values
     )) as any;
 
@@ -97,11 +145,12 @@ export function createReportsRouter(pool: DbPool): Router {
       avgTicket: visits > 0 ? Math.round(revenue / visits) : 0,
       lowStock: parseNumber(stockRows.lowStock, 0),
     });
-  });
+  }));
 
     // Payment summary for the reception desk — today's collections by channel
   // (cash / bank), discounts given, and the outstanding credit balance owed.
-  router.get('/payment-summary', async (req, res) => {
+  router.get('/payment-summary', asyncHandler(async (req, res) => {
+    if (!guardReportAccess(req, res)) return;
     const companyId = resolveCompanyId(req);
     const branchId = typeof req.query.branchId === 'string' && req.query.branchId ? String(req.query.branchId) : null;
     const dateParam = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? String(req.query.date) : null;
@@ -176,22 +225,24 @@ export function createReportsRouter(pool: DbPool): Router {
       outstandingRetailEtb,
       outstandingTotalEtb: r2(outstandingVisitsEtb + outstandingRetailEtb),
     });
-  });
+  }));
 
   // Daily revenue trend
-  router.get('/revenue', async (req, res) => {
+  router.get('/revenue', asyncHandler(async (req, res) => {
+    if (!guardReportAccess(req, res)) return;
     const { where, values } = whereClauses(req);
     const [rows] = (await pool.query(
       `SELECT DATE(started_at) AS d, ROUND(SUM(net_total_etb),2) AS revenue, COUNT(*) AS visits
-       FROM visit_sessions ${where} AND status='completed'
+       FROM visit_sessions ${scopedWhere(where, "status='completed'")}
        GROUP BY DATE(started_at) ORDER BY d ASC`,
       values
     )) as any;
     res.json(rows.map((r: any) => ({ date: r.d, revenue: parseNumber(r.revenue, 0), visits: r.visits })));
-  });
+  }));
 
   // Commissions by staff
-  router.get('/commissions', async (req, res) => {
+  router.get('/commissions', asyncHandler(async (req, res) => {
+    if (!guardReportAccess(req, res)) return;
     const { where, values } = whereClauses(req);
     const [rows] = (await pool.query(
       `SELECT staff_id, staff_name,
@@ -203,12 +254,13 @@ export function createReportsRouter(pool: DbPool): Router {
       values
     )) as any;
     res.json(rows);
-  });
+  }));
 
   // Payment channel breakdown (split-payment aware, sourced from the ledger).
   // A single payable may span multiple cash/bank lines; only the payments rows
   // capture the true split.
-  router.get('/payments', async (req, res) => {
+  router.get('/payments', asyncHandler(async (req, res) => {
+    if (!guardReportAccess(req, res)) return;
     const { where, values } = whereClauses(req, 'p');
     const from = typeof req.query.from === 'string' ? req.query.from : null;
     const to = typeof req.query.to === 'string' ? req.query.to : null;
@@ -232,20 +284,22 @@ export function createReportsRouter(pool: DbPool): Router {
       amount: parseNumber(r.amount, 0),
       lines: parseNumber(r.lines, 0),
     })));
-  });
+  }));
 
   // Expenses by category
-  router.get('/expenses', async (req, res) => {
+  router.get('/expenses', asyncHandler(async (req, res) => {
+    if (!guardReportAccess(req, res)) return;
     const { where, values } = whereClauses(req);
     const [rows] = (await pool.query(
       `SELECT category, ROUND(SUM(amount_etb),2) AS amount FROM expenses ${where} GROUP BY category ORDER BY amount DESC`,
       values
     )) as any;
     res.json(rows);
-  });
+  }));
 
   // CSV export of completed visits
-  router.get('/export/visits.csv', async (req, res) => {
+  router.get('/export/visits.csv', asyncHandler(async (req, res) => {
+    if (!guardMgmtReport(req, res)) return;
     const { where, values } = whereClauses(req);
     const serviceFilter: string[] = [];
     const serviceValues: any[] = [...values];
@@ -288,10 +342,11 @@ export function createReportsRouter(pool: DbPool): Router {
       r.started_at,
       r.completed_at || '',
     ]);
-  });
+  }));
 
   // CSV export of commission ledger
-  router.get('/export/commissions.csv', async (req, res) => {
+  router.get('/export/commissions.csv', asyncHandler(async (req, res) => {
+    if (!guardMgmtReport(req, res)) return;
     const { where, values } = whereClauses(req);
     const [rows] = (await pool.query(
       `SELECT staff_name, service_name, service_price_etb, commission_amount_etb, rule_applied, payout_status, created_at
@@ -315,7 +370,7 @@ export function createReportsRouter(pool: DbPool): Router {
       r.payout_status,
       r.created_at,
     ]);
-  });
+  }));
 
   return router;
 }

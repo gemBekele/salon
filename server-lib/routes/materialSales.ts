@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
-import { posOnly, asyncHandler } from '../middleware';
+import { deskOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound } from '../core';
 
@@ -12,7 +12,7 @@ import { uid, canAccessCompany, notFound } from '../core';
  */
 export function createMaterialSalesRouter(pool: DbPool): Router {
   const router = Router();
-  router.use('/material-sales', ...posOnly);
+  router.use('/material-sales', ...deskOnly);
 
   router.get('/material-sales', asyncHandler(async (req, res) => {
     const companyId = canAccessCompany(req.user!, String(req.query.companyId || '')) ? String(req.query.companyId) : req.user!.companyId;

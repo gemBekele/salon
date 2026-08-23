@@ -28,20 +28,7 @@ import {
   Pencil,
   Minus,
   LogOut,
-  Banknote,
 } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
 import {
   Customer,
   Service,
@@ -120,7 +107,6 @@ interface ReceptionistPosProps {
   onLogout?: () => void;
 }
 
-const PIE_COLORS = ['#18181b', '#0d9488', '#3a3a41', '#115e59', '#6b6b75'];
 
 const isToday = (dateStr?: string) => {
   if (!dateStr) return true;
@@ -371,7 +357,10 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
   }, [expenses, company, activeCompanyId, branchId]);
 
   const todayExpenseTotal = todayExpenses.reduce((acc, e) => acc + e.amountEtb, 0);
-  const expenseLimit = Number(branch?.dailyExpenseLimitEtb || 0);
+  // Mirrors the server fallback: reception is capped even when no branch limit
+  // is configured (EXPENSE_RECEPTION_DAILY_LIMIT, default 2000 ETB).
+  const RECEPTION_EXPENSE_FALLBACK_LIMIT = 2000;
+  const expenseLimit = Number(branch?.dailyExpenseLimitEtb || 0) || (currentUser?.role === 'reception' ? RECEPTION_EXPENSE_FALLBACK_LIMIT : 0);
   const expenseRemaining = expenseLimit > 0 ? Math.max(0, expenseLimit - todayExpenseTotal) : null;
   const expensePct = expenseLimit > 0 ? Math.min(100, Math.round((todayExpenseTotal / expenseLimit) * 100)) : 0;
   const expenseAtLimit = expenseLimit > 0 && todayExpenseTotal >= expenseLimit;
@@ -650,118 +639,56 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
     discountEtb: s.discountEtb ?? 0,
   });
 
-  // ---- Daily Analytics Computations ----
-  const paymentMethodPieData = useMemo(() => {
-    const map: Record<string, number> = { cash: 0, telebirr: 0, cbe_birr: 0, card: 0 };
-    todayBranchSessions.forEach((s) => {
-      if (s.isPaid || paidIds.includes(s.id)) {
-        const pm = s.paymentMethod || 'cash';
-        map[pm] = (map[pm] || 0) + s.netTotalEtb;
-      }
-    });
-    return [
-      { name: 'Cash', value: map.cash },
-      { name: 'Telebirr', value: map.telebirr },
-      { name: 'CBE Birr', value: map.cbe_birr },
-      { name: 'Card / POS', value: map.card },
-    ].filter((item) => item.value > 0);
-  }, [todayBranchSessions, paidIds]);
+  // ---- Daily Report (filterable) ----
+  const [reportMethod, setReportMethod] = useState<string>('all');
+  const [reportStaff, setReportStaff] = useState<string>('all');
 
-  const hourlyRevenueData = useMemo(() => {
-    const hoursMap: Record<string, number> = {};
-    for (let h = 8; h <= 20; h++) {
-      const key = `${h.toString().padStart(2, '0')}:00`;
-      hoursMap[key] = 0;
-    }
-    todayBranchSessions.forEach((s) => {
-      if (s.isPaid || paidIds.includes(s.id)) {
-        const date = new Date(s.completedAt || s.startedAt || Date.now());
-        const hour = date.getHours();
-        const key = `${hour.toString().padStart(2, '0')}:00`;
-        if (hoursMap[key] !== undefined) {
-          hoursMap[key] += s.netTotalEtb;
-        } else {
-          hoursMap[key] = s.netTotalEtb;
-        }
-      }
-    });
-    return Object.keys(hoursMap).map((h) => ({ hour: h, revenue: hoursMap[h] }));
-  }, [todayBranchSessions, paidIds]);
-
-  const todayStaffPerformance = useMemo(() => {
-    const map: Record<string, { name: string; role: string; count: number; revenue: number; commission: number }> = {};
-    todayBranchSessions.forEach((s) => {
+  const reportStaffOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    todayBranchSessions.forEach((s) =>
       s.services.forEach((srv) => {
-        if (!map[srv.staffId]) {
-          const stf = staffList.find((st) => st.id === srv.staffId);
-          map[srv.staffId] = {
-            name: srv.staffName || stf?.name || 'Staff',
-            role: stf?.role || 'Provider',
-            count: 0,
-            revenue: 0,
-            commission: 0,
-          };
-        }
-        if (srv.status === 'completed' || s.status === 'completed') {
-          map[srv.staffId].count += 1;
-          map[srv.staffId].revenue += srv.priceEtb;
-          map[srv.staffId].commission += srv.commissionEarnedEtb;
-        }
-      });
-    });
-    return Object.values(map).sort((a, b) => b.revenue - a.revenue);
-  }, [todayBranchSessions, staffList]);
+        if (!seen.has(srv.staffId)) seen.set(srv.staffId, srv.staffName || 'Staff');
+      })
+    );
+    return Array.from(seen, ([id, name]) => ({ id, name }));
+  }, [todayBranchSessions]);
+
+  const reportSessions = useMemo(() => {
+    return todayBranchSessions
+      .filter((s) => {
+        if (!(s.isPaid || paidIds.includes(s.id))) return false;
+        if (reportMethod !== 'all' && (s.paymentMethod || 'cash') !== reportMethod) return false;
+        if (reportStaff !== 'all' && !s.services.some((sv) => sv.staffId === reportStaff)) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.completedAt || b.startedAt || 0).getTime() - new Date(a.completedAt || a.startedAt || 0).getTime());
+  }, [todayBranchSessions, paidIds, reportMethod, reportStaff]);
+
+  const reportTotals = useMemo(() => {
+    const collected = reportSessions.reduce((a, s) => a + s.netTotalEtb, 0);
+    const discounts = reportSessions.reduce((a, s) => a + (s.discountEtb ?? 0), 0);
+    return { collected, discounts, count: reportSessions.length, avg: reportSessions.length ? Math.round(collected / reportSessions.length) : 0 };
+  }, [reportSessions]);
+
+  const METHOD_LABELS: Record<string, string> = { cash: 'Cash', telebirr: 'Telebirr', cbe_birr: 'CBE Birr', card: 'Card / POS', mixed: 'Mixed' };
 
   return (
     <div className="space-y-4">
-      {/* Header Banner */}
-      <Card className="border-border bg-card  overflow-hidden">
-        <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg">
-              <Scissors className="size-6" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">Front Desk</h1>
-                <Badge variant="outline" className="text-[10px] font-mono border-border text-muted-foreground">
-                  Today's View
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-2">
-                <span>{branch?.name || company?.name || 'Central Salon Branch'}</span>
-                <span>•</span>
-                <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-            <Button
-              size="xs"
-              variant={showAllDates ? 'secondary' : 'outline'}
-              onClick={() => setShowAllDates(!showAllDates)}
-              className="text-xs font-semibold"
-            >
-              {showAllDates ? 'Showing All Dates' : 'Showing Today Only'}
-            </Button>
-            <Badge variant="secondary" className="text-sm px-3 py-1 font-mono">
-              Live {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Syncing...'}
-            </Badge>
-            {onLogout && (
-              <Button
-                onClick={onLogout}
-                variant="outline"
-                className="gap-2 font-semibold text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
-                title="Sign out of the reception desk"
-              >
-                <LogOut className="size-4" />
-                Sign Out{currentUser?.name && <span className="hidden md:inline">&nbsp;({currentUser.name})</span>}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Header — sign-out only */}
+      {onLogout && (
+        <div className="flex justify-end">
+          <Button
+            onClick={onLogout}
+            variant="outline"
+            size="sm"
+            className="gap-2 font-semibold text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+            title="Sign out of the reception desk"
+          >
+            <LogOut className="size-4" />
+            Sign Out{currentUser?.name && <span className="hidden md:inline">&nbsp;({currentUser.name})</span>}
+          </Button>
+        </div>
+      )}
 
       {/* Daily KPI Row — Clickable filters */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border border-border">
@@ -804,7 +731,7 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
               <TabsTrigger value="board" className="gap-1.5 text-[13px] font-medium"><LayoutDashboard className="size-4" />Staff Board</TabsTrigger>
               <TabsTrigger value="inventory" className="gap-1.5 text-[13px] font-medium"><Package className="size-4" />Stock {lowStockCount > 0 && <Badge variant="destructive" className="text-[9px] px-1.5">{lowStockCount}</Badge>}</TabsTrigger>
               <TabsTrigger value="retail" className="gap-1.5 text-[13px] font-medium"><ShoppingCart className="size-4" />Shop Sales</TabsTrigger>
-              <TabsTrigger value="expenses" className="gap-1.5 text-[13px] font-medium"><ReceiptText className="size-4" />Money Out</TabsTrigger>
+              <TabsTrigger value="expenses" className="gap-1.5 text-[13px] font-medium"><ReceiptText className="size-4" />Expense</TabsTrigger>
               <TabsTrigger value="analytics" className="gap-1.5 text-[13px] font-medium"><BarChart3 className="size-4" />Daily Report</TabsTrigger>
             </TabsList>
 
@@ -1323,145 +1250,124 @@ export const ReceptionistPos: React.FC<ReceptionistPosProps> = ({
 
           {/* TAB 3: DAILY ANALYTICS (FULL WIDTH) */}
           <TabsContent value="analytics" className="mt-4 space-y-4">
-            {/* Payment Summary — Today */}
-            <Card className="border-border bg-card overflow-hidden">
-              <CardContent className="p-0">
-                <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
-                  <Banknote className="size-4 text-primary" />
-                  <h3 className="text-sm font-bold tracking-tight text-foreground">Payment Summary — Today</h3>
-                  {branch && <span className="text-[11px] font-semibold text-muted-foreground truncate">{branch.name}</span>}
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border border-t border-border">
-                  {[
-                    { label: 'Cash', value: paymentSummary ? `${paymentSummary.cashEtb.toLocaleString()} ETB` : null, tone: 'text-emerald-600 dark:text-emerald-400' },
-                    { label: 'Bank Transfer', value: paymentSummary ? `${paymentSummary.bankEtb.toLocaleString()} ETB` : null, tone: 'text-sky-600 dark:text-sky-400' },
-                    { label: 'Discounts Given', value: paymentSummary ? `${paymentSummary.discountsEtb.toLocaleString()} ETB` : null, tone: 'text-amber-600 dark:text-amber-400' },
-                    { label: 'Total Collected', value: paymentSummary ? `${paymentSummary.totalCollectedEtb.toLocaleString()} ETB` : null, tone: 'text-primary' },
-                    { label: 'Still Owed (Credit)', value: paymentSummary ? `${paymentSummary.outstandingTotalEtb.toLocaleString()} ETB${paymentSummary.outstandingVisitCount > 0 ? ` (${paymentSummary.outstandingVisitCount})` : ''}` : null, tone: 'text-destructive' },
-                  ].map(({ label, value, tone }) => (
-                    <div key={label} className="bg-card px-3.5 py-3">
-                      <p className="kpi-label mb-1.5">{label}</p>
-                      <p className={`kpi-value text-lg tabular-nums ${paymentSummary ? tone : 'text-muted-foreground'}`}>{value ?? '—'}</p>
-                    </div>
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={reportMethod} onValueChange={setReportMethod}>
+                <SelectTrigger className="w-[170px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payment Methods</SelectItem>
+                  {Object.entries(METHOD_LABELS).map(([v, label]) => (
+                    <SelectItem key={v} value={v}>{label}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={reportStaff} onValueChange={setReportStaff}>
+                <SelectTrigger className="w-[180px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {reportStaffOptions.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>{st.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(reportMethod !== 'all' || reportStaff !== 'all') && (
+                <Button variant="ghost" size="sm" className="text-xs font-semibold" onClick={() => { setReportMethod('all'); setReportStaff('all'); }}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
+
+            {/* Summary strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border border border-border rounded-md overflow-hidden">
+              {[
+                { label: 'Collected', value: `${reportTotals.collected.toLocaleString()} ETB` },
+                { label: 'Paid Visits', value: String(reportTotals.count) },
+                { label: 'Average Ticket', value: `${reportTotals.avg.toLocaleString()} ETB` },
+                { label: 'Still Owed', value: `${pendingUnpaidAmount.toLocaleString()} ETB` },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-card px-3.5 py-3">
+                  <p className="kpi-label mb-1">{label}</p>
+                  <p className="kpi-value text-lg tabular-nums">{value}</p>
                 </div>
+              ))}
+            </div>
+
+            {/* Transactions */}
+            <Card className="border-border">
+              <CardContent className="p-0">
+                <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
+                  <h3 className="text-sm font-bold tracking-tight text-foreground">Transactions{reportTotals.discounts > 0 && <span className="ml-2 text-[11px] font-medium text-muted-foreground">discounts given: {reportTotals.discounts.toLocaleString()} ETB</span>}</h3>
+                </div>
+                {reportSessions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8 border-t border-border">No matching paid visits today.</p>
+                ) : (
+                  <div className="divide-y divide-border border-t border-border">
+                    {reportSessions.map((s) => {
+                      const staffNames = Array.from(new Set(s.services.map((sv) => sv.staffName).filter(Boolean))).join(', ');
+                      const time = new Date(s.completedAt || s.startedAt || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <div key={s.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[11px] text-muted-foreground">{time}</span>
+                              <span className="text-sm font-semibold text-foreground truncate">{s.customerName}</span>
+                              <Badge variant="outline" className="text-[10px] shrink-0">{METHOD_LABELS[s.paymentMethod || 'cash'] || s.paymentMethod}</Badge>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {s.queueNumber}{s.services.length > 0 && ` · ${s.services.length} service${s.services.length > 1 ? 's' : ''}`}{staffNames && ` · ${staffNames}`}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold tabular-nums text-foreground shrink-0">{s.netTotalEtb.toLocaleString()} ETB</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="border-border ">
-                <CardContent className="p-4 space-y-1">
-                  <span className="kpi-label">Money In Today</span>
-                  <p className="kpi-value">{todayRevenue.toLocaleString()} ETB</p>
-                  <p className="text-[11px] text-muted-foreground">Everything customers paid today</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border ">
-                <CardContent className="p-4 space-y-1">
-                  <span className="kpi-label">Customers Finished Today</span>
-                  <p className="kpi-value">{completedToday}</p>
-                  <p className="text-[11px] text-muted-foreground">Visits completed and checked out</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border ">
-                <CardContent className="p-4 space-y-1">
-                  <span className="kpi-label">Not Paid Yet Today</span>
-                  <p className="kpi-value text-destructive">{pendingUnpaidAmount.toLocaleString()} ETB</p>
-                  <p className="text-[11px] text-muted-foreground">{pendingCount} finished visits still waiting for payment</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              {/* Hourly Sales Chart */}
-              <Card className="lg:col-span-8 border-border ">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-foreground">Money In — Hour by Hour</h3>
-                    <Badge variant="outline" className="text-[10px]">Today Only</Badge>
-                  </div>
-                  <div className="h-56 w-full pt-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={hourlyRevenueData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                        <XAxis dataKey="hour" fontSize={10} tickLine={false} />
-                        <YAxis fontSize={10} tickLine={false} />
-                        <Tooltip formatter={(value: any) => [`${Number(value).toLocaleString()} ETB`, 'Revenue']} />
-                        <Bar dataKey="revenue" fill="#18181b" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Payment Methods Distribution */}
-              <Card className="lg:col-span-4 border-border ">
-                <CardContent className="p-4 space-y-3">
-                  <h3 className="text-sm font-medium text-foreground">How Customers Paid</h3>
-                  {paymentMethodPieData.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-10">No payments recorded today yet</p>
-                  ) : (
-                    <div className="h-56 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={paymentMethodPieData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={40}
-                            outerRadius={70}
-                            paddingAngle={3}
-                          >
-                            {paymentMethodPieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(val: any) => [`${Number(val).toLocaleString()} ETB`, 'Amount']} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Today's Staff Performance Table */}
-            <Card className="border-border ">
+            {/* Staff performance (respects filters) */}
+            <Card className="border-border">
               <CardContent className="p-4 space-y-3">
-                <h3 className="text-sm font-medium text-foreground">Who Did What Today</h3>
+                <h3 className="text-sm font-medium text-foreground">Staff Summary</h3>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
                         <TableHead className="">Staff Member</TableHead>
-                        <TableHead className="">Role</TableHead>
                         <TableHead className="text-center">Services Done</TableHead>
                         <TableHead className="text-right">Money Brought In</TableHead>
-                        <TableHead className="text-right">Their Cut (Commission)</TableHead>
+                        <TableHead className="text-right">Their Cut</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {todayStaffPerformance.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
-                            No staff activity recorded today yet
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        todayStaffPerformance.map((st, i) => (
+                      {(() => {
+                        const map: Record<string, { name: string; count: number; revenue: number; commission: number }> = {};
+                        reportSessions.forEach((s) => {
+                          s.services.forEach((srv) => {
+                            if (!map[srv.staffId]) map[srv.staffId] = { name: srv.staffName || 'Staff', count: 0, revenue: 0, commission: 0 };
+                            map[srv.staffId].count += 1;
+                            map[srv.staffId].revenue += srv.priceEtb;
+                            map[srv.staffId].commission += srv.commissionEarnedEtb;
+                          });
+                        });
+                        const rows = Object.values(map).sort((a, b) => b.revenue - a.revenue);
+                        if (rows.length === 0) {
+                          return (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">No staff activity for this filter today</TableCell>
+                            </TableRow>
+                          );
+                        }
+                        return rows.map((st, i) => (
                           <TableRow key={i}>
-                            <TableCell className="">{st.name}</TableCell>
-                            <TableCell className="text-sm capitalize text-muted-foreground">{st.role}</TableCell>
+                            <TableCell className="font-medium">{st.name}</TableCell>
                             <TableCell className="text-center font-mono font-medium text-sm">{st.count}</TableCell>
                             <TableCell className="text-right font-mono font-medium text-sm">{st.revenue.toLocaleString()} ETB</TableCell>
                             <TableCell className="text-right font-mono font-medium text-sm text-primary">{st.commission.toLocaleString()} ETB</TableCell>
                           </TableRow>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </TableBody>
                   </Table>
                 </div>

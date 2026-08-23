@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
-import { mgmtOnly, posOnly, asyncHandler } from '../middleware';
+import { mgmtOnly, deskOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound, createAuditLogger, buildUpdate } from '../core';
 import { hashPassword, defaultPinForPhone } from '../auth';
@@ -290,6 +290,16 @@ export function createEntitiesRouter(pool: DbPool): Router {
     if (errs.length) return res.status(400).json({ error: errs.join('; ') });
 
     const b = req.body;
+    // Validate referenced branch/business unit up-front so bad input is a 400,
+    // never an FK-violation 500.
+    const [br] = (await pool.query(`SELECT company_id FROM branches WHERE id = ?`, [b.branchId])) as any;
+    if (!br[0]) return res.status(400).json({ error: 'Branch not found' });
+    if (br[0].company_id !== b.companyId) return res.status(400).json({ error: 'Branch does not belong to this company' });
+    if (b.businessUnitId) {
+      const [bu] = (await pool.query(`SELECT company_id FROM business_units WHERE id = ?`, [b.businessUnitId])) as any;
+      if (!bu[0]) return res.status(400).json({ error: 'Business unit not found' });
+      if (bu[0].company_id !== b.companyId) return res.status(400).json({ error: 'Business unit does not belong to this company' });
+    }
     const id = uid('inv');
     await pool.query(
       `INSERT INTO inventory_items (id, company_id, branch_id, business_unit_id, name, sku, unit, current_stock, reorder_level, unit_cost_etb)
@@ -332,7 +342,7 @@ export function createEntitiesRouter(pool: DbPool): Router {
     res.json({ success: true });
   }));
 
-  router.post('/inventory-items/adjust-stock', ...posOnly, asyncHandler(async (req, res) => {
+  router.post('/inventory-items/adjust-stock', ...deskOnly, asyncHandler(async (req, res) => {
     const b = req.body;
     const [rows] = (await pool.query(`SELECT company_id, branch_id, name FROM inventory_items WHERE id = ?`, [b.id])) as any;
     const item = rows[0];

@@ -18,12 +18,18 @@ export function scopedCompanyId(user: AuthUser, requested?: string): string | nu
   return user.role === 'super_admin' ? (requested || null) : user.companyId;
 }
 
-/** Is the requested companyId within the user's authority? */
-export function canAccessCompany(user: AuthUser, companyId: unknown): boolean {
-  if (!user) return true;
-  if (!companyId) return true;
-  if (['super_admin', 'owner', 'manager', 'reception', 'staff'].includes(user.role)) return true;
-  return user.companyId === companyId;
+/**
+ * Is the requested companyId within the user's authority?
+ *
+ * super_admin acts platform-wide; every other role may only touch resources
+ * that belong to the company their account is pinned to. PIN-issued staff
+ * tokens always carry a companyId, so they are scoped like everyone else.
+ */
+export function canAccessCompany(user: AuthUser | null | undefined, companyId: unknown): boolean {
+  if (!user) return false;
+  if (typeof companyId !== 'string' || companyId.length === 0) return false;
+  if (user.role === 'super_admin') return true;
+  return !!user.companyId && user.companyId === companyId;
 }
 
 /** Throw a 404 error for a missing resource. */

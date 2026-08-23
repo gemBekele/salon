@@ -535,14 +535,18 @@ const available = await pgAvailable();
       expect(bankLine.bank_name).toBe('CBE Birr');
 
       // Company-scoped ledger: fetch-all includes both lines; method filter narrows.
-      const ledger = await request(app).get(`/api/payments`).set(auth());
+      // (Broad ledger is management-only.)
+      const mgmtAuth = () => ({ Authorization: `Bearer ${ownerToken}` });
+      const forbiddenLedger = await request(app).get(`/api/payments`).set(auth());
+      expect(forbiddenLedger.status).toBe(403);
+      const ledger = await request(app).get(`/api/payments`).set(mgmtAuth());
       expect(ledger.status).toBe(200);
       const mine = (ledger.body as any[]).filter((p) => p.payable_id === sessionId);
       expect(mine).toHaveLength(2);
 
       const onlyCash = await request(app)
         .get(`/api/payments?method=cash&from=${'2000-01-01'}&to=${'2099-12-31'}`)
-        .set(auth());
+        .set(mgmtAuth());
       expect(onlyCash.body.every((p: any) => p.method === 'cash')).toBe(true);
 
       // Channel report aggregates split lines and keeps the true cash/bank split.
@@ -909,6 +913,141 @@ const available = await pgAvailable();
         .get('/api/public/tablet/catalog')
         .query({ companyId: 'cmp_gech_01' });
       expect(missing.status).toBe(400);
+    });
+  });
+
+  describe('RBAC overhaul: role tiers', () => {
+    let staffPinToken = '';
+    let managerToken = '';
+
+    beforeAll(async () => {
+      const opts = await request(app).get('/api/auth/staff-login-options');
+      const groups = (opts.body?.companies ?? []) as { staff: { id: string }[] }[];
+      const firstStaff = groups.flatMap((g) => g.staff)[0];
+      expect(firstStaff).toBeTruthy();
+      const res = await request(app).post('/api/auth/staff-login').send({ staffId: firstStaff.id, pin: '7788' });
+      expect(res.status).toBe(200);
+      staffPinToken = res.body.token as string;
+      managerToken = (await request(app).post('/api/auth/login').send({ email: 'admin@gechsalon.et', password: 'Manager123!' })).body.token as string;
+    });
+
+    it('blocks PIN-staff from POS mutations (customers)', async () => {
+      const res = await request(app)
+        .post('/api/customers')
+        .set('Authorization', `Bearer ${staffPinToken}`)
+        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', name: 'Sneak', phone: '+251911000001' });
+      expect(res.status).toBe(403);
+    });
+
+    it('blocks PIN-staff from retail sales', async () => {
+      const res = await request(app)
+        .post('/api/material-sales')
+        .set('Authorization', `Bearer ${staffPinToken}`)
+        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', customerName: 'X', items: [] });
+      expect(res.status).toBe(403);
+    });
+
+    it('blocks PIN-staff from checkout', async () => {
+      const res = await request(app)
+        .post('/api/payments/checkout')
+        .set('Authorization', `Bearer ${staffPinToken}`)
+        .send({ payableType: 'visit', payableId: 'vs_nope', payments: [{ method: 'cash' }] });
+      expect(res.status).toBe(403);
+    });
+
+    it('blocks PIN-staff from reports and hides users/audit in db-state', async () => {
+      const rep = await request(app).get('/api/reports/summary').set('Authorization', `Bearer ${staffPinToken}`);
+      expect(rep.status).toBe(403);
+      const db = await request(app).get('/api/db-state').set('Authorization', `Bearer ${staffPinToken}`);
+      expect(db.status).toBe(200);
+      expect(db.body.users).toBeUndefined();
+      expect(db.body.auditLogs).toBeUndefined();
+      expect(db.body.expenses).toBeUndefined();
+      expect(Array.isArray(db.body.visitSessions)).toBe(true);
+      if (Array.isArray(db.body.commissionLogs)) {
+        for (const l of db.body.commissionLogs) {
+          const me = JSON.parse(Buffer.from((staffPinToken.split('.')[1] || ''), 'base64url').toString('utf8'));
+          expect(l.staffId).toBe(me.sub ?? me.id);
+        }
+      }
+    });
+
+    it('allows reception to record an expense under the daily cap', async () => {
+      const res = await request(app)
+        .post('/api/expenses')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', category: 'other', amountEtb: 50, description: 'RBAC test small', paymentMethod: 'cash' });
+      expect([200, 400]).toContain(res.status); // 400 only if seeded limit already consumed
+      if (res.status === 400) expect(res.body.error).toMatch(/limit/i);
+    });
+
+    it('rejects a reception expense far above the daily cap', async () => {
+      const res = await request(app)
+        .post('/api/expenses')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', category: 'rent', amountEtb: 5_000_000, description: 'RBAC test huge', paymentMethod: 'cash' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/limit/i);
+    });
+
+    it('stops a manager from granting super_admin or owner roles, but allows reception/staff', async () => {
+      const bad = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ companyId: 'cmp_gech_01', name: 'Escalate', email: `esc-${Date.now()}@gechsalon.et`, password: 'Pass123!', role: 'super_admin' });
+      expect(bad.status).toBe(403);
+      const ok = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ companyId: 'cmp_gech_01', name: 'Junior Rec', email: `jr-${Date.now()}@gechsalon.et`, password: 'Pass123!', role: 'reception' });
+      expect(ok.status).toBe(200);
+    });
+
+    it('enforces tenant isolation on POS mutations (owner cannot touch another company)', async () => {
+      const other = await request(app)
+        .post('/api/companies')
+        .set('Authorization', `Bearer ${superToken}`)
+        .send({ name: 'Other Salon', subscriptionPlanId: 'plan_starter' });
+      expect(other.status).toBe(200);
+      const otherId = other.body.id as string;
+      const res = await request(app)
+        .post('/api/customers')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ companyId: otherId, branchId: 'br_x', name: 'Cross', phone: '+251911000002' });
+      expect(res.status).toBe(403);
+    });
+
+    it('serves a global summary to super_admin without crashing (empty tenant scope)', async () => {
+      const res = await request(app).get('/api/reports/summary').set('Authorization', `Bearer ${superToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.totalRevenue).toBeDefined();
+    });
+
+    it('returns 400 (not 500) when creating an inventory item with an unknown business unit', async () => {
+      const res = await request(app)
+        .post('/api/inventory-items')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', businessUnitId: 'bu_missing', name: 'Bad BU Item', sku: 'BADBU1' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/business unit/i);
+    });
+
+    it('restricts reception reports to today and blocks staff entirely', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const okToday = await request(app)
+        .get('/api/reports/summary')
+        .query({ from: today, to: today })
+        .set('Authorization', `Bearer ${receptionToken}`);
+      expect(okToday.status).toBe(200);
+      const oldRange = await request(app)
+        .get('/api/reports/summary')
+        .query({ from: '2020-01-01', to: '2020-01-02' })
+        .set('Authorization', `Bearer ${receptionToken}`);
+      expect(oldRange.status).toBe(403);
+      const csv = await request(app)
+        .get('/api/reports/export/visits.csv')
+        .set('Authorization', `Bearer ${receptionToken}`);
+      expect(csv.status).toBe(403);
     });
   });
 });

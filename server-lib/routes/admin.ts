@@ -182,6 +182,24 @@ export function createAdminRouter(pool: DbPool): Router {
         isActive: Boolean(r.is_active), lastLoginAt: r.last_login_at || undefined, createdAt: r.created_at,
       })),
     };
+    // Role-based section visibility: PIN-issued staff sessions get a minimal
+    // workspace (no users, audit, SMS, expense or rule data; commissions are
+    // limited to their own). Reception is shielded from user & audit data.
+    const viewerRole = req.user!.role || 'staff';
+    if (viewerRole === 'staff') {
+      delete payload.users;
+      delete payload.auditLogs;
+      delete payload.smsLogs;
+      delete payload.expenses;
+      delete payload.commissionRules;
+      delete payload.subscriptionPlans;
+      if (Array.isArray(payload.commissionLogs)) {
+        payload.commissionLogs = payload.commissionLogs.filter((l: any) => l.staffId === req.user!.id);
+      }
+    } else if (viewerRole === 'reception') {
+      delete payload.users;
+      delete payload.auditLogs;
+    }
     // In sections mode, omit unrequested keys entirely — returning them as []
     // would make the client wipe real state with empty arrays.
     if (wanted) {
@@ -193,6 +211,27 @@ export function createAdminRouter(pool: DbPool): Router {
   }));
 
   router.use('/users', ...mgmtOnly);
+
+  /**
+   * Creator hierarchy: which roles may a given actor grant?
+   *  - super_admin: any role (platform level)
+   *  - owner: manager, reception, staff (within own company)
+   *  - manager: reception, staff only
+   */
+  const ASSIGNABLE_ROLES: Record<string, string[]> = {
+    super_admin: ['super_admin', 'owner', 'manager', 'reception', 'staff'],
+    owner: ['manager', 'reception', 'staff'],
+    manager: ['reception', 'staff'],
+  };
+
+  function assertCanAssignRole(actorRole: string, targetRole: string): string | null {
+    const allowed = ASSIGNABLE_ROLES[actorRole];
+    if (!allowed) return 'You do not have permission to manage users';
+    if (!allowed.includes(targetRole)) {
+      return `A ${actorRole} cannot grant the ${targetRole} role`;
+    }
+    return null;
+  }
 
   // ==========================================================
   // User management
@@ -207,6 +246,9 @@ export function createAdminRouter(pool: DbPool): Router {
       role: { required: true, enum: ['super_admin', 'owner', 'manager', 'reception', 'staff'] },
     });
     if (errs.length) return res.status(400).json({ error: errs.join('; ') });
+
+    const roleViolation = assertCanAssignRole(req.user!.role || 'staff', req.body.role);
+    if (roleViolation) return res.status(403).json({ error: roleViolation });
 
     const b = req.body;
     const [existing] = (await pool.query(`SELECT id FROM users WHERE email = ?`, [b.email])) as any;
@@ -226,6 +268,10 @@ export function createAdminRouter(pool: DbPool): Router {
     if (!canAccessCompany(req.user!, u.company_id)) return res.status(403).json({ error: 'Company not found' });
 
     const b = req.body;
+    if (b.role !== undefined) {
+      const roleViolation = assertCanAssignRole(req.user!.role || 'staff', b.role);
+      if (roleViolation) return res.status(403).json({ error: roleViolation });
+    }
     const fields: string[] = [];
     const vals: any[] = [];
     if (b.name !== undefined) { fields.push('name = ?'); vals.push(b.name); }
