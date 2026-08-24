@@ -50,6 +50,10 @@ export const errorHandler: ErrorRequestHandler = (
 export const securityHeaders: RequestHandler = helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
   crossOriginEmbedderPolicy: false,
+  // COOP / Origin-Agent-Cluster are meaningless (and console-noisy) on a
+  // plain-http IP origin; drop them until the app is served over HTTPS.
+  crossOriginOpenerPolicy: false,
+  originAgentCluster: false,
 });
 
 export const corsMiddleware: RequestHandler = cors({
@@ -180,9 +184,10 @@ export const posOnly: RequestHandler[] = [
 ];
 
 /**
- * Front-desk write access: everyone who may work the till EXCEPT PIN-issued
- * staff sessions (staff portal only). Used for customers, visit sessions,
- * retail sales, checkout and stock adjustments.
+ * Front-desk-only writes: reception and management, EXCLUDING PIN-issued staff
+ * sessions. Used for retail sales, expenses and stock adjustments — things the
+ * staff workstation never does. Visit sessions / customers / checkout stay
+ * open to staff because the staff portal runs its own queue.
  */
 export const deskOnly: RequestHandler[] = [
   authenticate,

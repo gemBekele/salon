@@ -78,10 +78,10 @@ const ROLES = [
 const POLICY = {
   'GET    /api/db-state':                          { anon: 'D', staff_pin: 'A', staff_pw: 'A', reception: 'A', manager: 'A', owner: 'A', super: 'A' },
   'GET    /api/db-state sections=users':           { anon: 'D', staff_pin: 'A', staff_pw: 'A', reception: 'A', manager: 'A', owner: 'A', super: 'A' },
-  'POST   /api/customers':                         { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'L', manager: 'L', owner: 'L', super: 'L' },
+  'POST   /api/customers':                         { anon: 'D', staff_pin: 'L', staff_pw: 'L', reception: 'L', manager: 'L', owner: 'L', super: 'L' },
   'PATCH  /api/visit-sessions/status':             { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'E', manager: 'E', owner: 'E', super: 'E' },
   'POST   /api/material-sales':                    { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'E', manager: 'E', owner: 'E', super: 'E' },
-  'POST   /api/payments/checkout':                 { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'E', manager: 'E', owner: 'E', super: 'E' },
+  'POST   /api/payments/checkout':                 { anon: 'D', staff_pin: 'E', staff_pw: 'E', reception: 'E', manager: 'E', owner: 'E', super: 'E' },
   'POST   /api/expenses probe=small':                  { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'L', manager: 'A', owner: 'A', super: 'A' },
   'POST   /api/expenses probe=huge':                   { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'D', manager: 'A', owner: 'A', super: 'A' },
   'PUT    /api/expenses/:id':                      { anon: 'D', staff_pin: 'D', staff_pw: 'D', reception: 'D', manager: 'E', owner: 'E', super: 'E' },

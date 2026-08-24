@@ -46,6 +46,7 @@ export default function App() {
   // ── Auth ──
   const [user, setUser] = useState<AuthUser | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [dbLoading, setDbLoading] = useState(true);
   const [staffSessionPin, setStaffSessionPin] = useState<string | undefined>(undefined);
 
 
@@ -86,6 +87,7 @@ export default function App() {
   // refresh; omitted keys keep their current values. Full fetch when omitted.
   const fetchDbState = useCallback(async (sections?: string[]) => {
     if (!getToken()) return;
+    setDbLoading(true);
     try {
       const qs = sections?.length ? `?sections=${encodeURIComponent(sections.join(','))}` : '';
       const res = await apiFetch(`/api/db-state${qs}`);
@@ -123,6 +125,7 @@ export default function App() {
       if (data.subscriptionPlans) setSubscriptionPlans(data.subscriptionPlans);
       setDbError(null);
     } catch { setDbError('Could not load workspace data from the server.'); }
+    finally { setDbLoading(false); }
   }, []);
 
   // ── Bootstrap auth ──
@@ -415,7 +418,7 @@ export default function App() {
             } />
             <Route path="/staff" element={
               user && user.role !== 'staff' ? <Navigate to="/admin" replace /> : (
-              <StaffPortalView company={selectedCompany} branch={selectedBranch} staffList={staffList} loggedInStaffId={user?.role === 'staff' ? user.id : undefined} services={services} customers={customers} inventoryItems={inventoryItems} commissionLogs={commissionLogs} visitSessions={visitSessions} branches={branches} businessUnits={businessUnits}
+              <StaffPortalView loading={dbLoading} company={selectedCompany} branch={selectedBranch} staffList={staffList} loggedInStaffId={user?.role === 'staff' ? user.id : undefined} services={services} customers={customers} inventoryItems={inventoryItems} commissionLogs={commissionLogs} visitSessions={visitSessions} branches={branches} businessUnits={businessUnits}
                 onCreateVisitSession={handleCreateVisitSession} onUpdateSessionStatus={handleUpdateSessionStatus} onAddCustomer={handleAddCustomer} onUpdateSessionServices={handleUpdateSessionServices} onCheckoutSession={handleCheckoutSession} onRefresh={() => fetchDbState(['visitSessions', 'commissionLogs'])} onLogout={handleLogout}
                 onUpdateServiceStatus={handleUpdateServiceStatus}
               />
@@ -465,6 +468,7 @@ function LoginPage({ onLogin }: { onLogin: (u: AuthUser, pin?: string) => void }
         navigate(defaults[u.role] || '/pos', { replace: true });
       }}
       onLaunchTv={() => navigate('/tv')}
+        onLaunchTablet={() => navigate('/tablet')}
       onReturnToWebsite={() => navigate('/tablet')}
     />
   );

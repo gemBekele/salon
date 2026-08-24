@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
-import { mgmtOnly, deskOnly, asyncHandler } from '../middleware';
+import { authenticate, mgmtOnly, deskOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound, createAuditLogger } from '../core';
 
@@ -19,6 +19,77 @@ const RECEPTION_DAILY_EXPENSE_LIMIT = Number(process.env.EXPENSE_RECEPTION_DAILY
 export function createFinanceRouter(pool: DbPool): Router {
   const router = Router();
   const insertAudit = createAuditLogger(pool);
+
+  // ==========================================================
+  // Payout requests — staff-accessible (must sit BEFORE the mgmtOnly group)
+  // ==========================================================
+  const PAYOUT_REQUEST_ROLES = ['super_admin', 'owner', 'manager', 'reception', 'staff'];
+
+  // Staff request their unpaid commissions for payout. PIN-issued staff may
+  // only ever request for themselves; management may act on any staff member.
+  router.post('/commission-logs/payout/request', authenticate, asyncHandler(async (req, res) => {
+    if (!PAYOUT_REQUEST_ROLES.includes(req.user!.role || 'staff')) {
+      return res.status(403).json({ error: 'You do not have permission to perform this action' });
+    }
+    const b = req.body;
+    if (!b.companyId) return res.status(400).json({ error: 'companyId is required' });
+    if (!canAccessCompany(req.user!, b.companyId)) return res.status(403).json({ error: 'Company not found' });
+
+    const staffId = req.user!.role === 'staff' ? req.user!.id : (b.staffId || null);
+    if (!staffId) return res.status(400).json({ error: 'staffId is required' });
+
+    const [rows] = (await pool.query(
+      `SELECT id, commission_amount_etb FROM commission_logs
+       WHERE staff_id = ? AND company_id = ? AND payout_status = 'unpaid'
+       ORDER BY created_at ASC`,
+      [staffId, b.companyId]
+    )) as any;
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'No unpaid commissions to request.' });
+    }
+
+    const ids = rows.map((r: any) => r.id);
+    await pool.query(
+      `UPDATE commission_logs SET payout_status = 'payout_requested' WHERE id IN (${ids.map(() => '?').join(',')})`,
+      ids
+    );
+    const total = rows.reduce((a: number, r: any) => a + (Number(r.commission_amount_etb) || 0), 0);
+    await insertAudit(
+      { companyId: b.companyId, branchId: null },
+      'commission_change',
+      `Payout requested: ${(req.user!.name)} requested ${total.toFixed(2)} ETB for ${rows.length} commission log(s)`,
+      `${req.user!.name} (${staffId})`
+    );
+    res.json({ success: true, requestedCount: rows.length, requestedTotalEtb: Math.round(total * 100) / 100 });
+  }));
+
+  // Management rejects a pending payout request — logs return to unpaid.
+  router.post('/commission-logs/payout/request/reject', ...mgmtOnly, asyncHandler(async (req, res) => {
+    const b = req.body;
+    if (!b.companyId || !b.staffId) return res.status(400).json({ error: 'companyId and staffId are required' });
+    if (!canAccessCompany(req.user!, b.companyId)) return res.status(403).json({ error: 'Company not found' });
+
+    const [pendingRows] = await pool.query(
+      `SELECT COUNT(*) AS n FROM commission_logs
+       WHERE staff_id = ? AND company_id = ? AND payout_status = 'payout_requested'`,
+      [b.staffId, b.companyId]
+    ) as any;
+    const pendingCount = Number(pendingRows[0]?.n ?? 0);
+    if (pendingCount === 0) return res.status(400).json({ error: 'No pending payout request for this staff member' });
+
+    await pool.query(
+      `UPDATE commission_logs SET payout_status = 'unpaid'
+       WHERE staff_id = ? AND company_id = ? AND payout_status = 'payout_requested'`,
+      [b.staffId, b.companyId]
+    );
+    await insertAudit(
+      { companyId: b.companyId, branchId: null },
+      'commission_change',
+      `Payout request rejected for ${pendingCount} log(s)`,
+      `${req.user!.name} (${b.staffId})`
+    );
+    res.json({ success: true, rejectedCount: pendingCount });
+  }));
 
   router.use(['/commission-rules', '/commission-logs', '/audit-logs', '/audit', '/sms-logs', '/feedback'], ...mgmtOnly);
 

@@ -68,12 +68,24 @@ async function startServer() {
         maxAge: '1y',
         immutable: true,
         setHeaders(res, filePath) {
-          if (!filePath.endsWith('.html')) {
+          if (filePath.endsWith('.html')) {
+            // index.html must always revalidate so browsers pick up new
+            // asset hashes after every deploy.
+            res.setHeader('Cache-Control', 'no-cache');
+          } else if (!filePath.includes(`${path.sep}assets${path.sep}`)) {
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
           }
+          // Files inside /assets keep the static() defaults (1y immutable).
         },
       })
     );
+    // Unknown /assets/* paths must 404 — falling back to index.html here would
+    // serve HTML to <script src> requests and trip strict-MIME errors on
+    // clients that still hold a stale index.html from a previous deploy.
+    app.use('/assets', (_req, res) => {
+      res.status(404).type('text/plain').send('Asset not found — please reload the page.');
+    });
+    // Other unknown top-level paths get the SPA shell.
     app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 

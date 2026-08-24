@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { DbPool } from '../db';
 import type { SmsService } from '../sms';
-import { authenticate, mgmtOnly, deskOnly, asyncHandler } from '../middleware';
+import { authenticate, mgmtOnly, deskOnly, posOnly, asyncHandler } from '../middleware';
 import { validate } from '../validate';
 import { uid, canAccessCompany, notFound, createAuditLogger } from '../core';
 import { createPaymentService } from '../payments';
@@ -81,7 +81,7 @@ export function createPaymentsRouter(pool: DbPool, sms: SmsService): Router {
   // ==========================================================
   // Receipt image upload (client-compressed, stored on server)
   // ==========================================================
-  router.post('/upload', ...deskOnly, asyncHandler(async (req, res) => {
+  router.post('/upload', ...posOnly, asyncHandler(async (req, res) => {
     const data = typeof req.body?.data === 'string' ? req.body.data : null;
     const path = await payments.saveReceipt(data, req.body?.filename);
     res.json({ success: true, path });
@@ -90,7 +90,7 @@ export function createPaymentsRouter(pool: DbPool, sms: SmsService): Router {
   // ==========================================================
   // Unified checkout (visit | material_sale | group)
   // ==========================================================
-  router.post('/checkout', ...deskOnly, asyncHandler(async (req, res) => {
+  router.post('/checkout', ...posOnly, asyncHandler(async (req, res) => {
     const errs = validate(req.body, {
       payableType: { required: true, enum: ['visit', 'material_sale', 'group'] },
       payableId: { required: true },

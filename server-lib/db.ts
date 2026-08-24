@@ -73,6 +73,13 @@ export function createDbPool(dbName?: string): DbPool {
     idleTimeoutMillis: 30000,
   });
 
+  // All application timestamps are written as JS-UTC ISO strings; pin every
+  // session to UTC so server-side NOW()/CURRENT_DATE agree with them no matter
+  // where the host timezone points.
+  pool.on('connect', (client) => {
+    client.query("SET TIME ZONE 'UTC'").catch(() => {});
+  });
+
   return {
     query: makeQuery(pool),
     async getConnection(): Promise<DbConnection> {

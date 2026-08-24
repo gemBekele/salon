@@ -33,6 +33,7 @@ import {
   PaymentMethod,
 } from '../types';
 import { StaffPerformanceDashboard } from './StaffPerformanceDashboard';
+import { StaffPortalSkeleton } from './Skeleton';
 import { usePolling } from '../lib/usePolling';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -58,11 +59,12 @@ import {
   toSelectItems,
 } from './ui/select';
 import { PinPad } from './PinPad';
-import { apiFetch, readApiError } from '../lib/api';
+import { apiFetch, apiOk, readApiError } from '../lib/api';
 import { groupStaffQueue } from '../lib/queue';
 import { cn } from '../lib/utils';
 
 interface StaffPortalViewProps {
+  loading?: boolean;
   company?: Company | null;
   branch?: Branch | null;
   staffList: Staff[];
@@ -85,6 +87,7 @@ interface StaffPortalViewProps {
 }
 
 export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
+  loading = false,
   company,
   branch,
   staffList,
@@ -116,6 +119,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
 
   // Payout request status
   const [payoutRequested, setPayoutRequested] = useState(false);
+  const [payoutRequesting, setPayoutRequesting] = useState(false);
 
   // Live refresh status
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
@@ -197,13 +201,34 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   const unpaidCommissions = staffCommissions
     .filter((c) => c.payoutStatus === 'unpaid')
     .reduce((acc, c) => acc + c.commissionAmountEtb, 0);
-  const paidCommissions = staffCommissions
-    .filter((c) => c.payoutStatus === 'paid')
-    .reduce((acc, c) => acc + c.commissionAmountEtb, 0);
 
-  const handleRequestPayout = () => {
-    setPayoutRequested(true);
-    setTimeout(() => setPayoutRequested(false), 4000);
+  // Commissions earned in the current week (Mon–Sun).
+  const thisWeekCommissions = useMemo(() => {
+    const now = new Date();
+    const day = (now.getDay() + 6) % 7; // Mon=0 .. Sun=6
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    return staffCommissions
+      .filter((c) => new Date(c.createdAt) >= monday)
+      .reduce((acc, c) => acc + c.commissionAmountEtb, 0);
+  }, [staffCommissions]);
+
+  const hasRequestedLogs = staffCommissions.some((c) => c.payoutStatus === 'payout_requested');
+
+  const handleRequestPayout = async () => {
+    if (!activeStaff || unpaidCommissions === 0 || hasRequestedLogs || payoutRequesting) return;
+    setPayoutRequesting(true);
+    try {
+      await apiOk(await apiFetch('/api/commission-logs/payout/request', {
+        method: 'POST',
+        body: JSON.stringify({ companyId: activeStaff.companyId, staffId: activeStaff.id }),
+      }));
+      setPayoutRequested(true);
+      await onRefresh?.();
+    } catch (e) {
+      console.error('payout request failed:', e instanceof Error ? e.message : e);
+    } finally {
+      setPayoutRequesting(false);
+    }
   };
 
   // Service toggle in builder
@@ -372,6 +397,12 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
   }, [visitSessions]);
   const queueForCustomer = (c: Customer) => queueNumberByCustomer[c.id] || '';
 
+  // First paint: workspace data is still loading — show skeletons instead of
+  // empty lists so the page feels instant.
+  if (loading && !activeStaff) {
+    return <StaffPortalSkeleton />;
+  }
+
   if (!activeStaff) {
     return (
       <Card>
@@ -539,8 +570,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                                     <div className="flex items-center gap-2">
                                       {svc.status === 'pending' && (
                                         <Button
-                                          size="sm"
-                                          className="flex-1 gap-1.5 font-bold"
+                                          className="flex-1 gap-1.5 h-11 text-sm font-bold"
                                           disabled={pendingAction !== null || !item.available}
                                           onClick={() => runPending(`start-${svc.id}`, () => onUpdateServiceStatus(svc.id, 'in_progress'))}
                                         >
@@ -554,9 +584,8 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                                       )}
                                       {inProgress && (
                                         <Button
-                                          size="sm"
                                           variant="outline"
-                                          className="flex-1 gap-1.5 font-bold"
+                                          className="flex-1 gap-1.5 h-11 text-sm font-bold"
                                           disabled={pendingAction !== null}
                                           onClick={() => runPending(`complete-${svc.id}`, () => onUpdateServiceStatus(svc.id, 'completed'))}
                                         >
@@ -748,45 +777,22 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
 
         {/* ============ TAB 2: EARNINGS ============ */}
         <TabsContent value="ledger" className="mt-4 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="kpi-label mb-1.5 flex items-center justify-between">
-                  <span>Total Earned Commissions</span>
-                  <Award className="size-3.5 text-muted-foreground" />
-                </div>
-                <p className="kpi-value">
-                  {totalEarnedCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span>
-                </p>
-                <p className="text-sm text-muted-foreground mt-1.5">From completed services</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="kpi-label mb-1.5 flex items-center justify-between">
-                  <span>Unpaid Balance</span>
-                  <Wallet className="size-3.5 text-muted-foreground" />
-                </div>
-                <p className="kpi-value">
-                  {unpaidCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span>
-                </p>
-                <p className="text-sm text-muted-foreground mt-1.5">Ready for payout request</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="kpi-label mb-1.5 flex items-center justify-between">
-                  <span>Paid Commissions</span>
-                  <CheckCircle className="size-3.5 text-muted-foreground" />
-                </div>
-                <p className="kpi-value">
-                  {paidCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span>
-                </p>
-                <p className="text-sm text-muted-foreground mt-1.5">Paid via Telebirr / CBE</p>
-              </CardContent>
-            </Card>
+          {/* Compact earnings strip */}
+          <div className="grid grid-cols-2 gap-px bg-border border border-border rounded-md overflow-hidden">
+            <div className="bg-card px-4 py-3">
+              <p className="kpi-label mb-1 flex items-center justify-between">
+                <span>This Week's Commission</span>
+                <Award className="size-3.5 text-muted-foreground" />
+              </p>
+              <p className="kpi-value text-xl">{thisWeekCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span></p>
+            </div>
+            <div className="bg-card px-4 py-3">
+              <p className="kpi-label mb-1 flex items-center justify-between">
+                <span>Unpaid Balance (Total)</span>
+                <Wallet className="size-3.5 text-muted-foreground" />
+              </p>
+              <p className="kpi-value text-xl">{unpaidCommissions.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">ETB</span></p>
+            </div>
           </div>
 
           <Card>
@@ -797,18 +803,26 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                   Commission Payout
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Balance: <strong className="text-foreground">{unpaidCommissions} ETB</strong> â€¢ Rate:{' '}
+                  Balance: <strong className="text-foreground">{unpaidCommissions} ETB</strong> • Rate:{' '}
                   {activeStaff.defaultCommissionPercentage}%
                 </p>
               </div>
               <Button
-                disabled={unpaidCommissions === 0 || payoutRequested}
+                disabled={unpaidCommissions === 0 || hasRequestedLogs || payoutRequesting}
                 onClick={handleRequestPayout}
                 className="gap-1.5"
               >
-                {payoutRequested ? <Check className="size-4" /> : <Send className="size-4" />}
-                {payoutRequested
-                  ? 'Request Submitted!'
+                {payoutRequesting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : hasRequestedLogs || payoutRequested ? (
+                  <Check className="size-4" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                {hasRequestedLogs || payoutRequested
+                  ? 'Requested — awaiting approval'
+                  : payoutRequesting
+                  ? 'Submitting...'
                   : `Request Payout (${unpaidCommissions} ETB)`}
               </Button>
             </CardContent>
@@ -817,9 +831,6 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
           <StaffPerformanceDashboard
             activeStaff={activeStaff}
             commissionLogs={commissionLogs}
-            visitSessions={visitSessions}
-            branches={branches}
-            businessUnits={businessUnits}
           />
 
           <Card>
@@ -931,7 +942,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserCheck className="size-4" />
-              {switchStep === 'pick' ? 'Switch Active Employee' : `Enter PIN â€” ${switchTarget?.name}`}
+              {switchStep === 'pick' ? 'Switch Active Employee' : `Enter PIN — ${switchTarget?.name}`}
             </DialogTitle>
             <DialogDescription>
               {switchStep === 'pick'
@@ -956,7 +967,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
                 >
                   <span className="text-sm font-semibold">{st.name}</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {st.role} â€¢ {st.defaultCommissionPercentage}%
+                    {st.role} • {st.defaultCommissionPercentage}%
                   </span>
                 </Button>
               ))}
@@ -979,7 +990,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              Add Extra Service â€” {extraServiceModalSession?.customerName} ({extraServiceModalSession?.queueNumber})
+              Add Extra Service — {extraServiceModalSession?.customerName} ({extraServiceModalSession?.queueNumber})
             </DialogTitle>
             <DialogDescription>Select an additional service to append to this visit.</DialogDescription>
           </DialogHeader>
@@ -1007,7 +1018,7 @@ export const StaffPortalView: React.FC<StaffPortalViewProps> = ({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Collect Payment â€” {checkoutSession?.customerName} ({checkoutSession?.queueNumber})
+              Collect Payment — {checkoutSession?.customerName} ({checkoutSession?.queueNumber})
             </DialogTitle>
           </DialogHeader>
 

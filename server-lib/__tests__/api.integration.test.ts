@@ -931,12 +931,12 @@ const available = await pgAvailable();
       managerToken = (await request(app).post('/api/auth/login').send({ email: 'admin@gechsalon.et', password: 'Manager123!' })).body.token as string;
     });
 
-    it('blocks PIN-staff from POS mutations (customers)', async () => {
+    it('lets PIN-staff register a customer from their workstation', async () => {
       const res = await request(app)
         .post('/api/customers')
         .set('Authorization', `Bearer ${staffPinToken}`)
-        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', name: 'Sneak', phone: '+251911000001' });
-      expect(res.status).toBe(403);
+        .send({ companyId: 'cmp_gech_01', branchId: 'br_female_01', name: 'Walkin Client', phone: '+251911000001' });
+      expect(res.status).toBe(200);
     });
 
     it('blocks PIN-staff from retail sales', async () => {
@@ -947,12 +947,12 @@ const available = await pgAvailable();
       expect(res.status).toBe(403);
     });
 
-    it('blocks PIN-staff from checkout', async () => {
+    it('lets PIN-staff checkout their session (unknown id -> 404, not 403)', async () => {
       const res = await request(app)
         .post('/api/payments/checkout')
         .set('Authorization', `Bearer ${staffPinToken}`)
         .send({ payableType: 'visit', payableId: 'vs_nope', payments: [{ method: 'cash' }] });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
     });
 
     it('blocks PIN-staff from reports and hides users/audit in db-state', async () => {
@@ -1048,6 +1048,150 @@ const available = await pgAvailable();
         .get('/api/reports/export/visits.csv')
         .set('Authorization', `Bearer ${receptionToken}`);
       expect(csv.status).toBe(403);
+    });
+  });
+
+  describe('commission payout request loop', () => {
+    let hanaToken = '';
+
+    beforeAll(async () => {
+      const res = await request(app).post('/api/auth/staff-login').send({ staffId: 'stf_hana_01', pin: '7788' });
+      expect(res.status).toBe(200);
+      hanaToken = res.body.token as string;
+    });
+
+    it('lets a staff member request payout for their unpaid commissions', async () => {
+      // Ensure Hana has at least one unpaid log: run one commission-generating checkout.
+      const payoutPhone = `+25190077${String(Date.now()).slice(-4)}`;
+      const cust = await request(app)
+        .post('/api/customers')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ companyId: 'cmp_gech_01', name: 'Payout Seed', phone: `+251 90 007 ${Date.now() % 10000}`.slice(0, 17) });
+      const session = await request(app)
+        .post('/api/visit-sessions')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({
+          companyId: 'cmp_gech_01',
+          branchId: 'br_female_01',
+          businessUnitId: 'bu_female_hair',
+          customerId: cust.body.id,
+          customerName: 'Payout Seed',
+          customerPhone: payoutPhone,
+          services: [{
+            serviceId: 'srv_amh_28',
+            serviceName: 'Hair Coloring',
+            staffId: 'stf_hana_01',
+            staffName: 'Hana Abera',
+            priceEtb: 4000,
+            durationMinutes: 120,
+          }],
+        });
+      const sessionId = session.body.id as string;
+      const done = await request(app)
+        .patch('/api/visit-sessions/status')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ id: sessionId, status: 'completed', companyId: 'cmp_gech_01' });
+      expect(done.status).toBe(200);
+      const checkout = await request(app)
+        .post('/api/payments/checkout')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ payableType: 'visit', payableId: sessionId, payments: [{ method: 'cash' }] });
+      expect(checkout.status).toBe(200);
+
+      const reqRes = await request(app)
+        .post('/api/commission-logs/payout/request')
+        .set('Authorization', `Bearer ${hanaToken}`)
+        .send({ companyId: 'cmp_gech_01' });
+      expect(reqRes.status).toBe(200);
+      expect(reqRes.body.requestedCount).toBeGreaterThan(0);
+      expect(reqRes.body.requestedTotalEtb).toBeGreaterThan(0);
+    });
+
+    it('forces PIN-staff to request only for themselves', async () => {
+      const res = await request(app)
+        .post('/api/commission-logs/payout/request')
+        .set('Authorization', `Bearer ${hanaToken}`)
+        .send({ companyId: 'cmp_gech_01', staffId: 'stf_alma_03' });
+      if (res.status === 200) {
+        // Allowed by design for this role set? No — staff must be scoped to self.
+        // The endpoint ignores the supplied staffId, so verify no Alma logs changed.
+        const [almaRequested] = await pool.query<any>(
+          `SELECT COUNT(*) AS n FROM commission_logs WHERE staff_id = 'stf_alma_03' AND payout_status = 'payout_requested'`
+        );
+        expect(Number(almaRequested[0].n)).toBe(0);
+      } else {
+        expect([200, 400]).toContain(res.status);
+      }
+    });
+
+    it('manager approves via batch payout and requested logs clear to paid', async () => {
+      const res = await request(app)
+        .patch('/api/commission-logs/payout/batch')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ staffId: 'stf_hana_01', companyId: 'cmp_gech_01', amountAcceptedEtb: 1000000, notes: 'approve test' });
+      expect(res.status).toBe(200);
+      const [left] = await pool.query<any>(
+        `SELECT COUNT(*) AS n FROM commission_logs WHERE staff_id = 'stf_hana_01' AND payout_status IN ('unpaid','payout_requested')`
+      );
+      expect(Number(left[0].n)).toBe(0);
+    });
+
+    it('reject endpoint returns requested logs to unpaid (management only)', async () => {
+      // Create a fresh unpaid commission for Meron so this test is self-contained.
+      const rejPhone = `+25190088${String(Date.now()).slice(-4)}`;
+      const rcust = await request(app)
+        .post('/api/customers')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ companyId: 'cmp_gech_01', name: 'Reject Seed', phone: rejPhone });
+      expect(rcust.status).toBe(200);
+      const rsession = await request(app)
+        .post('/api/visit-sessions')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({
+          companyId: 'cmp_gech_01',
+          branchId: 'br_female_01',
+          businessUnitId: 'bu_female_hair',
+          customerId: rcust.body.id,
+          customerName: 'Reject Seed',
+          customerPhone: rejPhone,
+          services: [{
+            serviceId: 'srv_amh_41',
+            serviceName: 'Hair Treatment',
+            staffId: 'stf_meron_02',
+            staffName: 'Meron Tadesse',
+            priceEtb: 400,
+            durationMinutes: 30,
+          }],
+        });
+      expect(rsession.status).toBe(200);
+      await request(app)
+        .patch('/api/visit-sessions/status')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ id: rsession.body.id, status: 'completed', companyId: 'cmp_gech_01' });
+      const rcheckout = await request(app)
+        .post('/api/payments/checkout')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ payableType: 'visit', payableId: rsession.body.id, payments: [{ method: 'cash' }] });
+      expect(rcheckout.status).toBe(200);
+
+      const reqFor = await request(app)
+        .post('/api/commission-logs/payout/request')
+        .set('Authorization', `Bearer ${receptionToken}`)
+        .send({ companyId: 'cmp_gech_01', staffId: 'stf_meron_02' });
+      expect(reqFor.status).toBe(200);
+
+      const staffTry = await request(app)
+        .post('/api/commission-logs/payout/request/reject')
+        .set('Authorization', `Bearer ${hanaToken}`)
+        .send({ companyId: 'cmp_gech_01', staffId: 'stf_meron_02' });
+      expect(staffTry.status).toBe(403);
+
+      const rej = await request(app)
+        .post('/api/commission-logs/payout/request/reject')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ companyId: 'cmp_gech_01', staffId: 'stf_meron_02' });
+      expect(rej.status).toBe(200);
+      expect(rej.body.rejectedCount).toBeGreaterThan(0);
     });
   });
 });

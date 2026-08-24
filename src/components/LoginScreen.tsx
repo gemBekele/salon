@@ -5,6 +5,7 @@ import {
   ShieldCheck,
   AlertCircle,
   Tv,
+  Tablet,
   Users,
   Mail,
   Lock,
@@ -23,6 +24,7 @@ import { API_BASE } from '../lib/api';
 interface LoginScreenProps {
   onLogin: (user: AuthUser, pin?: string) => void;
   onLaunchTv?: () => void;
+  onLaunchTablet?: () => void;
   onReturnToWebsite?: () => void;
 }
 
@@ -32,7 +34,7 @@ interface StaffLoginGroup {
   staff: StaffLoginOption[];
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, onReturnToWebsite }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, onLaunchTablet, onReturnToWebsite }) => {
   const [mode, setMode] = useState<'staff' | 'manager'>('staff');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -215,10 +217,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                     <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Quick Demo Manager Credentials
                     </CardDescription>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
                       {[
-                        { label: 'Salon Manager', email: 'admin@gechsalon.et', pw: 'Manager123!' },
-                        { label: 'Receptionist', email: 'liya@gechsalon.et', pw: 'Staff123!' },
+                        { label: 'Owner', email: 'owner@gechsalon.et', pw: 'Owner123!' },
+                        { label: 'Manager', email: 'admin@gechsalon.et', pw: 'Manager123!' },
+                        { label: 'Reception', email: 'liya@gechsalon.et', pw: 'Staff123!' },
                       ].map((acc) => (
                         <Button
                           key={acc.email}
@@ -357,15 +360,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onLaunchTv, o
                   </CardContent>
                 </Card>
               ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full rounded-md border-border hover:border-primary/40 font-semibold text-sm gap-2"
-                  onClick={() => setShowTvPinPrompt(true)}
-                >
-                  <Tv className="size-4 text-primary" />
-                  Launch Lounge Queue TV Screen
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-md border-border hover:border-primary/40 font-semibold text-sm gap-2"
+                    onClick={() => setShowTvPinPrompt(true)}
+                  >
+                    <Tv className="size-4 text-primary" />
+                    TV
+                  </Button>
+                  {onLaunchTablet && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-md border-border hover:border-primary/40 font-semibold text-sm gap-2"
+                      onClick={onLaunchTablet}
+                    >
+                      <Tablet className="size-4 text-primary" />
+                      Tablet
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           )}

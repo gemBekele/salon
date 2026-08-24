@@ -367,6 +367,19 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       });
     return map;
   })();
+  // Staff-initiated payout requests awaiting approval.
+  const payoutRequestsByStaffId = (() => {
+    const map: Record<string, { total: number; count: number; name: string }> = {};
+    scopeCommissions
+      .filter((c) => c.payoutStatus === 'payout_requested')
+      .forEach((c) => {
+        const entry = map[c.staffId] || { total: 0, count: 0, name: c.staffName };
+        entry.total += c.commissionAmountEtb;
+        entry.count += 1;
+        map[c.staffId] = entry;
+      });
+    return map;
+  })();
   const scopeInProgressByStaff = (() => {
     const map: Record<string, VisitSession> = {};
     scopeVisits
@@ -552,6 +565,28 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
       showToast('error', e instanceof Error ? e.message : 'Failed to process payout');
     } finally {
       setPayoutUpdatingId(null);
+    }
+  };
+
+  const [rejectingPayoutId, setRejectingPayoutId] = useState<string | null>(null);
+  const handleRejectPayoutRequest = async (staffId: string, staffName: string) => {
+    if (rejectingPayoutId) return;
+    setRejectingPayoutId(staffId);
+    try {
+      const res = await apiFetch('/api/commission-logs/payout/request/reject', {
+        method: 'POST',
+        body: JSON.stringify({ companyId: company.id, staffId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to reject the request');
+      }
+      showToast('success', `Payout request from ${staffName} rejected — logs returned to unpaid`);
+      await onRefresh?.();
+    } catch (e) {
+      showToast('error', e instanceof Error ? e.message : 'Failed to reject request');
+    } finally {
+      setRejectingPayoutId(null);
     }
   };
 
@@ -1072,6 +1107,48 @@ export const TenantAdminView: React.FC<TenantAdminViewProps> = ({
               <div className="text-[11px] text-muted-foreground">{scopeCommissions.filter((c) => c.payoutStatus !== 'paid').length} unpaid record(s)</div>
             </div>
           </div>
+
+          {/* Payout requests awaiting approval */}
+          {Object.entries(payoutRequestsByStaffId).length > 0 && (
+            <div className="bg-amber-500/5 border border-amber-300 dark:border-amber-900 rounded-md p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Clock className="size-4 text-amber-600" />
+                Payout Requests ({Object.keys(payoutRequestsByStaffId).length})
+              </h3>
+              <div className="divide-y divide-border">
+                {Object.entries(payoutRequestsByStaffId).map(([staffId, req]) => (
+                  <div key={staffId} className="py-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-foreground">{req.name}</span>
+                      <span className="text-[11px] text-muted-foreground ml-2">{req.count} log(s)</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-bold tabular-nums text-amber-700 dark:text-amber-400">{req.total.toLocaleString()} ETB</span>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs font-semibold"
+                        onClick={() => {
+                          setPayoutTarget({ staffId, staffName: req.name });
+                          setPayoutAmount(String(req.total));
+                        }}
+                      >
+                        <DollarSign className="size-3.5 mr-1" />Pay now
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs font-semibold"
+                        disabled={rejectingPayoutId === staffId}
+                        onClick={() => handleRejectPayoutRequest(staffId, req.name)}
+                      >
+                        {rejectingPayoutId === staffId ? '...' : 'Reject'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Staff Table */}
           <div className="overflow-x-auto bg-card border border-border rounded-md p-5 font-sans">

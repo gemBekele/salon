@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { DbPool, DbConnection } from '../db';
 import type { SmsService } from '../sms';
-import { deskOnly, asyncHandler } from '../middleware';
+import { posOnly, asyncHandler } from '../middleware';
 import { validate, ValidationSchema } from '../validate';
 import { uid, canAccessCompany, notFound } from '../core';
 import { createPaymentService } from '../payments';
@@ -362,7 +362,7 @@ export function createPosRouter(pool: DbPool, sms: SmsService): Router {
     });
   }));
 
-  router.use(['/customers', '/visit-sessions'], ...deskOnly);
+  router.use(['/customers', '/visit-sessions'], ...posOnly);
 
   /**
    * Derive the next queue number for a branch for the current calendar day
